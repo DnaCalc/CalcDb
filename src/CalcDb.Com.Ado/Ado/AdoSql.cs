@@ -314,6 +314,60 @@ internal static class AdoSqlErrors
         -198839259,
         AdoObject.IidCommand);
 
+    /// <summary>Command.Execute with VT_EMPTY scalar parameter for ? marker (r-q54-excl-ddl-ix-cmd/ado-cmd-exec-params-accdb #152, r-q54-excl-ddl-ix-cmd/ado-cmd-exec-params-mdb #152).</summary>
+    public static MappedProviderError ParameterNoDefaultValue(int oneBasedIndex) => Make(
+        AdoObject.HResultParamNotOptional,
+        $"Parameter ?_{oneBasedIndex} has no default value.",
+        5003747,
+        "3748",
+        -542379020,
+        AdoObject.IidCommand);
+
+    /// <summary>Command.Execute with Output, InputOutput, or ReturnValue parameter direction on a ? command (r-oledb-odbc/param-edge #55, #77, #99).</summary>
+    public static MappedProviderError MultipleStepOnAccessor() => Make(
+        AdoObject.HResultErrorsOccurred,
+        AdoObject.MultipleStepDescription,
+        5000000,
+        "",
+        0,
+        AdoObject.IidAccessor);
+
+    /// <summary>Command.Execute parameter conversion mismatch on inline PARAMETERS query (r-oledb-odbc/param-order-binding #141).</summary>
+    public static MappedProviderError UnspecifiedCommandError() => Make(
+        AdoObject.HResultFail,
+        "Unspecified error",
+        5000000,
+        "",
+        0,
+        AdoObject.IidCommand);
+
+    /// <summary>Command.Execute with adNumeric (131) VT_NULL parameter value (r-q54-excl-ddl-ix-cmd/ado-cmd-exec-params-accdb #81, r-q54-excl-ddl-ix-cmd/ado-cmd-exec-params-mdb #81).</summary>
+    public static MappedProviderError DataTypeMismatchOnCommand() => Make(
+        AdoObject.HResultCantConvertValue,
+        "Data type mismatch in criteria expression.",
+        5003071,
+        "3464",
+        -539888598,
+        AdoObject.IidCommand);
+
+    /// <summary>Command.Execute of an ad-hoc ? command with fewer parameters than markers (r-oledb-odbc/param-types-insert #295).</summary>
+    public static MappedProviderError MissingAdHocParameters() => Make(
+        AdoObject.HResultParamNotOptional,
+        "No value given for one or more required parameters.",
+        5000000,
+        "",
+        0,
+        AdoObject.IidCommand);
+
+    /// <summary>Command.Execute of a saved parameterized query with too few parameters (r-oledb-odbc/param-order-binding #25, param-edge #16/#123, r-q-ado-misc/param-saved-wrong-names #39).</summary>
+    public static MappedProviderError TooFewSavedParameters(int expected) => Make(
+        AdoObject.HResultParamNotOptional,
+        $"Too few parameters. Expected {expected}.",
+        5003061,
+        "3061",
+        -531565506,
+        AdoObject.IidCommand);
+
     /// <summary>
     /// Map a <see cref="SqlFailure"/> to an exact recorded provider error, or null with <paramref name="unmodelled"/>
     /// when the failure is a named refusal or an ACE error number with no retained ADO record.
@@ -891,5 +945,86 @@ internal static class AdoSqlText
         }
         using SelectSyntax? syntax = SqlParser.Parse(sql, out SqlFailure? failure);
         return syntax is not null || failure is not ({ Number: 3129 } or { NotModelled: "NotModelled.Statement" });
+    }
+
+    /// <summary>
+    /// Rewrite positional <c>?</c> parameter markers outside single/double-quoted strings, date literals (<c>#...#</c>),
+    /// and bracketed identifiers (<c>[...]</c>) into synthetic bracketed identifiers <c>[__ado_p1]</c>, <c>[__ado_p2]</c>, ...
+    /// so <see cref="CalcDb.Sql"/> binds them in exact left-to-right positional order.
+    /// </summary>
+    public static string RewriteQuestionMarkParameters(string sql, out int markerCount)
+    {
+        markerCount = 0;
+        if (!sql.Contains('?'))
+        {
+            return sql;
+        }
+        System.Text.StringBuilder? sb = null;
+        int i = 0;
+        while (i < sql.Length)
+        {
+            char c = sql[i];
+            if (c is '\'' or '"')
+            {
+                int start = i++;
+                while (i < sql.Length)
+                {
+                    if (sql[i] == c)
+                    {
+                        i++;
+                        if (i < sql.Length && sql[i] == c)
+                        {
+                            i++;
+                            continue;
+                        }
+                        break;
+                    }
+                    i++;
+                }
+                sb?.Append(sql, start, i - start);
+                continue;
+            }
+            if (c == '#')
+            {
+                int start = i++;
+                while (i < sql.Length && sql[i] != '#')
+                {
+                    i++;
+                }
+                if (i < sql.Length)
+                {
+                    i++;
+                }
+                sb?.Append(sql, start, i - start);
+                continue;
+            }
+            if (c == '[')
+            {
+                int start = i++;
+                while (i < sql.Length && sql[i] != ']')
+                {
+                    i++;
+                }
+                if (i < sql.Length)
+                {
+                    i++;
+                }
+                sb?.Append(sql, start, i - start);
+                continue;
+            }
+            if (c == '?')
+            {
+                sb ??= new System.Text.StringBuilder(sql.Length + 32).Append(sql, 0, i);
+                markerCount++;
+                sb.Append("[__ado_p");
+                sb.Append(markerCount);
+                sb.Append(']');
+                i++;
+                continue;
+            }
+            sb?.Append(c);
+            i++;
+        }
+        return sb is null ? sql : sb.ToString();
     }
 }

@@ -572,7 +572,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
         .Method("CommitTrans", (self, args) => ((ConnectionObject)self).CommitTrans())
         .Method("RollbackTrans", (self, args) => ((ConnectionObject)self).RollbackTrans())
         .Method("Execute", (self, args) => ((ConnectionObject)self).Execute(args))
-        .Method("OpenSchema", (self, args) => ((ConnectionObject)self).OpenSchema());
+        .Method("OpenSchema", (self, args) => ((ConnectionObject)self).OpenSchema(args));
 
     /// <summary>The assigned text; null until one is assigned, which ADO reads as a null BSTR (r-str-ado-act/ado-open-provider-property).</summary>
     private string? _connectionString;
@@ -1536,16 +1536,17 @@ internal sealed unsafe class ConnectionObject : AdoObject
             int? lockingMode;
             if (!profile.IsAce)
             {
-                if (lockingModeExplicit || (effectiveMode != 1 && effectiveMode != 12 && !(effectiveMode == 16 && defaultMode)))
+                if (lockingModeExplicit || (effectiveMode != 1 && effectiveMode != 3 && effectiveMode != 12 && !(effectiveMode == 16 && defaultMode)))
                 {
                     AdoFilePool.CancelAcquire(shared);
                     DisposeValues(initValues);
-                    return NotImplemented($"Connection.Open of an MDB with Mode={effectiveMode} and explicitLocking={lockingModeExplicit} (only Mode=1, Mode=12, and default Mode=16 without explicit Database Locking Mode are recorded)");
+                    return NotImplemented($"Connection.Open of an MDB with Mode={effectiveMode} and explicitLocking={lockingModeExplicit} (only Mode=1, Mode=3, Mode=12, and default Mode=16 without explicit Database Locking Mode are recorded)");
                 }
                 // r-oledb-odbc/prop-connection-inventory records Database Locking Mode=0 for Jet 4 MDB Mode=1.
                 // Default Mode=16 opens on Jet 4 MDB are recorded in r-q30-sql-check/mdb-sat-ado-exec,
                 // r-q31-sql-check-2/mdb-null-ado-exec, r-q34-ddl-sweep/create-one-long-mdb-ado,
-                // r-fix-fmt-sort/sort3-comp-mdb, and r-oledb-odbc/create-mdb; Mode=12 in
+                // r-fix-fmt-sort/sort3-comp-mdb, and r-oledb-odbc/create-mdb; Mode=3 in
+                // r-q54-excl-ddl-ix-cmd/ado-cmd-exec-noparam-mdb and ado-cmd-exec-params-mdb; Mode=12 in
                 // r-q41-create-session-counter/excl-open-ado-mdb; none read open ConnectionString or open Properties,
                 // so LockingMode stays null and those open reads refuse by name.
                 lockingMode = effectiveMode == 1 ? 0 : null;
@@ -1829,8 +1830,82 @@ internal sealed unsafe class ConnectionObject : AdoObject
         return CallResult.Nothing;
     }
 
-    private CallResult OpenSchema() =>
-        NotImplemented("Connection.OpenSchema (schema rowsets belong to a later stretch)");
+    /// <summary>
+    /// OpenSchema(Schema, Restrictions, SchemaID) (W-09; R-ADO-1 ADO-SCHEMA, R-OLEDB-1 OLE-BUFFER;
+    /// evidence/r-q54-excl-ddl-ix-cmd/ado-openschema-accdb, evidence/r-q54-excl-ddl-ix-cmd/ado-openschema-mdb,
+    /// r-q-ado-misc/schema-ids-no-restrictions, r-oledb-odbc/schema-tables, r-oledb-odbc/schema-columns,
+    /// r-oledb-odbc/schema-keys-indexes, r-oledb-odbc/schema-others):
+    /// 0x800A0E78 when closed; 0x800A0BB9 when Schema is outside SchemaEnum (e.g. 9999);
+    /// 0x800A0CB3 for ACE-unsupported SchemaEnum values or scalar/byte-array Restrictions;
+    /// builds exact schema rowsets for adSchemaTables(20), adSchemaColumns(4), adSchemaIndexes(12),
+    /// adSchemaPrimaryKeys(28), and adSchemaForeignKeys(27). VT_ARRAY|VT_VARIANT Restrictions refuse by name.
+    /// </summary>
+    private CallResult OpenSchema(ReadOnlySpan<nint> args)
+    {
+        if (!IsOpen)
+        {
+            return Fail(AdoErrors.ObjectClosed);
+        }
+        if (_isPersistenceOpen || _session is null)
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.AdoMsPersistOpenSchema",
+                "Connection.OpenSchema on an MSPersist Connection is not recorded"));
+        }
+
+        int? schemaId = args.Length > 0 && args[0] != 0 ? AdoArgs.Int32(args[0]) : null;
+        if (schemaId is null || !AdoTypes.SchemaEnumDecl.Constants.Any(c => c.Value == schemaId.Value))
+        {
+            return Fail(AdoErrors.ArgumentsWrongType);
+        }
+
+        if (args.Length > 1 && args[1] != 0 && !TypedCall.IsMissing(Args.Cell(args[1])))
+        {
+            VarType rVt = (VarType)Args.Cell(args[1])->Vt & ~VarType.ByRef;
+            if (rVt == (VarType.Array | VarType.Variant))
+            {
+                return CallResult.Fail(Failure.NotModelled(
+                    "NotModelled.AdoOpenSchemaRestrictions",
+                    "Connection.OpenSchema with a VT_ARRAY|VT_VARIANT Restrictions argument is not recorded"));
+            }
+            if (rVt is not (VarType.Empty or VarType.Null))
+            {
+                // r-q54-excl-ddl-ix-cmd/ado-openschema-accdb #112, #120, #128; r-q54-excl-ddl-ix-cmd/ado-openschema-mdb #112, #120, #128;
+                // r-oledb-odbc/schema-others #251, #258, #265: scalar (BSTR/I4) or byte-array Restrictions fail 0x800A0CB3.
+                return Fail(AdoErrors.OperationNotSupported);
+            }
+        }
+
+        if (args.Length > 2 && args[2] != 0 && !TypedCall.IsMissing(Args.Cell(args[2])) && Args.TypeOf(args[2]) != VarType.Empty)
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.AdoOpenSchemaId",
+                "Connection.OpenSchema with a SchemaID argument is not recorded"));
+        }
+
+        if (schemaId.Value == -1)
+        {
+            // r-oledb-odbc/schema-others #217: adSchemaProviderSpecific (-1) with omitted SchemaID fails 0x800A0BB9.
+            return Fail(AdoErrors.ArgumentsWrongType);
+        }
+
+        if (AdoSchema.IsAceUnsupportedSchema(schemaId.Value))
+        {
+            return Fail(AdoErrors.OperationNotSupported);
+        }
+
+        MemoryRowSource? rows = AdoSchema.TryBuild(_session, schemaId.Value, out Failure? refusal);
+        if (rows is null)
+        {
+            return CallResult.Fail(refusal!);
+        }
+
+        ClearErrors();
+        RecordsetObject rs = RecordsetObject.CreateOpenForSchema(this, rows);
+        CallResult result = Object(rs);
+        rs.Release();
+        return result;
+    }
 
     /// <summary>
     /// Execute(CommandText, RecordsAffected, Options) (W-09/native-read-query):
@@ -1905,7 +1980,8 @@ internal sealed unsafe class ConnectionObject : AdoObject
         nint recordsAffectedArg,
         nint optionsArg,
         string callerName,
-        CommandObject? explicitCommand = null)
+        CommandObject? explicitCommand = null,
+        IReadOnlyList<AdoCommandParam>? commandParameters = null)
     {
         if (_session is not { } session)
         {
@@ -1974,19 +2050,21 @@ internal sealed unsafe class ConnectionObject : AdoObject
             }
             if (saved.Family is not (QueryFamily.Select or QueryFamily.Union))
             {
-                return ExecuteSavedAction(saved);
+                return ExecuteSavedAction(session, saved, noRecords, explicitCommand, commandParameters, EmitWillExec);
             }
             EmitWillExec();
-            return ExecuteRowReturning(session, callerName, commandText, effectiveText, cmdType, noRecords, recordsAffectedArg, explicitCommand);
+            return ExecuteRowReturning(session, callerName, commandText, effectiveText, cmdType, noRecords, recordsAffectedArg, explicitCommand, commandParameters);
         }
+
+        string parseProbeText = AdoSqlText.RewriteQuestionMarkParameters(effectiveText, out _);
 
         // TableDirect, adCmdTable, SELECT @@IDENTITY, or SELECT SQL -> row-returning.
         if (cmdType is AdoSqlText.AdCmdTableDirect or AdoSqlText.AdCmdTable
             || AdoSqlText.IsSelectIdentity(effectiveText)
-            || AdoSqlText.IsSelect(effectiveText))
+            || AdoSqlText.IsSelect(parseProbeText))
         {
             EmitWillExec();
-            return ExecuteRowReturning(session, callerName, commandText, effectiveText, cmdType, noRecords, recordsAffectedArg, explicitCommand);
+            return ExecuteRowReturning(session, callerName, commandText, effectiveText, cmdType, noRecords, recordsAffectedArg, explicitCommand, commandParameters);
         }
 
         // adCmdUnknown / adCmdUnspecified: bare local table or saved query name.
@@ -1995,21 +2073,21 @@ internal sealed unsafe class ConnectionObject : AdoObject
             if (session.Sql.Table(effectiveText) is not null)
             {
                 EmitWillExec();
-                return ExecuteRowReturning(session, callerName, commandText, effectiveText, cmdType, noRecords, recordsAffectedArg, explicitCommand);
+                return ExecuteRowReturning(session, callerName, commandText, effectiveText, cmdType, noRecords, recordsAffectedArg, explicitCommand, commandParameters);
             }
             if (session.FindSavedQuery(effectiveText) is { } saved)
             {
                 if (saved.Family is not (QueryFamily.Select or QueryFamily.Union))
                 {
-                    return ExecuteSavedAction(saved);
+                    return ExecuteSavedAction(session, saved, noRecords, explicitCommand, commandParameters, EmitWillExec);
                 }
                 EmitWillExec();
-                return ExecuteRowReturning(session, callerName, commandText, effectiveText, cmdType, noRecords, recordsAffectedArg, explicitCommand);
+                return ExecuteRowReturning(session, callerName, commandText, effectiveText, cmdType, noRecords, recordsAffectedArg, explicitCommand, commandParameters);
             }
         }
 
-        // Ad-hoc action DML or DDL; non-SQL garbage fails 3129 (r-str-ado-act/ado-execute-results #35).
-        if (!DdlParser.IsDdlLeadingKeyword(effectiveText) && !ActionParser.IsAction(effectiveText))
+        // Ad-hoc action DML or DDL; non-SQL garbage fails 3129 (r-str-ado-act/ado-execute-results #35, ado-cmd-exec-noparam-* #174).
+        if (!DdlParser.IsDdlLeadingKeyword(effectiveText) && !ActionParser.IsAction(parseProbeText))
         {
             EmitWillExec();
             MappedProviderError err = AdoSqlErrors.InvalidSqlStatement();
@@ -2018,14 +2096,21 @@ internal sealed unsafe class ConnectionObject : AdoObject
             return CallResult.Fail(err.ComFailure);
         }
 
+        bool isConnectionExecute = string.Equals(callerName, "Connection.Execute", StringComparison.Ordinal);
+        if (!isConnectionExecute && DdlParser.IsDdlLeadingKeyword(effectiveText))
+        {
+            return NotImplemented("Command.Execute with DDL statement (not recorded)");
+        }
+
         EmitWillExec();
         return ExecuteAction(
             session,
             effectiveText,
-            allowAdoConnectionExecute: string.Equals(callerName, "Connection.Execute", StringComparison.Ordinal),
+            allowAdoConnectionExecute: isConnectionExecute,
             noRecords,
             recordsAffectedArg,
-            explicitCommand);
+            explicitCommand,
+            commandParameters);
     }
 
     private void EmitFailedExecuteComplete(bool noRecords, CommandObject? explicitCommand)
@@ -2058,7 +2143,8 @@ internal sealed unsafe class ConnectionObject : AdoObject
         int cmdType,
         bool noRecords,
         nint recordsAffectedArg,
-        CommandObject? explicitCommand)
+        CommandObject? explicitCommand,
+        IReadOnlyList<AdoCommandParam>? commandParameters = null)
     {
         int loc = CursorLocationValue;
         bool isClient = loc == 3;
@@ -2080,7 +2166,8 @@ internal sealed unsafe class ConnectionObject : AdoObject
             selectContext,
             out MappedProviderError? providerError,
             out Failure? refusal,
-            out _);
+            out _,
+            commandParameters: commandParameters);
 
         if (rowSource is null)
         {
@@ -2119,17 +2206,39 @@ internal sealed unsafe class ConnectionObject : AdoObject
     }
 
     /// <summary>
-    /// No retained record shows ACE answering <c>Connection.Execute</c> of a saved action query (saved SELECT/UNION
-    /// queries route through <see cref="ExecuteRowReturning"/>). Refuse before <see cref="ActionExecutor.Execute"/>
-    /// runs so nothing is written.
+    /// Saved action query dispatch: when invoked via <c>Command.Execute</c> with too few parameters, reports ACE 3061
+    /// (r-oledb-odbc/param-edge #123: <c>QAction</c> -> "Too few parameters. Expected 2."); otherwise refuses before
+    /// <see cref="ActionExecutor.Execute"/> runs so nothing is written.
     /// </summary>
-    private static CallResult ExecuteSavedAction(SavedQuery query)
+    private CallResult ExecuteSavedAction(
+        AdoOpenSession session,
+        SavedQuery query,
+        bool noRecords,
+        CommandObject? explicitCommand,
+        IReadOnlyList<AdoCommandParam>? commandParameters,
+        Action emitWillExec)
     {
         if (query.Family is not { } family || family == QueryFamily.PassThrough)
         {
             return CallResult.Fail(Failure.NotModelled(
                 "NotModelled.ExecutePassThrough",
                 $"Connection.Execute of the {query.Family?.ToString() ?? "unclassified"} query '{query.Name}'"));
+        }
+        if (explicitCommand is not null && family is QueryFamily.Update or QueryFamily.Append or QueryFamily.Delete)
+        {
+            RenderedSql rendered = QuerySql.Render(query);
+            if (rendered.Text is { } sql)
+            {
+                using BoundAction? plan = BoundAction.Prepare(sql, session.Sql, out _);
+                if (plan is not null && plan.Parameters.Count > (commandParameters?.Count ?? 0))
+                {
+                    emitWillExec();
+                    MappedProviderError err = AdoSqlErrors.TooFewSavedParameters(plan.Parameters.Count);
+                    SetProviderError(err.ErrorEntry);
+                    EmitFailedExecuteComplete(noRecords, explicitCommand);
+                    return CallResult.Fail(err.ComFailure);
+                }
+            }
         }
         return CallResult.Fail(Failure.NotModelled(
             "NotModelled.AdoSavedActionQuery",
@@ -2142,7 +2251,8 @@ internal sealed unsafe class ConnectionObject : AdoObject
         bool allowAdoConnectionExecute,
         bool noRecords,
         nint recordsAffectedArg,
-        CommandObject? explicitCommand)
+        CommandObject? explicitCommand,
+        IReadOnlyList<AdoCommandParam>? commandParameters = null)
     {
         if (session.SchemaFailure is { } stale)
         {
@@ -2154,7 +2264,11 @@ internal sealed unsafe class ConnectionObject : AdoObject
             return CallResult.Fail(preByRefFail);
         }
 
-        using ActionSyntax? parsed = ActionParser.Parse(sql, out _);
+        string effectiveSql = allowAdoConnectionExecute
+            ? sql
+            : AdoSqlText.RewriteQuestionMarkParameters(sql, out _);
+
+        using ActionSyntax? parsed = ActionParser.Parse(effectiveSql, out _);
         TableEditContext? editContext = parsed is null ? null : session.Sql.EditContext(parsed.TargetName, out _);
         if (editContext is not null)
         {
@@ -2184,21 +2298,67 @@ internal sealed unsafe class ConnectionObject : AdoObject
                 failure,
                 isSavedQuery: false,
                 out unmodelled,
-                sql,
+                effectiveSql,
                 allowAdoCheckViolation,
                 isConnectionExecuteAction: allowAdoConnectionExecute);
         }
 
-        // ADO executes action statements atomically (like DAO dbFailOnError = 128).
-        // Pass ActionErrorSource.Ado for ad-hoc Connection.Execute and ActionErrorSource.AdoCommand for Command.Execute;
-        // never pass ActionErrorSource.Database from ADO.
-        ActionOutcome outcome = ActionExecutor.Execute(
-            sql,
-            session.Sql,
-            128,
-            null,
-            allowAdoConnectionExecute ? ActionErrorSource.Ado : ActionErrorSource.AdoCommand,
-            acceptsFailure: f => TryMapFailure(f, out _) is not null);
+        ActionOutcome outcome;
+        if (!allowAdoConnectionExecute && (commandParameters is not null || !ReferenceEquals(effectiveSql, sql)))
+        {
+            using BoundAction? plan = BoundAction.Prepare(effectiveSql, session.Sql, out SqlFailure? prepFail);
+            if (plan is null)
+            {
+                outcome = ActionOutcome.Fail(prepFail!);
+            }
+            else
+            {
+                NativeVariant?[]? boundParams = AdoCommandParameters.BindPositional(
+                    session,
+                    plan.Parameters,
+                    commandParameters,
+                    isSavedQuery: false,
+                    out MappedProviderError? bindErr,
+                    out Failure? bindRefusal);
+                if (bindErr is { } be)
+                {
+                    SetProviderError(be.ErrorEntry);
+                    EmitFailedExecuteComplete(noRecords, explicitCommand);
+                    return CallResult.Fail(be.ComFailure);
+                }
+                if (bindRefusal is { } br)
+                {
+                    return CallResult.Fail(br);
+                }
+                try
+                {
+                    outcome = ActionExecutor.Execute(
+                        plan,
+                        session.Sql,
+                        128,
+                        boundParams,
+                        ActionErrorSource.AdoCommand,
+                        acceptsFailure: f => TryMapFailure(f, out _) is not null);
+                }
+                finally
+                {
+                    AdoCommandParameters.Release(boundParams);
+                }
+            }
+        }
+        else
+        {
+            // ADO executes action statements atomically (like DAO dbFailOnError = 128).
+            // Pass ActionErrorSource.Ado for ad-hoc Connection.Execute and ActionErrorSource.AdoCommand for Command.Execute;
+            // never pass ActionErrorSource.Database from ADO.
+            outcome = ActionExecutor.Execute(
+                effectiveSql,
+                session.Sql,
+                128,
+                null,
+                allowAdoConnectionExecute ? ActionErrorSource.Ado : ActionErrorSource.AdoCommand,
+                acceptsFailure: f => TryMapFailure(f, out _) is not null);
+        }
         if (outcome.Failure is { } sqlFailure)
         {
             if (sqlFailure.IsNotModelled && sqlFailure.NotModelled != "NotModelled.ReadOnlyAction")
@@ -2616,8 +2776,10 @@ internal static class AdoValues
         7 => VarType.Date, // adDate
         8 => VarType.Bstr, // adBSTR
         11 => VarType.Bool, // adBoolean
+        14 or 131 => VarType.Decimal, // adDecimal, adNumeric
         17 => VarType.UI1, // adUnsignedTinyInt
         20 => VarType.I8, // adBigInt
+        72 => VarType.Bstr, // adGUID
         202 or 203 => VarType.Bstr, // adVarWChar, adLongVarWChar
         _ => null,
     };
