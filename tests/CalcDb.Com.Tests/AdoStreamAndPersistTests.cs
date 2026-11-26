@@ -1,6 +1,9 @@
 using System.Security.Cryptography;
+using CalcDb.Com.Ado;
 using CalcDb.Com.Com;
 using CalcDb.Evidence;
+using CalcDb.Foundation;
+using CalcDb.Values;
 using static CalcDb.Com.Tests.AdoTestHarness;
 using static CalcDb.Com.Tests.NativeRoute;
 
@@ -404,38 +407,81 @@ public sealed unsafe class AdoStreamAndPersistTests
 
     private static void PersistMalformedFilesAndOverwriteFlags(string dbPath, string tempDir)
     {
-        // r-ado-1b/persist-malformed-files
-        string emptyPath = Path.Combine(tempDir, "empty.dat");
-        string zerosPath = Path.Combine(tempDir, "zeros.dat");
-        string badXmlPath = Path.Combine(tempDir, "badxml.dat");
-        string missingPath = Path.Combine(tempDir, "missing.dat");
-        File.WriteAllBytes(emptyPath, []);
-        File.WriteAllBytes(zerosPath, new byte[512]);
-        File.WriteAllText(badXmlPath, "<xml/>");
+        // r-ado-1b/persist-malformed-files: all 9 malformed inputs + nonexistent path, checking post-failure State=0, Fields.Count=0, Close->0x800A0E78.
+        (string FileName, byte[]? Bytes, int ExpectedScode, string ExpectedFragment)[] malformedCases =
+        [
+            ("mal-0.dat", [], unchecked((int)0x80004005), "empty"),
+            ("mal-1.dat", [0x41], unchecked((int)0x80004005), "empty"),
+            ("mal-2.dat", "abc"u8.ToArray(), unchecked((int)0x80004005), "empty"),
+            ("mal-3.dat", new byte[512], unchecked((int)0x80004005), "XML or ADTG"),
+            ("mal-4.dat", "<xml"u8.ToArray(), unchecked((int)0x80004005), "empty"),
+            ("mal-5.dat", [0xEF, 0xBB, 0xBF], unchecked((int)0x80004005), "empty"),
+            ("mal-6.dat", "<xml/>"u8.ToArray(), unchecked((int)0x80004005), "incomplete or invalid"),
+            ("mal-7.dat", "<?xml version=\"1.0\"?>"u8.ToArray(), unchecked((int)0x80004005), "XML or ADTG"),
+            ("mal-8.dat", "<xml xmlns:s='uuid:BDC6E3F0-6DA3-11d1-A2A3-00AA00C14882' xmlns:dt='uuid:C2F41010-65B3-11d1-A29F-00AA00C14882' xmlns:rs='urn:schemas-microsoft-com:rowset' xmlns:z='#RowsetSchema'></xml>"u8.ToArray(), unchecked((int)0x80004005), "incomplete or invalid"),
+            ("mal-9-missing.dat", null, unchecked((int)0x80030002), "cannot be found."),
+        ];
 
-        nint rBad = New(OwnRecordset);
-        try
+        foreach (var mc in malformedCases)
         {
-            Outcome oEmpty = Call(rBad, "Open", emptyPath, Missing, 3, 1, 256);
-            Assert.Equal(unchecked((int)0x80004005), oEmpty.Failure!.Value.Scode);
-            Assert.Equal("Microsoft OLEDB Persistence Provider", oEmpty.Failure.Value.Source);
-            Assert.Contains("empty", oEmpty.Failure.Value.Description);
-
-            Outcome oZeros = Call(rBad, "Open", zerosPath, Missing, 3, 1, 256);
-            Assert.Equal(unchecked((int)0x80004005), oZeros.Failure!.Value.Scode);
-            Assert.Contains("XML or ADTG", oZeros.Failure.Value.Description);
-
-            Outcome oBadXml = Call(rBad, "Open", badXmlPath, Missing, 3, 1, 256);
-            Assert.Equal(unchecked((int)0x80004005), oBadXml.Failure!.Value.Scode);
-            Assert.Contains("incomplete or invalid", oBadXml.Failure.Value.Description);
-
-            Outcome oMissing = Call(rBad, "Open", missingPath, Missing, 3, 1, 256);
-            Assert.Equal(unchecked((int)0x80030002), oMissing.Failure!.Value.Scode);
-            Assert.Equal($"File {missingPath} cannot be found.", oMissing.Failure.Value.Description);
+            string p = Path.Combine(tempDir, mc.FileName);
+            if (mc.Bytes is not null)
+            {
+                File.WriteAllBytes(p, mc.Bytes);
+            }
+            nint rBad = New(OwnRecordset);
+            try
+            {
+                Outcome o = Call(rBad, "Open", p, Missing, 3, 4, 256);
+                Assert.NotNull(o.Failure);
+                Assert.Equal(mc.ExpectedScode, o.Failure!.Value.Scode);
+                Assert.Equal("Microsoft OLEDB Persistence Provider", o.Failure.Value.Source);
+                Assert.Contains(mc.ExpectedFragment, o.Failure.Value.Description ?? "");
+                Assert.Equal(0, Get(rBad, "State"));
+                nint flds = (nint)Get(rBad, "Fields")!;
+                try
+                {
+                    Assert.Equal(0, Get(flds, "Count"));
+                }
+                finally
+                {
+                    Release(flds);
+                }
+                AssertAdoErr(Call(rBad, "Close"), unchecked((int)0x800A0E78), "ADODB.Recordset", 1240653, IidRecordset);
+            }
+            finally
+            {
+                Release(rBad);
+            }
         }
-        finally
+
+        // F11: unknown <rs:data> child element and invalid XML boolean fail with InvalidXmlMessage.
+        string badChildXml = Path.Combine(tempDir, "bad-child.xml");
+        File.WriteAllText(
+            badChildXml,
+            "<xml xmlns:s='uuid:BDC6E3F0-6DA3-11d1-A2A3-00AA00C14882' xmlns:dt='uuid:C2F41010-65B3-11d1-A29F-00AA00C14882' xmlns:rs='urn:schemas-microsoft-com:rowset' xmlns:z='#RowsetSchema'>"
+            + "<s:Schema id='RowsetSchema'><s:ElementType name='row' content='eltOnly'><s:AttributeType name='B' rs:number='1'><s:datatype dt:type='boolean' dt:maxLength='2'/></s:AttributeType></s:ElementType></s:Schema>"
+            + "<rs:data><rs:bogus/></rs:data></xml>");
+        string badBoolXml = Path.Combine(tempDir, "bad-bool.xml");
+        File.WriteAllText(
+            badBoolXml,
+            "<xml xmlns:s='uuid:BDC6E3F0-6DA3-11d1-A2A3-00AA00C14882' xmlns:dt='uuid:C2F41010-65B3-11d1-A29F-00AA00C14882' xmlns:rs='urn:schemas-microsoft-com:rowset' xmlns:z='#RowsetSchema'>"
+            + "<s:Schema id='RowsetSchema'><s:ElementType name='row' content='eltOnly'><s:AttributeType name='B' rs:number='1'><s:datatype dt:type='boolean' dt:maxLength='2'/></s:AttributeType></s:ElementType></s:Schema>"
+            + "<rs:data><z:row B='maybe'/></rs:data></xml>");
+        foreach (string p in new[] { badChildXml, badBoolXml })
         {
-            Release(rBad);
+            nint rx = New(OwnRecordset);
+            try
+            {
+                Outcome o = Call(rx, "Open", p, Missing, 3, 1, 256);
+                Assert.NotNull(o.Failure);
+                Assert.Equal(unchecked((int)0x80004005), o.Failure!.Value.Scode);
+                Assert.Contains("incomplete or invalid", o.Failure.Value.Description ?? "");
+            }
+            finally
+            {
+                Release(rx);
+            }
         }
 
         // r-ado-1b/persist-overwrite-flags & r-fix-wire-ado/persist-save-two-parameter
@@ -457,6 +503,11 @@ public sealed unsafe class AdoStreamAndPersistTests
                 Assert.NotNull(existsErr.Failure);
                 Assert.Equal(unchecked((int)0x80030050), existsErr.Failure!.Value.Scode);
                 Assert.Equal(0, ConnectionErrorCount(cn));
+
+                // 3-arg Save(oDat, 0, 1) fails DISP_E_BADPARAMCOUNT (0x8002000E) (r-fix-wire-ado/persist-save-two-parameter).
+                Outcome badParamCount = Call(rs, "Save", oDat, 0, 1);
+                Assert.NotNull(badParamCount.Failure);
+                Assert.Equal(unchecked((int)0x8002000E), badParamCount.Failure!.Value.Scode);
 
                 // Invalid PersistFormat=99 fails 0x800A0BB9 even on existing path.
                 AssertAdoErr(Call(rs, "Save", oDat, 99), unchecked((int)0x800A0BB9), "ADODB.Recordset", 1240641, IidRecordset);
@@ -482,11 +533,11 @@ public sealed unsafe class AdoStreamAndPersistTests
 
     private static void PersistPendingChangesMsPersistAndReconnect(string ado4Path, string reconnAdtgDb, string reconnXmlDb, string tempDir)
     {
-        // 1) r-str-ado-act/ado-persist: (3,3,4) with OLE B, edit T="pending", Save ADTG & XML, reopen + MSPersist.
+        // 1) r-str-ado-act/ado-persist: Mode=1 (3,3,4) with OLE B, edit T="pending", Save ADTG & XML, reopen + MSPersist.
         string kAdtg = Path.Combine(tempDir, "k.adtg");
         string kPendAdtg = Path.Combine(tempDir, "k-pending.adtg");
         string kPendXml = Path.Combine(tempDir, "k-pending.xml");
-        nint cn4 = OpenAceConnection(ado4Path);
+        nint cn4 = OpenAceConnection(ado4Path, mode: 1);
         try
         {
             nint rs = New(OwnRecordset);
@@ -498,12 +549,19 @@ public sealed unsafe class AdoStreamAndPersistTests
 
                 nint flds = (nint)Get(rs, "Fields")!;
                 nint ft = (nint)Get(flds, "Item", "T")!;
+                nint fbLive = (nint)Get(flds, "Item", "B")!;
                 try
                 {
+                    // F6: live (3,3,4) SELECT guards OLE Value/OriginalValue/UnderlyingValue with NotModelled.AdoSqlBinaryCursor.
+                    AssertNotModelled(Invoke(fbLive, "Value", 2), "NotModelled.AdoSqlBinaryCursor");
+                    AssertNotModelled(Invoke(fbLive, "OriginalValue", 2), "NotModelled.AdoSqlBinaryCursor");
+                    AssertNotModelled(Invoke(fbLive, "UnderlyingValue", 2), "NotModelled.AdoSqlBinaryCursor");
+
                     Assert.Null(Put(ft, "Value", "pending").Failure);
                 }
                 finally
                 {
+                    Release(fbLive);
                     Release(ft);
                     Release(flds);
                 }
@@ -586,6 +644,42 @@ public sealed unsafe class AdoStreamAndPersistTests
             }
 
             Assert.Equal(0, ConnectionErrorCount(cm));
+
+            // F1: MSPersist guards on DefaultDatabase and Command binding.
+            AssertNotModelled(Invoke(cm, "DefaultDatabase", 2), "NotModelled.AdoMsPersistDefaultDatabase");
+            AssertNotModelled(Call(cm, "Execute", kAdtg, 0), "NotModelled.AdoMsPersistExecuteRecordsAffected");
+            nint cmdMs = New(OwnCommand);
+            try
+            {
+                AssertNotModelled(Invoke(cmdMs, "ActiveConnection", 8, new Dispatch(cm)), "NotModelled.AdoMsPersistCommand");
+            }
+            finally
+            {
+                Release(cmdMs);
+            }
+
+            // F4: cm.Execute(missingPath) fails 0x80030002 and populates cm.Errors with NativeError 130 (r-str-ado-act/ado-persist #73-84).
+            string missingMsPath = Path.Combine(tempDir, "no-such-mspersist.adtg");
+            Outcome missingExec = Call(cm, "Execute", missingMsPath);
+            Assert.NotNull(missingExec.Failure);
+            Assert.Equal(unchecked((int)0x80030002), missingExec.Failure!.Value.Scode);
+            Assert.Equal(1, ConnectionErrorCount(cm));
+            nint cmErrs = (nint)Get(cm, "Errors")!;
+            nint cmErr0 = (nint)Get(cmErrs, "Item", 0)!;
+            try
+            {
+                Assert.Equal(unchecked((int)0x80030002), Get(cmErr0, "Number"));
+                Assert.Equal("Microsoft OLEDB Persistence Provider", Get(cmErr0, "Source"));
+                Assert.Equal($"File {missingMsPath} cannot be found.", Get(cmErr0, "Description"));
+                Assert.True(string.IsNullOrEmpty((string?)Get(cmErr0, "SQLState")));
+                Assert.Equal(130, Get(cmErr0, "NativeError"));
+            }
+            finally
+            {
+                Release(cmErr0);
+                Release(cmErrs);
+            }
+
             Assert.Null(Call(cm, "Close").Failure);
             Assert.Equal(0, Get(cm, "State"));
         }
@@ -639,13 +733,36 @@ public sealed unsafe class AdoStreamAndPersistTests
                 Release(rs);
             }
 
-            // Reopen disconnected, reconnect ActiveConnection, set Unique Table, UpdateBatch(3).
+            // Reopen disconnected, verify OriginalValue/UnderlyingValue (F7), reconnect ActiveConnection, set Unique Table, UpdateBatch(3).
             nint r2 = New(OwnRecordset);
             try
             {
                 Assert.Null(Call(r2, "Open", savePath, Missing, 3, 4, 256).Failure);
                 Assert.Equal(12, Get(r2, "RecordCount"));
                 Assert.Equal(2, Get(r2, "Status")); // Row 1 modified
+
+                // Verify modified row (ID=1) has Value="pr1" and OriginalValue != "pr1", and new row (ID=40) has DBNull OriginalValue/UnderlyingValue (F7).
+                nint flds2 = (nint)Get(r2, "Fields")!;
+                nint fid2 = (nint)Get(flds2, "Item", "ID")!;
+                nint fs2 = (nint)Get(flds2, "Item", "S")!;
+                try
+                {
+                    Assert.Equal("pr1", Get(fs2, "Value"));
+                    Assert.NotEqual("pr1", Get(fs2, "OriginalValue"));
+                    Assert.Null(Call(r2, "MoveLast").Failure);
+                    Assert.Equal(40, Get(fid2, "Value"));
+                    Assert.Equal(1, Get(r2, "Status")); // adRecNew
+                    Assert.Equal(DBNull.Value, Get(fid2, "OriginalValue"));
+                    Assert.Equal(DBNull.Value, Get(fid2, "UnderlyingValue"));
+                    Assert.Null(Call(r2, "MoveFirst").Failure);
+                }
+                finally
+                {
+                    Release(fs2);
+                    Release(fid2);
+                    Release(flds2);
+                }
+
                 Assert.Null(Invoke(r2, "ActiveConnection", 8, new Dispatch(cn)).Failure);
                 Assert.Null(Call(r2, "UpdateBatch", 3).Failure);
                 Assert.Equal(0, ConnectionErrorCount(cn));
@@ -714,17 +831,21 @@ public sealed unsafe class AdoStreamAndPersistTests
 
     private static void UnrecordedEdgesRefusedByName(string dbPath, string tempDir)
     {
-        // Unrecorded Stream charsets, URL Open, multi-line ReadText(-2) without prior NUL, SkipLine before EOS, non-utf8 text SaveToFile.
+        // Unrecorded Stream charsets, URL Open, LineSeparator on closed stream, non-text Open credentials,
+        // mid-stream WriteText overwrite, valid UTF-8 ReadText, multi-line ReadText(-2) without prior NUL, SkipLine before EOS, non-utf8 text SaveToFile.
         nint st = New(OwnStream);
         try
         {
             AssertNotModelled(Put(st, "Charset", "iso-8859-1"), "NotModelled.AdoStreamCharset");
+            AssertNotModelled(Put(st, "LineSeparator", 10), "NotModelled.AdoStreamLineSeparatorContext");
             AssertNotModelled(Call(st, "Open", "file://temp.bin"), "NotModelled.AdoStreamOpenSource");
+            AssertNotModelled(Call(st, "Open", Missing, 0, -1, 123), "NotModelled.AdoStreamOpenCredentials");
 
             Assert.Null(Call(st, "Open").Failure);
             Assert.Null(Call(st, "WriteText", "line1\nline2", 0).Failure);
             Assert.Null(Put(st, "LineSeparator", 10).Failure);
             Assert.Null(Put(st, "Position", 0).Failure);
+            AssertNotModelled(Call(st, "WriteText", "ov", 0), "NotModelled.AdoStreamWriteTextOverwrite");
             AssertNotModelled(Call(st, "ReadText", -2), "NotModelled.AdoStreamReadLineWithSeparator");
             AssertNotModelled(Call(st, "SkipLine"), "NotModelled.AdoStreamSkipLine");
             AssertNotModelled(Call(st, "SaveToFile", Path.Combine(tempDir, "unicode-text.bin"), 2), "NotModelled.AdoStreamSaveTextCharset");
@@ -740,13 +861,35 @@ public sealed unsafe class AdoStreamAndPersistTests
                 Release(dest);
             }
             Assert.Null(Call(st, "Close").Failure);
+
+            // F11: valid UTF-8 bytes under Charset="utf-8" refuse ReadText by name (only invalid UTF-8 -> 0x80070057 is recorded).
+            Assert.Null(Put(st, "Type", 1).Failure);
+            Assert.Null(Call(st, "Open").Failure);
+            Assert.Null(Call(st, "Write", "hello"u8.ToArray()).Failure);
+            Assert.Null(Put(st, "Position", 0).Failure);
+            Assert.Null(Put(st, "Type", 2).Failure);
+            Assert.Null(Put(st, "Charset", "utf-8").Failure);
+            AssertNotModelled(Call(st, "ReadText", -1), "NotModelled.AdoStreamReadValidUtf8");
+            Assert.Null(Call(st, "Close").Failure);
+
+            // F11: Recordset.Open from closed Stream refuses by name.
+            nint rsClosedStream = New(OwnRecordset);
+            try
+            {
+                AssertNotModelled(Call(rsClosedStream, "Open", new Dispatch(st), Missing, 3, 1, Missing), "NotModelled.AdoRecordsetOpenClosedStream");
+            }
+            finally
+            {
+                Release(rsClosedStream);
+            }
         }
         finally
         {
             Release(st);
         }
 
-        // Unrecorded Recordset.Save on server cursor and omitted destination without prior file Save.
+        // Unrecorded Recordset.Save on server cursor, Execute-returned client cursor (F10), empty path (F9),
+        // omitted destination without prior file Save, and persisted Open with LockType=3 (F11).
         nint cn = OpenAceConnection(dbPath, mode: 1);
         try
         {
@@ -762,17 +905,52 @@ public sealed unsafe class AdoStreamAndPersistTests
                 Release(srvRs);
             }
 
+            string refFile = Path.Combine(tempDir, "ref-lock.adtg");
             nint cliRs = New(OwnRecordset);
             try
             {
                 Assert.Null(Put(cliRs, "CursorLocation", 3).Failure);
                 Assert.Null(Call(cliRs, "Open", "SELECT ID FROM T ORDER BY ID", new Dispatch(cn), 3, 1, 1).Failure);
                 AssertNotModelled(Call(cliRs, "Save"), "NotModelled.AdoRecordsetSaveNoPriorDestination");
+                AssertNotModelled(Call(cliRs, "Save", "", 0), "NotModelled.AdoRecordsetSaveEmptyPath");
+                Assert.Null(Call(cliRs, "Save", refFile, 0).Failure);
                 Assert.Null(Call(cliRs, "Close").Failure);
             }
             finally
             {
                 Release(cliRs);
+            }
+
+            nint rsLock3 = New(OwnRecordset);
+            try
+            {
+                AssertNotModelled(Call(rsLock3, "Open", refFile, Missing, 3, 3, 256), "NotModelled.AdoPersistLockType");
+            }
+            finally
+            {
+                Release(rsLock3);
+            }
+
+            // F10: Connection.Execute client Recordset refuses Save.
+            nint cnClient = OpenAceConnection(dbPath, mode: 1);
+            try
+            {
+                Assert.Null(Put(cnClient, "CursorLocation", 3).Failure);
+                nint execRs = (nint)Call(cnClient, "Execute", "SELECT ID FROM T ORDER BY ID").Value!;
+                try
+                {
+                    AssertNotModelled(Call(execRs, "Save", Path.Combine(tempDir, "exec.adtg"), 0), "NotModelled.AdoRecordsetSaveFromExecute");
+                    Assert.Null(Call(execRs, "Close").Failure);
+                }
+                finally
+                {
+                    Release(execRs);
+                }
+            }
+            finally
+            {
+                Assert.Null(Call(cnClient, "Close").Failure);
+                Release(cnClient);
             }
         }
         finally
@@ -780,6 +958,119 @@ public sealed unsafe class AdoStreamAndPersistTests
             Assert.Null(Call(cn, "Close").Failure);
             Release(cn);
         }
+    }
+
+    [Fact]
+    public void Persisted_ADTG_and_XML_codecs_roundtrip_all_15_ADO_types_and_pending_states()
+    {
+        // F2, F5, F7, F11, F12: direct roundtrip of all 15 persist-roundtrip-typed ADO types across Clean/Modified/New/Deleted.
+        PersistedColumn[] cols =
+        [
+            new("ID", 3, 4, 10, 255, 16, "AllTypes", "ID", true),
+            new("C_Txt", 202, 50, 255, 255, 96, "AllTypes", "C_Txt", false),
+            new("C_I2", 2, 2, 5, 255, 112, "AllTypes", "C_I2", false),
+            new("C_UI1", 17, 1, 3, 255, 112, "AllTypes", "C_UI1", false),
+            new("C_R4", 4, 4, 7, 255, 112, "AllTypes", "C_R4", false),
+            new("C_R8", 5, 8, 15, 255, 112, "AllTypes", "C_R8", false),
+            new("C_Cur", 6, 8, 19, 255, 112, "AllTypes", "C_Cur", false),
+            new("C_Date", 7, 8, 255, 255, 112, "AllTypes", "C_Date", false),
+            new("C_Bool", 11, 2, 255, 255, 112, "AllTypes", "C_Bool", false),
+            new("C_Dec", 131, 19, 18, 4, 112, "AllTypes", "C_Dec", false),
+            new("C_Guid", 72, 16, 255, 255, 112, "AllTypes", "C_Guid", false),
+            new("C_Memo", 203, 536870910, 255, 255, 224, "AllTypes", "C_Memo", false),
+            new("C_Ole", 205, 536870910, 255, 255, 224, "AllTypes", "C_Ole", false),
+            new("C_Bin", 204, 16, 255, 255, 112, "AllTypes", "C_Bin", false),
+            new("C_Null", 3, 4, 10, 255, 112, "AllTypes", "C_Null", false),
+        ];
+
+        static OwnedVariant MakeBytes(params byte[] data)
+        {
+            nint psa = SafeArrays.Create(VarType.UI1, (0, data.Length));
+            if (data.Length > 0)
+            {
+                data.CopyTo(new Span<byte>(SafeArrays.ElementPointer(psa, 0), data.Length));
+            }
+            return OwnedVariant.TakeArray(psa, VarType.UI1);
+        }
+
+        static OwnedVariant[] MakeRow(int id, string txt, short i2, byte ui1, bool flag) =>
+        [
+            OwnedVariant.FromInt32(id),
+            OwnedVariant.FromText(txt),
+            OwnedVariant.FromInt16(i2),
+            OwnedVariant.FromByte(ui1),
+            OwnedVariant.FromSingle(1.5f),
+            OwnedVariant.FromDouble(3.25),
+            OwnedVariant.FromCurrency(123456), // 12.3456
+            OwnedVariant.FromDate(new DateTime(2026, 6, 15, 12, 30, 0).ToOADate()),
+            OwnedVariant.FromBoolean(flag),
+            OwnedVariant.FromDecimal(DecimalValue.FromDecimal(987.6543m)),
+            OwnedVariant.FromText("{12345678-1234-1234-1234-1234567890AB}"),
+            OwnedVariant.FromText("memo line 1\r\nline 2"),
+            MakeBytes(0x00, 0x01, 0xFF),
+            MakeBytes(0xDE, 0xAD),
+            OwnedVariant.Null(),
+        ];
+
+        bool[] modMask = new bool[cols.Length];
+        modMask[1] = true;
+        var rows = new List<PersistedRow>
+        {
+            new(ClientRowState.Clean, MakeRow(1, "clean", -12, 7, true), MakeRow(1, "clean", -12, 7, true), new bool[cols.Length], 0),
+            new(ClientRowState.Modified, MakeRow(2, "after", 99, 8, false), MakeRow(2, "before", 99, 8, false), modMask, 1),
+            new(ClientRowState.New, MakeRow(3, "inserted", 5, 2, true), AdoAdtgCodec.CreateNullVariants(cols.Length), new bool[cols.Length], 2),
+            new(ClientRowState.Deleted, MakeRow(4, "deleted", 1, 1, false), MakeRow(4, "deleted", 1, 1, false), new bool[cols.Length], 3),
+        };
+
+        using var input = new PersistedRecordsetData(cols, rows, "AllTypes", isUpdatable: true);
+
+        // ADTG roundtrip + verify MS-ADTG row tokens (F5: 0x08 Insert, 0x09 Delete, 0x0A Change)
+        byte[] adtg = AdoAdtgCodec.Encode(input, out Failure? adtgEncFail);
+        Assert.Null(adtgEncFail);
+        Assert.True(AdoAdtgCodec.TryDecode(adtg, out PersistedRecordsetData? fromAdtg, out Failure? adtgDecFail));
+        Assert.Null(adtgDecFail);
+        Assert.NotNull(fromAdtg);
+        using (fromAdtg)
+        {
+            Assert.Equal(15, fromAdtg.Columns.Length);
+            Assert.Equal(4, fromAdtg.Rows.Count);
+            Assert.Equal(ClientRowState.Clean, fromAdtg.Rows[0].State);
+            Assert.Equal(ClientRowState.Modified, fromAdtg.Rows[1].State);
+            Assert.True(fromAdtg.Rows[1].ModifiedColumns[1]);
+            Assert.False(fromAdtg.Rows[1].ModifiedColumns[2]);
+            Assert.Equal(ClientRowState.New, fromAdtg.Rows[2].State);
+            Assert.All(fromAdtg.Rows[2].Original, v => Assert.Equal(VarType.Null, v.Type)); // F7
+            Assert.Equal(ClientRowState.Deleted, fromAdtg.Rows[3].State);
+        }
+
+        // XML roundtrip (including F2 narrow-scalar diff detection and F7 null Original on New)
+        string xml = AdoXmlPersistCodec.Encode(input, out Failure? xmlEncFail);
+        Assert.Null(xmlEncFail);
+        byte[] xmlBytes = System.Text.Encoding.UTF8.GetBytes(xml);
+        Assert.True(AdoXmlPersistCodec.TryDecode(xmlBytes, out PersistedRecordsetData? fromXml, out Failure? xmlDecFail));
+        Assert.Null(xmlDecFail);
+        Assert.NotNull(fromXml);
+        using (fromXml)
+        {
+            Assert.Equal(15, fromXml.Columns.Length);
+            Assert.Equal(4, fromXml.Rows.Count);
+            Assert.Equal(ClientRowState.Clean, fromXml.Rows[0].State);
+            Assert.Equal(ClientRowState.Modified, fromXml.Rows[1].State);
+            Assert.True(fromXml.Rows[1].ModifiedColumns[1]);
+            Assert.False(fromXml.Rows[1].ModifiedColumns[2]); // I2 equal (F2)
+            Assert.False(fromXml.Rows[1].ModifiedColumns[3]); // UI1 equal (F2)
+            Assert.False(fromXml.Rows[1].ModifiedColumns[8]); // Bool equal (F2)
+            Assert.Equal(ClientRowState.New, fromXml.Rows[2].State);
+            Assert.All(fromXml.Rows[2].Original, v => Assert.Equal(VarType.Null, v.Type)); // F7
+            Assert.Equal(ClientRowState.Deleted, fromXml.Rows[3].State);
+        }
+
+        // F11: non-NCName column name refused by XML encoder
+        PersistedColumn[] badCol = [new("bad col", 3, 4, 10, 255, 16, null, null, false)];
+        using var badInput = new PersistedRecordsetData(badCol, [], null, isUpdatable: false);
+        _ = AdoXmlPersistCodec.Encode(badInput, out Failure? badNameFail);
+        Assert.NotNull(badNameFail);
+        Assert.Contains("NotModelled.AdoPersistXmlColumnName", badNameFail!.Description ?? "");
     }
 
     private static string GetText(Outcome outcome)

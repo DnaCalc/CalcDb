@@ -1334,12 +1334,18 @@ internal sealed unsafe class RecordsetObject : AdoObject
         return rs;
     }
 
-    private void OpenFromPersisted(
+    private CallResult OpenFromPersisted(
         PersistedRecordsetData data,
         ConnectionObject? activeConnection,
         int requestedLockType)
     {
-        int effLock = requestedLockType is 1 or 3 or 4 ? requestedLockType : 1;
+        if (requestedLockType is not (1 or 4))
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.AdoPersistLockType",
+                $"Opening a persisted Recordset with LockType={requestedLockType} is not recorded (only adLockReadOnly=1 and adLockBatchOptimistic=4 are recorded)"));
+        }
+        int effLock = requestedLockType;
         ClientRowBuffer buffer = ClientRowBuffer.FromPersisted(data);
         var rows = new ClientBatchRowSource(buffer, isBatchOptimistic: effLock == 4, fromTable: false, fromSavedQuery: false, isPersisted: true);
         _cursorLocation = 3;
@@ -1365,6 +1371,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
             openedFromCommand: false,
             recordCountSource: AdoRecordCountSource.Persisted,
             selectShape: AdoSelectShape.PlainSingleTable);
+        return CallResult.Nothing;
     }
 
     internal AdoFieldDescriptor[] ColumnDescriptors => _rows!.Columns;
@@ -4741,6 +4748,12 @@ internal sealed unsafe class RecordsetObject : AdoObject
             {
                 return NotImplemented("Recordset.Open(Stream) with an ActiveConnection (not recorded)");
             }
+            if (!sourceStream.IsOpen)
+            {
+                return CallResult.Fail(Failure.NotModelled(
+                    "NotModelled.AdoRecordsetOpenClosedStream",
+                    "Recordset.Open from a closed ADODB.Stream is not recorded"));
+            }
             byte[] raw = sourceStream.ReadRemainingRawBytes();
             if (!AdoPersistence.TryDecodeBytes(raw, out PersistedRecordsetData? streamData, out Failure? streamErr))
             {
@@ -4748,8 +4761,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
             }
             using (streamData!)
             {
-                OpenFromPersisted(streamData!, activeConnection: null, _requestedLockType);
-                return CallResult.Nothing;
+                return OpenFromPersisted(streamData!, activeConnection: null, _requestedLockType);
             }
         }
 
@@ -4777,12 +4789,27 @@ internal sealed unsafe class RecordsetObject : AdoObject
             }
             if (!AdoPersistence.TryLoadFile(_source, out PersistedRecordsetData? fileData, out Failure? fileErr))
             {
+                if (_activeConnection is { IsPersistenceOpen: true } && fileErr!.Scode == HResultFileNotFound)
+                {
+                    _activeConnection.SetProviderError(new AdoErrorEntry(
+                        HResultFileNotFound,
+                        PersistenceProviderSource,
+                        fileErr.Description ?? "",
+                        "",
+                        0,
+                        "",
+                        130));
+                }
                 return CallResult.Fail(fileErr!);
             }
             using (fileData!)
             {
-                OpenFromPersisted(fileData!, _activeConnection, _requestedLockType);
-                return CallResult.Nothing;
+                CallResult openRes = OpenFromPersisted(fileData!, _activeConnection, _requestedLockType);
+                if (openRes.Failure is null && _activeConnection is { IsPersistenceOpen: true })
+                {
+                    _activeConnection.ClearErrors();
+                }
+                return openRes;
             }
         }
 
@@ -4989,6 +5016,13 @@ internal sealed unsafe class RecordsetObject : AdoObject
             format = parsedFormat;
         }
 
+        if (_openedFromExecute)
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.AdoRecordsetSaveFromExecute",
+                "Recordset.Save on a Recordset returned by Connection.Execute is not recorded"));
+        }
+
         PersistedRecordsetData? snapshot;
         if (_rows is ClientBatchRowSource cb)
         {
@@ -5053,6 +5087,12 @@ internal sealed unsafe class RecordsetObject : AdoObject
             {
                 return NotImplemented("Recordset.Save with a non-string, non-Stream Destination (not recorded)");
             }
+            if (string.IsNullOrEmpty(filePath))
+            {
+                return CallResult.Fail(Failure.NotModelled(
+                    "NotModelled.AdoRecordsetSaveEmptyPath",
+                    "Recordset.Save with an empty string Destination is not recorded"));
+            }
 
             CallResult fileResult = SaveToFile(filePath, format, snapshot, overwriteExisting: false);
             if (fileResult.Failure is null)
@@ -5104,7 +5144,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return CallResult.Fail(FileAlreadyExistsFailure());
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {
             return CallResult.Fail(PersistenceFailure(HResultFail, $"Failed to save Recordset to '{path}': {ex.Message}"));
         }

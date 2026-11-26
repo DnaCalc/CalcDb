@@ -193,6 +193,10 @@ internal sealed unsafe class StreamObject : AdoObject
 
     private CallResult PutLineSeparator(nint arg)
     {
+        if (!_isOpen || _type != AdTypeText)
+        {
+            return NotModelled("NotModelled.AdoStreamLineSeparatorContext", "Stream.LineSeparator put on a closed or binary stream is not recorded");
+        }
         if (AdoArgs.Int32(arg) is not int sep || sep is not (AdCrLf or AdLf))
         {
             return NotModelled("NotModelled.AdoStreamLineSeparator", "Stream.LineSeparator outside adCRLF (-1) and adLF (10) is not recorded");
@@ -261,11 +265,13 @@ internal sealed unsafe class StreamObject : AdoObject
             return NotModelled("NotModelled.AdoStreamOpenSource", "Stream.Open with a URL or object Source (other than a closed Record) is not recorded");
         }
 
-        if (userArg != 0 && !TypedCall.IsMissing(Args.Cell(userArg)) && !string.IsNullOrEmpty(Args.Text(userArg)))
+        bool userPresent = userArg != 0 && !TypedCall.IsMissing(Args.Cell(userArg)) && Args.TypeOf(userArg) != VarType.Empty;
+        if (userPresent && Args.Text(userArg) is not "")
         {
             return NotModelled("NotModelled.AdoStreamOpenCredentials", "Stream.Open with UserName is not recorded");
         }
-        if (passArg != 0 && !TypedCall.IsMissing(Args.Cell(passArg)) && !string.IsNullOrEmpty(Args.Text(passArg)))
+        bool passPresent = passArg != 0 && !TypedCall.IsMissing(Args.Cell(passArg)) && Args.TypeOf(passArg) != VarType.Empty;
+        if (passPresent && Args.Text(passArg) is not "")
         {
             return NotModelled("NotModelled.AdoStreamOpenCredentials", "Stream.Open with Password is not recorded");
         }
@@ -477,6 +483,11 @@ internal sealed unsafe class StreamObject : AdoObject
             return NotModelled("NotModelled.AdoStreamWriteTextCharset", $"Stream.WriteText under Charset='{_charset}' is not recorded");
         }
 
+        if (_position < _bytes.Count)
+        {
+            return NotModelled("NotModelled.AdoStreamWriteTextOverwrite", "Stream.WriteText overwriting at Position < Size is not recorded");
+        }
+
         string payload = options == AdWriteLine
             ? text + (_lineSeparator == AdLf ? "\n" : "\r\n")
             : text;
@@ -606,15 +617,14 @@ internal sealed unsafe class StreamObject : AdoObject
         _bytes.CopyTo(start, slice, 0, slice.Length);
         try
         {
-            string decoded = StrictUtf8.GetString(slice);
-            _position = _bytes.Count;
-            return Text(decoded);
+            _ = StrictUtf8.GetString(slice);
         }
         catch (DecoderFallbackException)
         {
             // r-str-ado-act/ado-stream #24, r-q-ado-misc/stream-text-ops #32: Provider 0x80070057 "The parameter is incorrect."
             return CallResult.Fail(ProviderFailure(HResultInvalidArg, "The parameter is incorrect.", Decl.Iid));
         }
+        return NotModelled("NotModelled.AdoStreamReadValidUtf8", "Stream.ReadText on valid UTF-8 bytes under Charset='utf-8' is not recorded");
     }
 
     private CallResult ReadAsciiText(int numChars)
@@ -638,6 +648,10 @@ internal sealed unsafe class StreamObject : AdoObject
         {
             // r-q45-querydef-stream-rollback/stream-write-on-text-and-types #32.
             return Fail(AdoErrors.NotAllowedInContext);
+        }
+        if (_mode == AdModeWrite)
+        {
+            return NotModelled("NotModelled.AdoStreamSkipLineWriteOnly", "Stream.SkipLine on an adModeWrite stream is not recorded");
         }
         if (_position >= _bytes.Count)
         {
@@ -664,6 +678,10 @@ internal sealed unsafe class StreamObject : AdoObject
         if (ReferenceEquals(this, dest))
         {
             return NotModelled("NotModelled.AdoStreamCopyToSelf", "Stream.CopyTo onto the same Stream instance is not recorded");
+        }
+        if (_mode == AdModeWrite || dest._mode == AdModeRead)
+        {
+            return NotModelled("NotModelled.AdoStreamCopyToMode", "Stream.CopyTo with an adModeWrite source or adModeRead destination is not recorded");
         }
 
         int charNumber = AdReadAll;
@@ -692,6 +710,10 @@ internal sealed unsafe class StreamObject : AdoObject
         }
 
         // r-q-ado-misc/stream-text-ops #46-47: 3 ascii bytes copied into open Unicode stream -> Size 8 (2B BOM + 6B UTF-16LE).
+        if (dest._position < dest._bytes.Count)
+        {
+            return NotModelled("NotModelled.AdoStreamWriteTextOverwrite", "Stream.CopyTo overwriting destination at Position < Size is not recorded");
+        }
         string text = DecodeAscii(_position, _bytes.Count - _position);
         _position = _bytes.Count;
         dest.WriteUnicodeTextCore(text);
@@ -703,6 +725,10 @@ internal sealed unsafe class StreamObject : AdoObject
         if (!_isOpen)
         {
             return Fail(AdoErrors.ObjectClosed);
+        }
+        if (_mode is AdModeRead or AdModeWrite)
+        {
+            return NotModelled("NotModelled.AdoStreamSaveToFileMode", $"Stream.SaveToFile under Mode={_mode} is not recorded");
         }
         string? fileName = args.Length > 0 && args[0] != 0 ? Args.Text(args[0]) : null;
         if (string.IsNullOrEmpty(fileName))
@@ -739,20 +765,17 @@ internal sealed unsafe class StreamObject : AdoObject
         else if (IsUtf8Charset(_charset))
         {
             // r-str-ado-act/ado-stream #25-26: text stream with Charset="utf-8" writes UTF-8 BOM EF BB BF prepended
-            // to raw buffer bytes when not already present (14B Unicode buffer -> 17B file sha256 a802d5ea9691...).
+            // to raw buffer bytes (14B Unicode buffer -> 17B file sha256 a802d5ea9691...).
             bool hasUtf8Bom = _bytes.Count >= 3 && _bytes[0] == 0xEF && _bytes[1] == 0xBB && _bytes[2] == 0xBF;
             if (hasUtf8Bom)
             {
-                output = [.. _bytes];
+                return NotModelled("NotModelled.AdoStreamSaveUtf8WithExistingBom", "Stream.SaveToFile on a utf-8 text stream whose buffer already starts with EF BB BF is not recorded");
             }
-            else
-            {
-                output = new byte[_bytes.Count + 3];
-                output[0] = 0xEF;
-                output[1] = 0xBB;
-                output[2] = 0xBF;
-                _bytes.CopyTo(output, 3);
-            }
+            output = new byte[_bytes.Count + 3];
+            output[0] = 0xEF;
+            output[1] = 0xBB;
+            output[2] = 0xBF;
+            _bytes.CopyTo(output, 3);
         }
         else
         {
@@ -765,11 +788,7 @@ internal sealed unsafe class StreamObject : AdoObject
             using var fs = new FileStream(fileName, fileMode, FileAccess.Write, FileShare.None);
             fs.Write(output, 0, output.Length);
         }
-        catch (IOException)
-        {
-            return Fail(AdoErrors.WriteToFileFailed);
-        }
-        catch (UnauthorizedAccessException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {
             return Fail(AdoErrors.WriteToFileFailed);
         }
@@ -782,6 +801,10 @@ internal sealed unsafe class StreamObject : AdoObject
         if (!_isOpen)
         {
             return Fail(AdoErrors.ObjectClosed);
+        }
+        if (_mode == AdModeRead)
+        {
+            return NotModelled("NotModelled.AdoStreamLoadFromFileReadOnly", "Stream.LoadFromFile on an adModeRead stream is not recorded");
         }
         string? fileName = arg != 0 ? Args.Text(arg) : null;
         if (string.IsNullOrEmpty(fileName))
@@ -812,11 +835,7 @@ internal sealed unsafe class StreamObject : AdoObject
             _position = 0;
             return CallResult.Nothing;
         }
-        catch (IOException)
-        {
-            return Fail(AdoErrors.FileCouldNotBeOpened);
-        }
-        catch (UnauthorizedAccessException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {
             return Fail(AdoErrors.FileCouldNotBeOpened);
         }

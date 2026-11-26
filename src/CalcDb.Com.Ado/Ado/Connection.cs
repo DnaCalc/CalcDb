@@ -1016,7 +1016,16 @@ internal sealed unsafe class ConnectionObject : AdoObject
         return CallResult.Nothing;
     }
 
-    private CallResult GetDefaultDatabase() => IsOpen ? CallResult.OfOwnedBstr(0) : Fail(AdoErrors.ObjectClosed);
+    private CallResult GetDefaultDatabase()
+    {
+        if (_isPersistenceOpen)
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.AdoMsPersistDefaultDatabase",
+                "Connection.DefaultDatabase on an open MSPersist connection is not recorded"));
+        }
+        return IsOpen ? CallResult.OfOwnedBstr(0) : Fail(AdoErrors.ObjectClosed);
+    }
 
     /// <summary>
     /// DefaultDatabase = text: 0x800A0E78 while closed; while open, 0x80040E21 with IErrorInfo on _Connection and
@@ -1846,7 +1855,14 @@ internal sealed unsafe class ConnectionObject : AdoObject
         }
         if (_isPersistenceOpen)
         {
-            // r-str-ado-act/ado-persist #70-73: cm.Execute(filePath) loads a persisted Recordset file.
+            // r-str-ado-act/ado-persist #70-84: cm.Execute(filePath) loads a persisted Recordset file;
+            // missing file fails 0x80030002 and populates Connection.Errors with NativeError 130.
+            if (args[1] != 0 && !TypedCall.IsMissing(Args.Cell(args[1])) && Args.TypeOf(args[1]) != VarType.Empty)
+            {
+                return CallResult.Fail(Failure.NotModelled(
+                    "NotModelled.AdoMsPersistExecuteRecordsAffected",
+                    "Connection.Execute on MSPersist with a RecordsAffected argument is not recorded"));
+            }
             int pOpt = args[2] == 0 ? AdoSqlText.AdCmdUnspecified : (AdoArgs.Int32(args[2]) ?? int.MinValue);
             if (pOpt is not (AdoSqlText.AdCmdUnspecified or AdoSqlText.AdCmdFile))
             {
@@ -1854,7 +1870,18 @@ internal sealed unsafe class ConnectionObject : AdoObject
             }
             if (!AdoPersistence.TryLoadFile(commandText, out PersistedRecordsetData? data, out Failure? persistFail))
             {
-                return CallResult.Fail(persistFail!);
+                if (persistFail!.Scode == HResultFileNotFound)
+                {
+                    SetProviderError(new AdoErrorEntry(
+                        HResultFileNotFound,
+                        PersistenceProviderSource,
+                        persistFail.Description ?? "",
+                        "",
+                        0,
+                        "",
+                        130));
+                }
+                return CallResult.Fail(persistFail);
             }
             using (data!)
             {
@@ -1880,7 +1907,12 @@ internal sealed unsafe class ConnectionObject : AdoObject
         string callerName,
         CommandObject? explicitCommand = null)
     {
-        AdoOpenSession session = _session!;
+        if (_session is not { } session)
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.AdoMsPersistExecuteCommandText",
+                $"{callerName} without an open ACE session is not recorded"));
+        }
         if (string.IsNullOrWhiteSpace(commandText))
         {
             MappedProviderError emptyErr = AdoSqlErrors.CommandTextNotSet();

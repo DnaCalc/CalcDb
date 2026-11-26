@@ -533,7 +533,7 @@ internal sealed unsafe class ClientRowBuffer
                 cur[c] = pr.Current[c].CopyPreservingReference();
                 orig[c] = pr.Original[c].CopyPreservingReference();
                 under[c] = pr.State == ClientRowState.New
-                    ? pr.Current[c].CopyPreservingReference()
+                    ? OwnedVariant.Null()
                     : pr.Original[c].CopyPreservingReference();
             }
             long staging = pr.StagingOrder;
@@ -2066,6 +2066,13 @@ internal sealed class ClientBatchRowSource : IAdoRowSource
             failure = AdoSqlErrors.ClientDeletedRowHandle().ComFailure;
             return null;
         }
+        if (_buffer.IsLiveBinaryGuard && _buffer.Columns[ordinal].AdoType is 204 or 205)
+        {
+            failure = Failure.NotModelled(
+                "NotModelled.AdoSqlBinaryCursor",
+                $"Reading OriginalValue of Binary/OLE field '{_buffer.Columns[ordinal].Name}' on live client batch SELECT is not recorded");
+            return null;
+        }
         return row.Original[ordinal].CopyPreservingReference();
     }
 
@@ -2081,6 +2088,13 @@ internal sealed class ClientBatchRowSource : IAdoRowSource
         if (row.State is ClientRowState.Deleted or ClientRowState.Purged)
         {
             failure = AdoSqlErrors.ClientDeletedRowHandle().ComFailure;
+            return null;
+        }
+        if (_buffer.IsLiveBinaryGuard && _buffer.Columns[ordinal].AdoType is 204 or 205)
+        {
+            failure = Failure.NotModelled(
+                "NotModelled.AdoSqlBinaryCursor",
+                $"Reading UnderlyingValue of Binary/OLE field '{_buffer.Columns[ordinal].Name}' on live client batch SELECT is not recorded");
             return null;
         }
         return row.Underlying[ordinal].CopyPreservingReference();

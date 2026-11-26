@@ -152,7 +152,7 @@ internal static class AdoPersistence
             error = AdoObject.PersistenceFailure(AdoObject.HResultFileNotFound, $"File {path} cannot be found.");
             return false;
         }
-        catch (IOException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {
             error = AdoObject.PersistenceFailure(AdoObject.HResultFail, InvalidSourceFormatMessage);
             return false;
@@ -227,18 +227,20 @@ internal static class AdoPersistence
 
 /// <summary>
 /// Independent MS-ADTG TableGram codec ([MS-ADTG] §2.2.3.14; II-12 §24; W-09/events-persistence-inventory).
-/// Verified byte-for-byte against the 568-byte ADTG TableGram in <c>evidence/r-ado-1b/persist-stream-roundtrip</c>,
+/// Verified byte-for-byte against the 568-byte read-only <c>T</c> TableGram in <c>evidence/r-ado-1b/persist-stream-roundtrip</c>,
 /// <c>evidence/r-ado-1b/persist-overwrite-flags</c>, <c>evidence/r-fix-wire-ado/persist-save-two-parameter</c>,
 /// and <c>evidence/r-q45-querydef-stream-rollback/stream-save-into-open</c> (<c>sha256 03cdca6d816d...</c>).
+/// Pending-change (<c>New</c>/<c>Modified</c>/<c>Deleted</c>) and multi-type shapes use [MS-ADTG] §2.2.3.14.3 row tokens
+/// as an interim roundtrip encoding pending byte-kept captures (W-04).
 /// </summary>
 internal static unsafe class AdoAdtgCodec
 {
     private const byte TokenHeader = 0x01;
     private const byte TokenColumnDescriptor = 0x06;
     private const byte TokenUnchangedRow = 0x07;
-    private const byte TokenChangeRow = 0x08;
-    private const byte TokenInsertRow = 0x09;
-    private const byte TokenDeleteRow = 0x0A;
+    private const byte TokenInsertRow = 0x08;
+    private const byte TokenDeleteRow = 0x09;
+    private const byte TokenChangeRow = 0x0A;
     private const byte TokenDone = 0x0F;
     private const byte TokenRowsetProperties = 0x10;
 
@@ -468,13 +470,15 @@ internal static unsafe class AdoAdtgCodec
                     {
                         goto Invalid;
                     }
-                    OwnedVariant[] dup = CloneVariants(vals!);
                     ClientRowState state = token switch
                     {
                         TokenInsertRow => ClientRowState.New,
                         TokenDeleteRow => ClientRowState.Deleted,
                         _ => ClientRowState.Clean,
                     };
+                    OwnedVariant[] orig = state == ClientRowState.New
+                        ? CreateNullVariants(columns.Count)
+                        : CloneVariants(vals!);
                     if (state != ClientRowState.Clean)
                     {
                         isUpdatable = true;
@@ -482,7 +486,7 @@ internal static unsafe class AdoAdtgCodec
                     rows.Add(new PersistedRow(
                         state,
                         vals!,
-                        dup,
+                        orig,
                         new bool[columns.Count],
                         state == ClientRowState.Clean ? 0 : ++stagingOrder));
                     continue;
@@ -1071,6 +1075,16 @@ internal static unsafe class AdoAdtgCodec
         return new DecimalValue(scale, neg, hi, lo);
     }
 
+    internal static OwnedVariant[] CreateNullVariants(int count)
+    {
+        var arr = new OwnedVariant[count];
+        for (int i = 0; i < count; i++)
+        {
+            arr[i] = OwnedVariant.Null();
+        }
+        return arr;
+    }
+
     internal static OwnedVariant[] CloneVariants(OwnedVariant[] src)
     {
         var copy = new OwnedVariant[src.Length];
@@ -1107,7 +1121,7 @@ internal static unsafe class AdoAdtgCodec
         rows.Clear();
     }
 
-    private static void DisposeVariants(OwnedVariant[] arr, int? count = null)
+    internal static void DisposeVariants(OwnedVariant[] arr, int? count = null)
     {
         int n = count ?? arr.Length;
         for (int i = 0; i < n; i++)
@@ -1148,6 +1162,17 @@ internal static unsafe class AdoXmlPersistCodec
         for (int i = 0; i < data.Columns.Length; i++)
         {
             PersistedColumn col = data.Columns[i];
+            try
+            {
+                XmlConvert.VerifyNCName(col.Name);
+            }
+            catch (XmlException)
+            {
+                refusal = Failure.NotModelled(
+                    "NotModelled.AdoPersistXmlColumnName",
+                    $"XML persistence for non-NCName column '{col.Name}' is not recorded");
+                return "";
+            }
             bool nullable = (col.Attributes & 32) != 0;
             sb.Append("\t\t<s:AttributeType name='").Append(EscapeAttr(col.Name))
               .Append("' rs:number='").Append(i + 1).Append('\'');
@@ -1332,7 +1357,16 @@ internal static unsafe class AdoXmlPersistCodec
                         goto InvalidXml;
                     }
                     OwnedVariant[] origVals = ParseXmlRowElement(origEl, columns);
-                    OwnedVariant[] curVals = ParseXmlRowElement(curEl, columns);
+                    OwnedVariant[] curVals;
+                    try
+                    {
+                        curVals = ParseXmlRowElement(curEl, columns);
+                    }
+                    catch
+                    {
+                        AdoAdtgCodec.DisposeVariants(origVals);
+                        throw;
+                    }
                     bool[] modified = new bool[columns.Count];
                     for (int i = 0; i < columns.Count; i++)
                     {
@@ -1347,7 +1381,7 @@ internal static unsafe class AdoXmlPersistCodec
                     {
                         OwnedVariant[] vals = ParseXmlRowElement(insRow, columns);
                         isUpdatable = true;
-                        rows.Add(new PersistedRow(ClientRowState.New, vals, AdoAdtgCodec.CloneVariants(vals), new bool[columns.Count], ++stagingOrder));
+                        rows.Add(new PersistedRow(ClientRowState.New, vals, AdoAdtgCodec.CreateNullVariants(columns.Count), new bool[columns.Count], ++stagingOrder));
                     }
                 }
                 else if (child.Name == rsNs + "delete")
@@ -1358,6 +1392,10 @@ internal static unsafe class AdoXmlPersistCodec
                         isUpdatable = true;
                         rows.Add(new PersistedRow(ClientRowState.Deleted, AdoAdtgCodec.CloneVariants(origVals), origVals, new bool[columns.Count], ++stagingOrder));
                     }
+                }
+                else
+                {
+                    goto InvalidXml;
                 }
             }
 
@@ -1595,18 +1633,32 @@ internal static unsafe class AdoXmlPersistCodec
     private static OwnedVariant[] ParseXmlRowElement(XElement rowEl, List<PersistedColumn> columns)
     {
         var vals = new OwnedVariant[columns.Count];
-        for (int i = 0; i < columns.Count; i++)
+        int filled = 0;
+        try
         {
-            PersistedColumn col = columns[i];
-            XAttribute? attr = rowEl.Attribute(col.Name);
-            if (attr is null)
+            for (int i = 0; i < columns.Count; i++)
             {
-                vals[i] = OwnedVariant.Null();
-                continue;
+                PersistedColumn col = columns[i];
+                XAttribute? attr = rowEl.Attribute(col.Name);
+                if (attr is null)
+                {
+                    vals[i] = OwnedVariant.Null();
+                    filled = i + 1;
+                    continue;
+                }
+                vals[i] = ParseXmlValue(col, attr.Value);
+                filled = i + 1;
             }
-            vals[i] = ParseXmlValue(col, attr.Value);
+            return vals;
         }
-        return vals;
+        catch
+        {
+            for (int i = 0; i < filled; i++)
+            {
+                vals[i].Dispose();
+            }
+            throw;
+        }
     }
 
     private static OwnedVariant ParseXmlValue(PersistedColumn col, string text) => col.AdoType switch
@@ -1614,7 +1666,7 @@ internal static unsafe class AdoXmlPersistCodec
         3 => OwnedVariant.FromInt32(int.Parse(text, CultureInfo.InvariantCulture)),
         2 => OwnedVariant.FromInt16(short.Parse(text, CultureInfo.InvariantCulture)),
         17 => OwnedVariant.FromByte(byte.Parse(text, CultureInfo.InvariantCulture)),
-        11 => OwnedVariant.FromBoolean(string.Equals(text, "True", StringComparison.OrdinalIgnoreCase) || text == "1"),
+        11 => ParseXmlBoolean(text),
         4 => OwnedVariant.FromSingle(float.Parse(text, CultureInfo.InvariantCulture)),
         5 => OwnedVariant.FromDouble(double.Parse(text, CultureInfo.InvariantCulture)),
         6 => OwnedVariant.FromCurrency(checked((long)(decimal.Parse(text, CultureInfo.InvariantCulture) * 10000m))),
@@ -1625,6 +1677,19 @@ internal static unsafe class AdoXmlPersistCodec
         204 or 205 => ParseHexBytes(text),
         _ => throw new FormatException($"Unsupported XML ADO type {col.AdoType}"),
     };
+
+    private static OwnedVariant ParseXmlBoolean(string text)
+    {
+        if (string.Equals(text, "True", StringComparison.OrdinalIgnoreCase) || text == "1")
+        {
+            return OwnedVariant.FromBoolean(true);
+        }
+        if (string.Equals(text, "False", StringComparison.OrdinalIgnoreCase) || text == "0")
+        {
+            return OwnedVariant.FromBoolean(false);
+        }
+        throw new FormatException($"Invalid XML boolean value '{text}'");
+    }
 
     private static OwnedVariant ParseHexBytes(string hex)
     {
@@ -1646,10 +1711,13 @@ internal static unsafe class AdoXmlPersistCodec
         return a.Type switch
         {
             VarType.Null or VarType.Empty => true,
+            VarType.Bool or VarType.I2 => (short)a.Pointer->Int64 == (short)b.Pointer->Int64,
+            VarType.UI1 => (byte)a.Pointer->Int64 == (byte)b.Pointer->Int64,
+            VarType.I4 or VarType.R4 => (int)a.Pointer->Int64 == (int)b.Pointer->Int64,
+            VarType.I8 or VarType.Currency => a.Pointer->Int64 == b.Pointer->Int64,
             VarType.Bstr => (a.Pointer->Pointer != 0 ? Bstrs.Chars(a.Pointer->Pointer) : ReadOnlySpan<char>.Empty)
                 .SequenceEqual(b.Pointer->Pointer != 0 ? Bstrs.Chars(b.Pointer->Pointer) : ReadOnlySpan<char>.Empty),
             VarType.Decimal => AdoAdtgCodec.ReadDecimalValue(a) == AdoAdtgCodec.ReadDecimalValue(b),
-            VarType.R4 => (int)a.Pointer->Int64 == (int)b.Pointer->Int64,
             VarType.R8 or VarType.Date => BitConverter.DoubleToInt64Bits(a.Pointer->Double) == BitConverter.DoubleToInt64Bits(b.Pointer->Double),
             VarType.Array | VarType.UI1 => BytesEqual(a.Pointer->Pointer, b.Pointer->Pointer),
             _ => a.Pointer->Int64 == b.Pointer->Int64,
