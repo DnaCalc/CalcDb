@@ -71,12 +71,13 @@ scope or design, the book wins.
   `calcdb-oracle freeze --name` into `evidence/artifacts` and `probes/fixtures.json`, so its questions run again from
   the repository (63z8).
 - Set the model of every child via `swarm add` and balance quota across available Gemini and Claude models
-  (`swarm models`): use `gemini-4-neon-high` for standard writer stretches, probe rounds, and tooling; use
-  `gemini-4-neon-xhigh` for complex slices and Gate 4 reviews; balance `claude-opus-5-5-high` and
-  `claude-sonnet-5-5-high` onto high-leverage implementation slices, second reviews, concurrency/locking/crash probe
-  design, and RoslynSkills improvements whenever Claude quota is available (prefer `gemini-4-neon-xhigh` over
-  `hydrogen-xhigh` for workers when Claude hits 429). If a worker or coordinator hits quota/capacity (429), switch
-  models in place with `swarm model` rather than killing and re-spawning. Keep stretches to one deliverable each.
+  (`swarm models`): trial one notch lower thinking where appropriate — `gemini-4-neon-medium` for well-probed focused
+  writer slices and probe rounds, `gemini-4-neon-high` for standard writer stretches, Gate 4 reviews, and tooling,
+  `gemini-4-neon-xhigh` for complex multi-layer slices; balance `claude-opus-5-5-high` and `claude-sonnet-5-5-high` onto
+  high-leverage implementation slices, second reviews, concurrency/locking/crash probe design, and RoslynSkills
+  improvements whenever Claude quota is available (prefer `gemini-4-neon-high`/`xhigh` over `hydrogen-xhigh` for
+  workers when Claude hits 429). If a worker or coordinator hits quota/capacity (429), switch models in place with
+  `swarm model` rather than killing and re-spawning. Keep stretches to one deliverable each.
 - Workers coordinate on the swarm message board (`post_message` / `read_board` / `swarm_wait`) and the organizer keeps
   the Swarm UI `plan.json` updated (per `swarm_pane`) when adding workers, moving work, or changing goals. A child ends
   with the fixed report of landing-check.md posted to `@coordinator`: change, rules as a domain table (rule, the record
