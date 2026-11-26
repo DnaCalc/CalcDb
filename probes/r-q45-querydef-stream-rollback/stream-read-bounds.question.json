@@ -1,0 +1,723 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q45-querydef-stream-rollback/stream-read-bounds",
+  "bookRefs": [
+    "R-ADO-1",
+    "ADO-STREAM",
+    "ADO-PERSIST",
+    "W-09"
+  ],
+  "description": "ADODB.Stream: binary Read(2), Read(10) past EOF, Read(10) at EOF, Read(-1) at EOF, Read(0), Read(-1), Read(-2), Read(-5), Read() omitted; text ReadText(2), ReadText(100) past EOF, ReadText(100) at EOF, ReadText(0), ReadText(-1), ReadText(-2), ReadText(-5), ReadText() omitted; Read/ReadText on closed stream.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Stream",
+      "bind": "sb"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "Read",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": -1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "ReadText",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": -1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "Type",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "Write",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bytes",
+          "hex": "11223344"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "Position",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "Read",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "Position",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "EOS",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "Read",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 10
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "Position",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "EOS",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "Read",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 10
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "Position",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "EOS",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "Read",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": -1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "Position",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "EOS",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "Position",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "Read",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "Position",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "EOS",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "Position",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "Read",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": -1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "Position",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "EOS",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "Position",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "Read",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": -2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "Position",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "EOS",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "Position",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "Read",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": -5
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "Position",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "EOS",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "Position",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "Read",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "Position",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "EOS",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sb"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Stream",
+      "bind": "st"
+    },
+    {
+      "op": "invoke",
+      "target": "st",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "st",
+      "member": "WriteText",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "hello"
+        },
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "st",
+      "member": "Position",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "st",
+      "member": "ReadText",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "st",
+      "member": "Position",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "st",
+      "member": "EOS",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "st",
+      "member": "ReadText",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 100
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "st",
+      "member": "Position",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "st",
+      "member": "EOS",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "st",
+      "member": "ReadText",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 100
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "st",
+      "member": "Position",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "st",
+      "member": "EOS",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "st",
+      "member": "Position",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "st",
+      "member": "ReadText",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "st",
+      "member": "Position",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "st",
+      "member": "EOS",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "st",
+      "member": "Position",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "st",
+      "member": "ReadText",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": -1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "st",
+      "member": "Position",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "st",
+      "member": "EOS",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "st",
+      "member": "Position",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "st",
+      "member": "ReadText",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": -2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "st",
+      "member": "Position",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "st",
+      "member": "EOS",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "st",
+      "member": "Position",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "st",
+      "member": "ReadText",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": -5
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "st",
+      "member": "Position",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "st",
+      "member": "EOS",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "st",
+      "member": "Position",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "st",
+      "member": "ReadText",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "st",
+      "member": "Position",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "st",
+      "member": "EOS",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "st",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "st"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}
