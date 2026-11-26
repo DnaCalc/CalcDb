@@ -637,7 +637,6 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
                 _appendOnlyIndex = -1;
                 _appendOnlyBof = true;
                 _appendOnlyEof = true;
-                return CallResult.Nothing;
             }
             return Fail(3021, DaoErrors.NoCurrentRecord);
         }
@@ -1541,6 +1540,12 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         {
             return pending;
         }
+        if (_appendOnly && Database.Workspace.Transactions.Depth > 0)
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.QueryRecordsetAppendOnlyTransaction",
+                "AddNew on a dbAppendOnly SELECT dynaset inside an active transaction (not recorded)"));
+        }
         if (EditFrameForSource("AddNew", 0, out CallResult refused) is not { } frame)
         {
             return refused;
@@ -1616,6 +1621,12 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
             return refused;
         }
         EditMode mode = frame.Mode;
+        if (_appendOnly && mode == EditMode.AddNew && Database.Workspace.Transactions.Depth > 0)
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.QueryRecordsetAppendOnlyTransaction",
+                "Update of AddNew on a dbAppendOnly SELECT dynaset inside an active transaction (not recorded)"));
+        }
         UpdateOutcome outcome = frame.Update(type: 1, force: false);
         CallResult result = EditPublication.Of(outcome);
         if (result.Failure is null && frame.Mode == EditMode.None)
@@ -2670,12 +2681,6 @@ internal sealed unsafe class SelectFieldObject : DaoObject
         {
             return refused;
         }
-        if (recordset.IsAppendOnly && (recordset.IsAtBof || recordset.IsAtEof))
-        {
-            return fromCollect
-                ? CallResult.Fail(Failure.Dao(3021, "DAO.Recordset", DaoErrors.NoCurrentRecord))
-                : CallResult.Fail(Failure.Dao(3021, "DAO.Field", DaoErrors.NoCurrentRecord) with { PublishesErrorInfo = true });
-        }
         if (recordset.Cursor.Columns[ordinal] is { Origin: ColumnOrigin.BaseColumn, SourceColumn: { } sc }
             && recordset.FrameForSourceIfEditing(sc.SourceIndex) is { } frame)
         {
@@ -2694,6 +2699,12 @@ internal sealed unsafe class SelectFieldObject : DaoObject
             return CallResult.Fail(Failure.NotModelled(
                 "NotModelled.QueryFieldValueReadDuringEdit",
                 $"Field.Value read of non-base column {recordset.Cursor.Columns[ordinal].Name} while an edit is pending on a SELECT recordset (not recorded)"));
+        }
+        if (recordset.IsAppendOnly && (recordset.IsAtBof || recordset.IsAtEof))
+        {
+            return fromCollect
+                ? CallResult.Fail(Failure.Dao(3021, "DAO.Recordset", DaoErrors.NoCurrentRecord))
+                : CallResult.Fail(Failure.Dao(3021, "DAO.Field", DaoErrors.NoCurrentRecord) with { PublishesErrorInfo = true });
         }
         if (recordset.IsAppendOnly)
         {

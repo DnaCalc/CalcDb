@@ -441,7 +441,9 @@ internal static class ActionRoute
             return CallResult.Fail(refused);
         }
         ActionOutcome outcome;
-        if (!ddl && (preParsed is not null || ActionParser.IsSqlStatement(sql.TrimStart())))
+        int nul = sql.IndexOf('\0', StringComparison.Ordinal);
+        int effectiveLength = nul >= 0 ? nul : sql.Length;
+        if (!ddl && (preParsed is not null || (effectiveLength <= 65000 && ActionParser.IsSqlStatement(sql))))
         {
             SqlFailure? parseFailure = null;
             ActionSyntax? syntax = preParsed ?? ActionParser.Parse(sql, out parseFailure);

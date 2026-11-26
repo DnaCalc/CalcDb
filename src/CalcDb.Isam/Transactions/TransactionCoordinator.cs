@@ -151,23 +151,39 @@ public sealed class PooledCloseObligations
 
     public bool CloseCommitRequired { get; set; }
 
+    public bool Jet4MdbRollbackPending { get; set; }
+
+    public bool RollbackExtentPending { get; set; }
+
     public List<uint> ReleaseAtClose { get; } = [];
 
     public List<PageEdit> DeferredCloseEdits { get; } = [];
 
+    public List<uint> PendingGroup2AllocatedPages { get; } = [];
+
+    public List<uint> PendingRolledBackPages { get; } = [];
+
     public bool HasWork => AllocatedGlobalMap
         || ReservedExtent
         || CloseCommitRequired
+        || Jet4MdbRollbackPending
+        || RollbackExtentPending
         || ReleaseAtClose.Count > 0
-        || DeferredCloseEdits.Count > 0;
+        || DeferredCloseEdits.Count > 0
+        || PendingGroup2AllocatedPages.Count > 0
+        || PendingRolledBackPages.Count > 0;
 
     public void Clear()
     {
         AllocatedGlobalMap = false;
         ReservedExtent = false;
         CloseCommitRequired = false;
+        Jet4MdbRollbackPending = false;
+        RollbackExtentPending = false;
         ReleaseAtClose.Clear();
         DeferredCloseEdits.Clear();
+        PendingGroup2AllocatedPages.Clear();
+        PendingRolledBackPages.Clear();
     }
 }
 
@@ -728,6 +744,14 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         || _closeCommitRequired.Contains(cache)
         || _deferredCloseEdits.ContainsKey(cache);
 
+    public bool HasParticipant(PageCache cache) => _participants.ContainsKey(cache);
+
+    public bool HasPendingRollbackGuard(PageCache cache) =>
+        _jet4MdbRollbackPending.Contains(cache)
+        || _rollbackExtentPending.Contains(cache)
+        || _pendingGroup2AllocatedPages.ContainsKey(cache)
+        || _pendingRolledBackPages.ContainsKey(cache);
+
     /// <summary>Flush any pending deferred catalog commit on <paramref name="cache"/> without emitting a counter-only commit.</summary>
     public (MutationOpen Open, string? Detail) FlushDeferredCatalogCommitIfAny(PageCache cache)
     {
@@ -758,16 +782,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             target.ReservedExtent = true;
         }
         _sessionReservedExtent.Remove(cache);
-        if (_releaseAtClose.Remove(cache, out List<uint>? pages))
-        {
-            foreach (uint page in pages)
-            {
-                if (!target.ReleaseAtClose.Contains(page))
-                {
-                    target.ReleaseAtClose.Add(page);
-                }
-            }
-        }
+        AppendDistinct(_releaseAtClose, cache, target.ReleaseAtClose);
         if (_closeCommitRequired.Remove(cache))
         {
             target.CloseCommitRequired = true;
@@ -776,10 +791,16 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         {
             target.DeferredCloseEdits.AddRange(closeEdits);
         }
-        _jet4MdbRollbackPending.Remove(cache);
-        _rollbackExtentPending.Remove(cache);
-        _pendingGroup2AllocatedPages.Remove(cache);
-        _pendingRolledBackPages.Remove(cache);
+        if (_jet4MdbRollbackPending.Remove(cache))
+        {
+            target.Jet4MdbRollbackPending = true;
+        }
+        if (_rollbackExtentPending.Remove(cache))
+        {
+            target.RollbackExtentPending = true;
+        }
+        AppendDistinct(_pendingGroup2AllocatedPages, cache, target.PendingGroup2AllocatedPages);
+        AppendDistinct(_pendingRolledBackPages, cache, target.PendingRolledBackPages);
         cache.UnregisterRollbackExtentOwner(Locker);
     }
 
@@ -798,25 +819,57 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         {
             _closeCommitRequired.Add(cache);
         }
-        if (source.ReleaseAtClose.Count > 0)
+        if (source.Jet4MdbRollbackPending)
         {
-            if (!_releaseAtClose.TryGetValue(cache, out List<uint>? pages))
-            {
-                _releaseAtClose[cache] = pages = [];
-            }
-            foreach (uint page in source.ReleaseAtClose)
-            {
-                if (!pages.Contains(page))
-                {
-                    pages.Add(page);
-                }
-            }
+            _jet4MdbRollbackPending.Add(cache);
         }
+        if (source.RollbackExtentPending)
+        {
+            _rollbackExtentPending.Add(cache);
+            cache.RegisterRollbackExtentOwner(Locker);
+        }
+        RestoreDistinct(source.ReleaseAtClose, _releaseAtClose, cache);
+        RestoreDistinct(source.PendingGroup2AllocatedPages, _pendingGroup2AllocatedPages, cache);
+        RestoreDistinct(source.PendingRolledBackPages, _pendingRolledBackPages, cache);
         if (source.DeferredCloseEdits.Count > 0)
         {
             AppendDeferredCloseEdits(cache, source.DeferredCloseEdits);
         }
         source.Clear();
+    }
+
+    private static void AppendDistinct(Dictionary<PageCache, List<uint>> map, PageCache cache, List<uint> target)
+    {
+        if (!map.Remove(cache, out List<uint>? items))
+        {
+            return;
+        }
+        foreach (uint page in items)
+        {
+            if (!target.Contains(page))
+            {
+                target.Add(page);
+            }
+        }
+    }
+
+    private static void RestoreDistinct(List<uint> items, Dictionary<PageCache, List<uint>> map, PageCache cache)
+    {
+        if (items.Count == 0)
+        {
+            return;
+        }
+        if (!map.TryGetValue(cache, out List<uint>? dest))
+        {
+            map[cache] = dest = [];
+        }
+        foreach (uint page in items)
+        {
+            if (!dest.Contains(page))
+            {
+                dest.Add(page);
+            }
+        }
     }
 
     /// <summary>
@@ -3976,7 +4029,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         return true;
     }
 
-    public (MutationOpen Open, string? Detail) PublishCloseCommit(PageCache cache, IReadOnlyList<uint>? extraReleasedPages = null)
+    public (MutationOpen Open, string? Detail) PublishCloseCommit(PageCache cache)
     {
         if (_participants.ContainsKey(cache))
         {
@@ -3992,8 +4045,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             if (!_allocatedGlobalMap.Contains(cache)
                 && !_releaseAtClose.ContainsKey(cache)
                 && !_closeCommitRequired.Contains(cache)
-                && !_deferredCloseEdits.ContainsKey(cache)
-                && extraReleasedPages is not { Count: > 0 })
+                && !_deferredCloseEdits.ContainsKey(cache))
             {
                 return (MutationOpen.None, null);
             }
@@ -4004,16 +4056,6 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         if (_releaseAtClose.TryGetValue(cache, out List<uint>? released))
         {
             foreach (uint page in released)
-            {
-                if (!releasedPages.Contains(page))
-                {
-                    releasedPages.Add(page);
-                }
-            }
-        }
-        if (extraReleasedPages is { Count: > 0 })
-        {
-            foreach (uint page in extraReleasedPages)
             {
                 if (!releasedPages.Contains(page))
                 {

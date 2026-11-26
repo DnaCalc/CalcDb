@@ -350,12 +350,12 @@ public sealed class ComDatabaseSession : IPublicationTarget
     /// ReleasedAtClose pages, publish the closing commit that sets those global-map free bits and advances the page-0
     /// counter (R-CRASH-1, R-FMT-2; jh6s, nv5x, zfrp).
     /// </summary>
-    public (MutationOpen Open, string? Detail) CloseCommit(TransactionCoordinator transactions, IReadOnlyList<uint>? extraReleasedPages = null)
+    public (MutationOpen Open, string? Detail) CloseCommit(TransactionCoordinator transactions)
     {
         transactions.EndLazyBurst(Cache);
-        if (transactions.NeedsCloseCommit(Cache) || extraReleasedPages is { Count: > 0 })
+        if (transactions.NeedsCloseCommit(Cache))
         {
-            return transactions.PublishCloseCommit(Cache, extraReleasedPages);
+            return transactions.PublishCloseCommit(Cache);
         }
         return (MutationOpen.None, null);
     }

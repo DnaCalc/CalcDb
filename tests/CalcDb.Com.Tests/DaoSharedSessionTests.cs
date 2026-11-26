@@ -266,8 +266,8 @@ public sealed unsafe class DaoSharedSessionTests : IDisposable
         Ok(Method(dbRo, "Close"));
         Assert.Equal(1, FilePage(path, 0, D.PageSize)[D.Header.ReadOnlyFirstCommitCounter!.Offset]);
 
-        // Phase 2: two Workspaces, ReadOnly opened first on ws2 then writable on default Workspace (even with dbRw
-        // writing BEFORE dbRo opens its first recordset, dbRo's ReadOnlyFirstView still keeps open-time isolation).
+        // Phase 2: two Workspaces, ReadOnly opened first on ws2 then writable on default Workspace (once dbRo2 opens a
+        // recordset, dbRo2's ReadOnlyFirstView keeps open-time isolation across subsequent snapshots on dbRo2).
         WorkspaceObject ws2 = Workspace2(eng);
         DatabaseObject dbRo2 = Open(ws2, path, false, true);
         DispatchObject rs2 = Recover<DispatchObject>(Ok(Method(dbRo2, "OpenRecordset", "SELECT ID, V, S FROM T ORDER BY ID", 2)));
@@ -983,5 +983,71 @@ public sealed unsafe class DaoSharedSessionTests : IDisposable
         Assert.Equal(20, Int32Result(Get(Recover<DispatchObject>(Ok(Get(fields, "Item", "ID"))), "Value")));
         Ok(Method(dyn, "Close"));
         Ok(Method(db, "Close"));
+    }
+
+    [Fact]
+    public void SeeChanges_checks_updatable_and_eof_before_write_conflict_3197()
+    {
+        // Gate 4 second pass Finding #3: on a read-only or EOF dbSeeChanges table dynaset, Edit() raises 3027 or 3021
+        // before HasSeeChangesConflict() can fire 3197.
+        DBEngineObject eng = Engine();
+        string path = Seeded(eng, mdb: false);
+        WorkspaceObject ws0 = eng.Engine.DefaultWorkspace!;
+        WorkspaceObject ws2 = Workspace2(eng);
+        DatabaseObject db1 = Open(ws0, path, exclusive: false, readOnly: false);
+        DatabaseObject db2 = Open(ws2, path, exclusive: false, readOnly: false);
+        DatabaseObject dbRo = Open(ws0, path, exclusive: false, readOnly: true);
+
+        // Read-only option (dbReadOnly | dbSeeChanges = 516) -> 3027 despite peer write.
+        DispatchObject rsRoOpt = Recover<DispatchObject>(Ok(Method(db1, "OpenRecordset", "T", 2, 4 | 512)));
+        // Read-only Database + dbSeeChanges (512) -> 3027 despite peer write.
+        DispatchObject rsRoDb = Recover<DispatchObject>(Ok(Method(dbRo, "OpenRecordset", "T", 2, 512)));
+        // Writable dbSeeChanges moved to EOF -> 3021 despite peer write.
+        DispatchObject rsEof = Recover<DispatchObject>(Ok(Method(db1, "OpenRecordset", "T", 2, 512)));
+        Ok(Method(rsEof, "MoveLast"));
+        Ok(Method(rsEof, "MoveNext"));
+        Assert.True(BoolResult(Get(rsEof, "EOF")));
+
+        Ok(Method(db2, "Execute", "UPDATE T SET V = 888 WHERE ID = 1", 128));
+        FailsDao(Method(rsRoOpt, "Edit"), 3027, "DAO.Recordset");
+        FailsNotModelled(Method(rsRoDb, "Edit"), "NotModelled.InheritedReadOnlyWrite");
+        FailsDao(Method(rsEof, "Edit"), 3021, "DAO.Recordset");
+
+        Ok(Method(rsEof, "Close"));
+        Ok(Method(rsRoDb, "Close"));
+        Ok(Method(rsRoOpt, "Close"));
+        Ok(Method(dbRo, "Close"));
+        Ok(Method(db2, "Close"));
+        Ok(Method(db1, "Close"));
+    }
+
+    [Fact]
+    public void Non_last_close_with_active_BeginTrans_preserves_workspace_close_commit_obligation()
+    {
+        // Gate 4 second pass Finding #4: closing db1 while ws0 holds an open BeginTrans with DML changes (no deferred
+        // catalog commit) must not strip ws0's pending close-commit obligations before CommitTrans and final Close.
+        DBEngineObject eng = Engine();
+        string path = Seeded(eng, mdb: false);
+        WorkspaceObject ws0 = eng.Engine.DefaultWorkspace!;
+        WorkspaceObject ws2 = Workspace2(eng);
+        DatabaseObject db1 = Open(ws0, path, exclusive: false, readOnly: false);
+        DatabaseObject db2 = Open(ws2, path, exclusive: false, readOnly: false);
+
+        Ok(Method(db1, "Execute", "CREATE TABLE U (V LONG)", 128));
+        Ok(Method(ws0, "BeginTrans"));
+        Ok(Method(db1, "Execute", "UPDATE T SET V = 777 WHERE ID = 1", 128));
+        Assert.True(ws0.Transactions.HasParticipant(db1.Cache));
+        Ok(Method(db1, "Close"));
+        Assert.True(ws0.Transactions.HasParticipant(db2.Cache));
+
+        byte[] preCommit0 = Page(db2, 0);
+        ulong preCommitCounter = D.Header.CommitCounter.Read(preCommit0);
+        Ok(Method(ws0, "CommitTrans"));
+        ulong afterCommitCounter = D.Header.CommitCounter.Read(Page(db2, 0));
+        Assert.Equal(preCommitCounter + 1UL, afterCommitCounter);
+
+        Ok(Method(db2, "Close"));
+        byte[] finalDisk0 = FilePage(path, 0, preCommit0.Length);
+        Assert.Equal(afterCommitCounter + 1UL, D.Header.CommitCounter.Read(finalDisk0));
     }
 }

@@ -1046,6 +1046,35 @@ public sealed unsafe class DaoSelectDynamicOverlayTests : IDisposable
         Ok(Method(rs2, "Close"));
     }
 
+    [Fact]
+    public void Select_append_only_empty_moves_fail_3021_addnew_allows_field_read_and_intxn_refuses()
+    {
+        // Gate 4 second pass Findings #1 & #2: empty dbAppendOnly SELECT MoveFirst/MoveLast raise 3021; AddNew()
+        // permits reading pending Field.Value (including AutoNumber) before Update(); AddNew() inside BeginTrans
+        // stays refused by name.
+        string path = CopyFixture(Txn1bAccdb);
+        DatabaseObject db = OpenPath(path);
+        WorkspaceObject ws = _engine.DefaultWorkspace;
+        Ok(Method(db, "Execute", "CREATE TABLE AppAuto (ID COUNTER CONSTRAINT PK_AA PRIMARY KEY, V LONG)", 128));
+
+        SelectRecordsetObject app = Recover<SelectRecordsetObject>(Ok(Method(db, "OpenRecordset", "SELECT ID, V FROM AppAuto", 2, 8)));
+        AssertDaoError(Method(app, "MoveFirst"), 3021, "DAO.Recordset");
+        AssertDaoError(Method(app, "MoveLast"), 3021, "DAO.Recordset");
+        Assert.True(BoolValue(Ok(Get(app, "BOF"))));
+        Assert.True(BoolValue(Ok(Get(app, "EOF"))));
+
+        Ok(Method(app, "AddNew"));
+        Assert.Equal(1, IntValue(Ok(FieldValue(app, "ID"))));
+        Ok(Call(GetField(app, "V"), "Value", InvokeKind.PropertyPut, 42));
+        Assert.Equal(42, IntValue(Ok(FieldValue(app, "V"))));
+        Ok(Method(app, "Update"));
+
+        Ok(Method(ws, "BeginTrans"));
+        AssertNotModelled(Method(app, "AddNew"), "NotModelled.QueryRecordsetAppendOnlyTransaction");
+        Ok(Method(ws, "Rollback"));
+        Ok(Method(app, "Close"));
+    }
+
     private string CopyFixture(string fixture, string extension = ".accdb")
     {
         string path = Path.Combine(Path.GetTempPath(), $"calcdb-dao-select-overlay-{Guid.NewGuid():N}{extension}");

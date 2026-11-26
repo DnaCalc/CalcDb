@@ -1319,7 +1319,7 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         {
             return unpublished;
         }
-        if (HasSeeChangesConflict())
+        if (frame.Updatable && !Cursor.Bof && !Cursor.Eof && HasSeeChangesConflict())
         {
             return Fail(MutationError.WriteConflict, "The Microsoft Access database engine stopped the process because you and another user are attempting to change the same data at the same time.");
         }

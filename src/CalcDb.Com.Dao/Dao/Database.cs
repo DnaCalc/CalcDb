@@ -2352,7 +2352,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
                 {
                     closing = EditPublication.Open(defOpen, "Database.Close could not write its closing commit: " + defDetail);
                 }
-                else
+                else if (!_workspace.Transactions.HasParticipant(Cache) && !_workspace.Transactions.HasPendingRollbackGuard(Cache))
                 {
                     _workspace.Transactions.TransferCloseObligationsTo(Cache, _pooled.DeferredObligations);
                 }
