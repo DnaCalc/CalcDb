@@ -1982,7 +1982,8 @@ public static class DdlExecutor
         return plan.Kind switch
         {
             BoundDdlKind.DropTable when plan.Syntax is DropTableStatement { TableNames.Count: 1 } drop => ReadOnlyDdlRefusal(drop.TableNames[0]),
-            BoundDdlKind.CreateTable when plan.Syntax is CreateTableStatement create => ReadOnlyDdlRefusal(create.TableName),
+            BoundDdlKind.CreateTable when plan.Syntax is CreateTableStatement create
+                && !create.Columns.Any(c => c.DataType.Kind is DdlTypeKind.BigInt or DdlTypeKind.DateTime2) => ReadOnlyDdlRefusal(create.TableName),
             BoundDdlKind.CreateIndex when plan.Syntax is CreateIndexStatement index => ReadOnlyDdlRefusal(index.TableName),
             _ => ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.ReadOnlyAction", "DDL Execute on a read-only Database handle")),
         };

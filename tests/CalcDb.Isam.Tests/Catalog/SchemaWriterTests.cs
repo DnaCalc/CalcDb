@@ -145,6 +145,8 @@ public sealed class SchemaWriterTests
 
         public TransactionCoordinator Workspace { get; }
 
+        public void SyncExtent() => Pages = Math.Max(Pages, Cache.KnownExtentPages);
+
         /// <summary>A writer over the committed catalog, as the Database makes one per statement.</summary>
         public SchemaWriter Writer()
         {
@@ -3283,6 +3285,64 @@ public sealed class SchemaWriterTests
             Assert.False(o.PublishedAny);
         }
         Assert.Equal(afterCreate, session.File.Snapshot());
+
+        // Succeeding UNIQUE Memo index with a Null row refuses by name without writing (non-unique succeeds).
+        TableDefinition ixDef = OpenTableDef(session, "IxT");
+        using (MutationSemantics sem = MutationSemantics.Compile("IxT", ixDef, null, NoTestRules.Instance, D.IndexDescriptor))
+        {
+            foreach ((int id, string? m) in new (int, string?)[] { (1, null), (2, "alpha"), (3, "beta") })
+            {
+                ulong extent = Math.Max(session.Pages, session.Cache.KnownExtentPages);
+                var writer = new SameWidthWriter(new TableFootprints(session.Cache, D, ixDef, extent));
+                NativeValue[] row =
+                [
+                    new(NativeKind.Long) { Integer = id },
+                    NativeValue.Null,
+                    m is null ? NativeValue.Null : new(NativeKind.Text) { Text = m },
+                ];
+                CompiledChange ins = writer.CompileInsert(sem, row, null, session.Workspace.OverlayOf(session.Cache));
+                Assert.NotNull(ins.Change);
+                using StatementScope stmt = session.Workspace.BeginStatement();
+                AcceptOutcome acc = session.Workspace.Accept(new AcceptedRowChange(sem, RowChangeKind.Insert, null, [], [], null, ins));
+                Assert.True(acc.Accepted, $"{acc.Open} {acc.Detail}");
+                Assert.Equal(MutationOpen.None, stmt.Complete().Open);
+            }
+        }
+        session.SyncExtent();
+        byte[] afterMemoRows = session.File.Snapshot();
+        SchemaOutcome uqMemoNull = session.Writer().CreateIndex(session.Workspace, new("IxT", new("UQ_MN", ["M"], PrimaryKey: false, Unique: true), SchemaRoute.Sql), 3);
+        Assert.False(uqMemoNull.Succeeded);
+        Assert.Null(uqMemoNull.Refused?.Error);
+        Assert.Contains("UNIQUE Memo", uqMemoNull.Accepted.Detail ?? uqMemoNull.Refused?.NotWritten ?? string.Empty);
+        Assert.Equal(afterMemoRows, session.File.Snapshot());
+
+        // Shared MSysObjects.LvProp LVAL page dropping below 264 free bytes during incremental FCMin*Ver steps refuses without writing.
+        // ValidationRule of 1,800 chars (~3,655B LvProp) leaves ~425B free: step 1 (~84B) stays >= 264B, step 3 (~220B) would drop < 264B.
+        session.Create(new("Pad", [Long("ID"), Text("W", 50)], SchemaRoute.Sql, [new("PKP", ["ID"], PrimaryKey: true)]), 4, 4);
+        SchemaOutcome padRule = session.Writer().SetFieldValidationProperty(session.Workspace, "Pad", "W", FieldValidationProperty.ValidationRule, $"<> '{new string('a', 1800)}'", 5);
+        Assert.True(padRule.Succeeded, $"{padRule.Refused} {padRule.Accepted}");
+        session.SyncExtent();
+        byte[] afterPad = session.File.Snapshot();
+        SchemaOutcome lowFreeBig = session.Writer().CreateTable(session.Workspace, new("LowBig", [Long("ID"), new("B", NewFieldType.BigInt)], SchemaRoute.Sql, [new("PKL", ["ID"], PrimaryKey: true)]), 6, 6);
+        Assert.False(lowFreeBig.Succeeded);
+        Assert.Null(lowFreeBig.Refused?.Error);
+        Assert.False(lowFreeBig.PublishedAny);
+        Assert.Contains("264", lowFreeBig.Accepted.Detail ?? lowFreeBig.Refused?.NotWritten ?? string.Empty);
+        Assert.Equal(afterPad, session.File.Snapshot());
+
+        // Jet 4 MDB: unrecorded BIGINT combinations refuse by name with 0 bytes written (do NOT step 0xE02 / return 3001).
+        byte[] mdb = ArtifactStore.ForRepository(ReplayFixture.Root()).ReadAll(EmptyMdb);
+        using var mdbSession = new Session(mdb);
+        byte[] mdbBefore = mdbSession.File.Snapshot();
+        foreach (CreateTableRequest req in badCreates)
+        {
+            SchemaOutcome o = mdbSession.Writer().CreateTable(mdbSession.Workspace, req, 1, 1);
+            Assert.False(o.Succeeded);
+            Assert.Null(o.Refused?.Error);
+            Assert.NotNull(o.Refused?.NotWritten);
+            Assert.False(o.PublishedAny);
+        }
+        Assert.Equal(mdbBefore, mdbSession.File.Snapshot());
     }
 }
 

@@ -2258,9 +2258,10 @@ public sealed class SameWidthWriter(TableFootprints footprints)
     /// Refused by name (the notes' Open items): two or more LV free-map pages both having room
     /// (<c>lv-two-free-lower-looser-*</c> disproves both first-fit and best-fit), walking past a full first LV
     /// free-map page, a single-row page left with 179..263 free bytes, and a column without long-value maps.
-    /// On Jet 4 MDB, only an uncompressed single-row Memo onto an empty LV free map leaving &gt;= 264 free bytes is
-    /// recorded (<c>evidence/r-q36-publication-bytes/feff-content-mdb-dao</c>); all other external MDB LVAL writes are
-    /// refused by name.
+    /// On Jet 4 MDB, an uncompressed single-row Memo onto an empty LV free map
+    /// (<c>evidence/r-q36-publication-bytes/feff-content-mdb-dao</c>) or appending onto the sole LV free-map page
+    /// (<c>evidence/r-q44-ddl-alter-types/ixtype-memo-rows-mdb-dao</c>) leaving &gt;= 264 free bytes is recorded; all
+    /// other external MDB LVAL writes are refused by name.
     /// </summary>
     private byte[]? PlaceExternalLongValue(
         ColumnDescriptor c,

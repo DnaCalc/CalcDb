@@ -127,6 +127,25 @@ public sealed class ReadOnlyActionSqlTests
             Assert.Null(adoBound.Failure.ReadOnlyInfo);
         }
 
+        // BoundDdl overload for BIGINT/DATETIME2 keeps ReadOnlyInfo null (matching ExecuteOnReadOnly).
+        foreach (string extSql in new[]
+        {
+            "CREATE TABLE RoBig (ID LONG, B BIGINT)",
+            "CREATE TABLE RoDt2 (ID LONG, D DATETIME2)",
+        })
+        {
+            DdlStatement? stmt = DdlParser.Parse(extSql, out SqlFailure? parseFail);
+            Assert.True(stmt is not null, parseFail?.ToString());
+            BoundDdl? plan = DdlBinder.Bind(stmt!, rw, out SqlFailure? bindFail);
+            Assert.True(plan is not null, bindFail?.ToString());
+            ActionOutcome boundOut = DdlExecutor.Execute(plan!, ro);
+            Assert.Equal("NotModelled.ReadOnlyAction", boundOut.Failure!.NotModelled);
+            Assert.Null(boundOut.Failure.ReadOnlyInfo);
+            ActionOutcome sqlOut = DdlExecutor.Execute(extSql, ro);
+            Assert.Equal("NotModelled.ReadOnlyAction", sqlOut.Failure!.NotModelled);
+            Assert.Null(sqlOut.Failure.ReadOnlyInfo);
+        }
+
         // Unrecorded DAO read-only DDL neighbours (including invalid CREATE TABLE / CREATE INDEX / ALTER ADD COLUMN
         // whose bind-error vs read-only precedence is unrecorded) stay plain NotModelled.ReadOnlyAction with ReadOnlyInfo null.
         foreach (string unrecordedSql in new[]

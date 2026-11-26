@@ -526,15 +526,9 @@ public sealed class SchemaWriter
         }
         if (bigIntCount > 0 || dateTime2Count > 0)
         {
-            if (isJet4Mdb)
+            if (request.Route is not (SchemaRoute.Sql or SchemaRoute.Ado))
             {
-                if (request.Route is SchemaRoute.Sql or SchemaRoute.Ado)
-                {
-                    // evidence/r-q44-ddl-alter-types/ext-bigint-mdb-dao, ext-bigint-mdb-ado, ext-datetime2-mdb-dao, ext-datetime2-mdb-ado:
-                    // Jet 4 MDB refuses BIGINT and DATETIME2 with 3001 after stepping MSysObjects/MSysACEs UniqueEntryCount +1 and 0xE02 +2.
-                    return new SchemaRefusal(3001, null);
-                }
-                return new SchemaRefusal(null, $"BIGINT/DATETIME2 on {request.Route} route in a Jet 4 MDB is not recorded");
+                return new SchemaRefusal(null, $"BIGINT/DATETIME2 on {request.Route} route is not recorded");
             }
             if (bigIntCount > 1 || dateTime2Count > 1 || sawDateTime2BeforeBigInt)
             {
@@ -743,6 +737,12 @@ public sealed class SchemaWriter
             && CheckLvPropPlan(request, requiredFields, SqlFieldRequired, allowMultiLvalWrite: false) is { } sqlLvRefusal)
         {
             return sqlLvRefusal;
+        }
+        if (isJet4Mdb && (bigIntCount > 0 || dateTime2Count > 0))
+        {
+            // evidence/r-q44-ddl-alter-types/ext-bigint-mdb-dao, ext-bigint-mdb-ado, ext-datetime2-mdb-dao, ext-datetime2-mdb-ado:
+            // Jet 4 MDB refuses BIGINT and DATETIME2 with 3001 after stepping MSysObjects/MSysACEs UniqueEntryCount +1 and 0xE02 +2.
+            return new SchemaRefusal(3001, null);
         }
         return null;
     }
@@ -3259,7 +3259,7 @@ public sealed class SchemaWriter
             }
             int needed = blob.Length + _d.DataPage.SlotEntryBytes;
             int freshFree = (_d.PageSize - _d.DataPage.SlotBase) - needed;
-            if (allowShrinkToInline && freshFree < LvalFreeMapStaysAtOrAbove)
+            if ((allowShrinkToInline || allowSharedLvalPage) && freshFree < LvalFreeMapStaysAtOrAbove)
             {
                 work.Fail($"MSysObjects.LvProp LVAL page would keep {freshFree} free bytes (< {LvalFreeMapStaysAtOrAbove}): leaving or uncertain MSysObjects.LvProp free map is not recorded");
                 return false;
@@ -3278,7 +3278,7 @@ public sealed class SchemaWriter
                 int rowCount = (int)_d.DataPage.RowCount.Read(oldPin.Bytes);
                 if (freeBytes >= needed && rowCount < _d.DataPage.WriterSlotLimit)
                 {
-                    if (allowShrinkToInline)
+                    if (allowShrinkToInline || allowSharedLvalPage)
                     {
                         byte[] dryCopy = oldPin.Bytes.ToArray();
                         if (!DataPages.TryAppendRow(dryCopy, blob, _d, out _, out string? dryFail, lval: true)
@@ -5227,6 +5227,13 @@ public sealed class SchemaWriter
         if (index.IgnoreNull && entryCount == 0)
         {
             failure = $"{index.Name}: WITH IGNORE NULL on a populated table where every row is Null (0 entries) is not recorded (evidence/r-q34-ddl-sweep/ix-cat1b-rows-chain-accdb-dao has 2 non-Null entries)";
+            return false;
+        }
+        if (index.Unique && keyCols.Length == 1 && keyCols[0].TypeCode == NativeTypes.Memo && nullKeyRows > 0)
+        {
+            // evidence/r-q44-ddl-alter-types/ixtype-memo-rows-accdb-dao and ixtype-memo-rows-mdb-dao have a Null row
+            // before a 255-char duplicate prefix that fails 3022; a succeeding UNIQUE Memo index with a Null row is not recorded.
+            failure = $"{index.Name}: succeeding UNIQUE Memo index containing a Null row is not recorded (evidence/r-q44-ddl-alter-types/ixtype-memo-rows-accdb-dao and evidence/r-q44-ddl-alter-types/ixtype-memo-rows-mdb-dao fail 3022 on duplicate prefix)";
             return false;
         }
         uniqueEntryCount = (uint)seenKeys.Count;
