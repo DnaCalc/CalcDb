@@ -646,6 +646,8 @@ internal sealed unsafe class ConnectionObject : AdoObject
 
     public void SetProviderError(AdoErrorEntry entry) => ErrorsCollection.Replace(entry);
 
+    public void ReplaceProviderErrors(AdoErrorEntry[] entries) => ErrorsCollection.Replace(entries);
+
     public static unsafe int Create(HostBinding binding, nint outer, in Guid iid, nint* result) => Publish(new ConnectionObject(), outer, iid, result);
 
     /// <summary>The route the Connection's accepted inputs select now (a pinned provider stays), for a dependent object.</summary>

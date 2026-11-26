@@ -218,6 +218,88 @@ internal static class AdoSqlErrors
         null,
         AdoObject.IidRowset);
 
+    /// <summary>Client cursor concurrency conflict during UpdateBatch (0x80040E38; Microsoft Cursor Engine, NativeError 32, SQLState "", IErrorInfo guid = Guid.Empty; r-q48-ado-batch-edits/conflict-*, r-ado-1b/batch-conflict-first).</summary>
+    public static MappedProviderError ConcurrencyConflict() => new(
+        AdoObject.CursorEngineFailure(AdoObject.HResultConcurrencyConflict, AdoObject.ConcurrencyConflictDescription),
+        new AdoErrorEntry(
+            AdoObject.HResultConcurrencyConflict,
+            AdoObject.CursorEngineSource,
+            AdoObject.ConcurrencyConflictDescription,
+            "",
+            0,
+            "",
+            32));
+
+    /// <summary>Client cursor Field read on a row deleted or marked for deletion (0x80040E23; Microsoft Cursor Engine, helpContext 0, IErrorInfo guid = Guid.Empty; r-ado-1b/view-filter-constants #31, r-q48-ado-batch-edits/batch-delete-scopes-accdb).</summary>
+    public static Failure ClientDeletedRowHandle() =>
+        AdoObject.CursorEngineFailure(AdoObject.HResultDeletedRecord, AdoObject.DeletedRowHandleDescription);
+
+    /// <summary>Client cursor Resync(adResyncAllValues) on a row deleted at the data store (0x80040E23; Microsoft Cursor Engine, NativeError 1029, SQLState "", helpContext 0, IErrorInfo guid = Guid.Empty; r-q48-ado-batch-edits/resync-all-vs-underlying-mdb, txn-updatebatch-rollback-accdb).</summary>
+    public static MappedProviderError ClientResyncDeletedRow() => new(
+        AdoObject.CursorEngineFailure(AdoObject.HResultDeletedRecord, AdoObject.ResyncDeletedRowDescription),
+        new AdoErrorEntry(
+            AdoObject.HResultDeletedRecord,
+            AdoObject.CursorEngineSource,
+            AdoObject.ResyncDeletedRowDescription,
+            "",
+            0,
+            "",
+            1029));
+
+    /// <summary>Duplicate PK/unique index during client UpdateBatch / (3,3,3) immediate flush (3022 on ICommand; r-q48-ado-batch-edits/conflict-unique-dup-and-null-accdb, r-ado-1b/batch-conflict-middle).</summary>
+    public static MappedProviderError DuplicateOnCommand() => Make(
+        AdoObject.HResultFail,
+        "The changes you requested to the table were not successful because they would create duplicate values in the index, primary key, or relationship. Change the data in the field or fields that contain duplicate data, remove the index, or redefine the index to permit duplicate entries and try again.",
+        5003022,
+        "3022",
+        -105121349,
+        AdoObject.IidCommand);
+
+    /// <summary>Null in primary key or non-null unique index during client UpdateBatch (3058 on ICommand; r-q48-ado-batch-edits/conflict-unique-dup-and-null-accdb #47[2]).</summary>
+    public static MappedProviderError NullInIndexOnCommand() => Make(
+        AdoObject.HResultFail,
+        "Index or primary key cannot contain a Null value.",
+        5003058,
+        "3058",
+        -68944925,
+        AdoObject.IidCommand);
+
+    /// <summary>FK parent-delete violation during client UpdateBatch (3200 on ICommand; r-ado-1b/batch-fk-failure #48-#50).</summary>
+    public static MappedProviderError RelatedRecordsExistOnCommand(string description) => Make(
+        AdoObject.HResultFail,
+        description,
+        5003000,
+        "3200",
+        -534971980,
+        AdoObject.IidCommand);
+
+    /// <summary>FK child insert/update violation during client UpdateBatch (3201 on ICommand; r-ado-1b/batch-fk-failure #36-#38).</summary>
+    public static MappedProviderError RelatedRecordRequiredOnCommand(string description) => Make(
+        AdoObject.HResultFail,
+        description,
+        5003000,
+        "3201",
+        -535037517,
+        AdoObject.IidCommand);
+
+    /// <summary>Required field violation during client UpdateBatch (3314 on ICommand; r-oledb-odbc/error-record-channels).</summary>
+    public static MappedProviderError RequiredOnCommand(string description) => Make(
+        AdoObject.HResultFail,
+        description,
+        5003000,
+        "3314",
+        -541331061,
+        AdoObject.IidCommand);
+
+    /// <summary>Validation rule violation during client UpdateBatch (3316 on ICommand; r-oledb-odbc/error-record-channels).</summary>
+    public static MappedProviderError ValidationRuleOnCommand(string description) => Make(
+        AdoObject.HResultFail,
+        description,
+        5003000,
+        "3316",
+        -541462135,
+        AdoObject.IidCommand);
+
     /// <summary>Provider Type mismatch on Field.Value put or Recordset.Update/AddNew argument conversion (r-ado-1b/fields-assign-conversion #199, edit-update-args #130-149).</summary>
     public static MappedProviderError TypeMismatchOn(in Guid iid) => new(
         AdoObject.ProviderFailure(AdoObject.HResultTypeMismatch, "Type mismatch.", iid),
@@ -462,6 +544,30 @@ internal static unsafe class AdoEditErrors
             // r-oledb-odbc/update-errors #153-164: FK delete violation on server keyset reports 3200 on IidRowsetUpdate.
             CalcDb.Isam.Edit.MutationError.RelatedRecordsExist => AdoSqlErrors.RelatedRecordsOnRowset(error.Describe()),
             _ => FailUnmodelled(error, "rowset delete", out unmodelled),
+        };
+    }
+
+    /// <summary>
+    /// Map ISAM <see cref="CalcDb.Isam.Edit.MutationError"/> emitted during client cursor <c>UpdateBatch</c> or
+    /// immediate <c>(3,3,3)</c> <c>Update</c>/<c>Delete</c>, where Microsoft Cursor Engine executes DML through
+    /// <c>ICommand</c> (r-q48-ado-batch-edits/conflict-unique-dup-and-null-accdb, r-ado-1b/batch-fk-failure,
+    /// r-ado-1b/batch-conflict-middle).
+    /// </summary>
+    public static MappedProviderError? MapClientBatchError(CalcDb.Isam.Edit.MutationError error, out Failure? unmodelled)
+    {
+        unmodelled = null;
+        return error.Number switch
+        {
+            CalcDb.Isam.Edit.MutationError.Duplicate => AdoSqlErrors.DuplicateOnCommand(),
+            CalcDb.Isam.Edit.MutationError.NullInIndex => AdoSqlErrors.NullInIndexOnCommand(),
+            CalcDb.Isam.Edit.MutationError.RelatedRecordsExist => AdoSqlErrors.RelatedRecordsExistOnCommand(error.Describe()),
+            CalcDb.Isam.Edit.MutationError.RelatedRecordRequired => AdoSqlErrors.RelatedRecordRequiredOnCommand(error.Describe()),
+            CalcDb.Isam.Edit.MutationError.Required => AdoSqlErrors.RequiredOnCommand(error.Describe()),
+            CalcDb.Isam.Edit.MutationError.RuleWithText or CalcDb.Isam.Edit.MutationError.RuleWithoutText =>
+                AdoSqlErrors.ValidationRuleOnCommand(error.Describe()),
+            CalcDb.Isam.Edit.MutationError.LockedBySession => AdoSqlErrors.CurrentlyLockedOnCommand(),
+            CalcDb.Isam.Edit.MutationError.RecordDeleted => AdoSqlErrors.ConcurrencyConflict(),
+            _ => FailUnmodelled(error, "client batch update", out unmodelled),
         };
     }
 

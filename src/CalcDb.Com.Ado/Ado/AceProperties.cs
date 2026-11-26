@@ -26,11 +26,16 @@ internal enum PropertySlotKind
     NameOnlyUnrecorded,
 
     /// <summary>
-    /// Client Recordset writable Int32 property whose default and recorded values are known
-    /// (r-ado-1b/batch-update-criteria "Update Criteria", r-ado-1b/batch-update-resync "Update Resync");
-    /// Type and Attributes were not recorded and refuse by name.
+    /// Client Recordset writable Int32 property whose Type, Attributes, default, and validation rules are recorded
+    /// (r-q48-ado-batch-edits/client-props-inventory-accdb, r-ado-1b/batch-update-criteria, batch-update-resync).
     /// </summary>
     ClientRecordsetWritable,
+
+    /// <summary>
+    /// Client Recordset read-only or unrecorded-put property whose Name, Type, Attributes, and default Value are recorded
+    /// (r-q48-ado-batch-edits/client-props-inventory-accdb [0..102]).
+    /// </summary>
+    ClientRecordsetRecordedRead,
 }
 
 /// <summary>A property's current value; the collection owns it, so every wrapper of the entry sees the same value.</summary>
@@ -367,11 +372,127 @@ internal static class AceProperties
         return slots;
     }
 
-    public static PropertySlot[] CreateClientRecordsetSlots() =>
+    /// <summary>
+    /// Exact 103 client Recordset dynamic properties [0..102] for updatable client cursors (3,3,4) and (3,3,3)
+    /// (r-q48-ado-batch-edits/client-props-inventory-accdb #22-#23, #126-#131).
+    /// </summary>
+    private static readonly (string Name, int Type, int Attributes, Func<OwnedVariant> Value, PropertySlotKind Kind)[] ClientRecordsetInventory =
     [
-        new PropertySlot(new PropertyDescriptor("Update Criteria", 3, ReadWriteAttr), OwnedVariant.FromInt32(2), PropertySlotKind.ClientRecordsetWritable),
-        new PropertySlot(new PropertyDescriptor("Update Resync", 3, ReadWriteAttr), OwnedVariant.FromInt32(1), PropertySlotKind.ClientRecordsetWritable),
+        ("IAccessor", 11, ReadOnlyAttr, () => OwnedVariant.FromBoolean(true), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("IChapteredRowset", 11, ReadWriteAttr, () => OwnedVariant.FromBoolean(true), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("IColumnsInfo", 11, ReadOnlyAttr, () => OwnedVariant.FromBoolean(true), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("IColumnsRowset", 11, ReadOnlyAttr, () => OwnedVariant.FromBoolean(true), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("IConnectionPointContainer", 11, ReadOnlyAttr, () => OwnedVariant.FromBoolean(true), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("IConvertType", 11, ReadOnlyAttr, () => OwnedVariant.FromBoolean(true), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("ILockBytes", 11, ReadOnlyAttr, () => OwnedVariant.FromBoolean(false), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("IRowset", 11, ReadOnlyAttr, () => OwnedVariant.FromBoolean(true), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("IDBAsynchStatus", 11, ReadWriteAttr, () => OwnedVariant.FromBoolean(false), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("IParentRowset", 11, ReadOnlyAttr, () => OwnedVariant.FromBoolean(true), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("IRowsetChange", 11, ReadWriteAttr, () => OwnedVariant.FromBoolean(true), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("IRowsetExactScroll", 11, ReadOnlyAttr, () => OwnedVariant.FromBoolean(true), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("IRowsetFind", 11, ReadWriteAttr, () => OwnedVariant.FromBoolean(true), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("IRowsetIdentity", 11, ReadOnlyAttr, () => OwnedVariant.FromBoolean(true), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("IRowsetInfo", 11, ReadOnlyAttr, () => OwnedVariant.FromBoolean(true), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("IRowsetLocate", 11, ReadOnlyAttr, () => OwnedVariant.FromBoolean(true), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("IRowsetRefresh", 11, ReadWriteAttr, () => OwnedVariant.FromBoolean(true), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("IRowsetResynch", 11, ReadOnlyAttr, () => OwnedVariant.FromBoolean(false), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("IRowsetScroll", 11, ReadOnlyAttr, () => OwnedVariant.FromBoolean(true), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("IRowsetUpdate", 11, ReadWriteAttr, () => OwnedVariant.FromBoolean(true), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("IRowsetView", 11, ReadWriteAttr, () => OwnedVariant.FromBoolean(true), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("IRowsetIndex", 11, ReadOnlyAttr, () => OwnedVariant.FromBoolean(false), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("ISequentialStream", 11, ReadOnlyAttr, () => OwnedVariant.FromBoolean(true), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("IStorage", 11, ReadOnlyAttr, () => OwnedVariant.FromBoolean(false), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("IStream", 11, ReadOnlyAttr, () => OwnedVariant.FromBoolean(false), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("ISupportErrorInfo", 11, ReadOnlyAttr, () => OwnedVariant.FromBoolean(true), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Preserve on Abort", 11, ReadOnlyAttr, () => OwnedVariant.FromBoolean(true), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Access Order", 3, ReadOnlyAttr, () => OwnedVariant.FromInt32(2), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Append-Only Rowset", 11, ReadWriteAttr, () => OwnedVariant.FromBoolean(false), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Blocking Storage Objects", 11, ReadWriteAttr, () => OwnedVariant.FromBoolean(false), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Use Bookmarks", 11, ReadOnlyAttr, () => OwnedVariant.FromBoolean(true), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Skip Deleted Bookmarks", 11, ReadOnlyAttr, () => OwnedVariant.FromBoolean(true), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Bookmark Type", 3, ReadOnlyAttr, () => OwnedVariant.FromInt32(1), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Cache Deferred Columns", 11, ReadOnlyAttr, () => OwnedVariant.FromBoolean(false), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Fetch Backwards", 11, ReadOnlyAttr, () => OwnedVariant.FromBoolean(true), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Hold Rows", 11, ReadWriteAttr, () => OwnedVariant.FromBoolean(true), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Scroll Backwards", 11, ReadOnlyAttr, () => OwnedVariant.FromBoolean(true), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Change Inserted Rows", 11, ReadOnlyAttr, () => OwnedVariant.FromBoolean(true), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Column Privileges", 11, ReadOnlyAttr, () => OwnedVariant.FromBoolean(false), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Command Time Out", 3, ReadWriteAttr, () => OwnedVariant.FromInt32(0), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Preserve on Commit", 11, ReadOnlyAttr, () => OwnedVariant.FromBoolean(true), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Defer Column", 11, ReadOnlyAttr, () => OwnedVariant.FromBoolean(false), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Delay Storage Object Updates", 11, ReadOnlyAttr, () => OwnedVariant.FromBoolean(true), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Private1", 8, ReadWriteAttr, () => OwnedVariant.FromText(""), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Filter Operations", 3, ReadOnlyAttr, () => OwnedVariant.FromInt32(27), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Find Operations", 3, ReadOnlyAttr, () => OwnedVariant.FromInt32(27), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Hidden Columns", 3, ReadOnlyAttr, () => OwnedVariant.FromInt32(0), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Immobile Rows", 11, ReadOnlyAttr, () => OwnedVariant.FromBoolean(true), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Literal Bookmarks", 11, ReadOnlyAttr, () => OwnedVariant.FromBoolean(true), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Literal Row Identity", 11, ReadOnlyAttr, () => OwnedVariant.FromBoolean(true), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Maximum Open Rows", 3, ReadOnlyAttr, () => OwnedVariant.FromInt32(0), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Maximum Pending Rows", 3, ReadOnlyAttr, () => OwnedVariant.FromInt32(0), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Maximum Rows", 3, ReadWriteAttr, () => OwnedVariant.FromInt32(0), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Column Writable", 11, ReadOnlyAttr, () => OwnedVariant.FromBoolean(false), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Memory Usage", 3, ReadOnlyAttr, () => OwnedVariant.FromInt32(0), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Notification Granularity", 3, ReadOnlyAttr, () => OwnedVariant.FromInt32(1), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Notification Phases", 3, ReadOnlyAttr, () => OwnedVariant.FromInt32(31), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Column Set Notification", 3, ReadOnlyAttr, () => OwnedVariant.FromInt32(3), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Row Delete Notification", 3, ReadOnlyAttr, () => OwnedVariant.FromInt32(3), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Row First Change Notification", 3, ReadOnlyAttr, () => OwnedVariant.FromInt32(3), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Row Insert Notification", 3, ReadOnlyAttr, () => OwnedVariant.FromInt32(3), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Row Resynchronization Notification", 3, ReadOnlyAttr, () => OwnedVariant.FromInt32(3), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Rowset Release Notification", 3, ReadOnlyAttr, () => OwnedVariant.FromInt32(3), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Rowset Fetch Position Change Notification", 3, ReadOnlyAttr, () => OwnedVariant.FromInt32(3), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Row Undo Change Notification", 3, ReadOnlyAttr, () => OwnedVariant.FromInt32(3), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Row Undo Delete Notification", 3, ReadOnlyAttr, () => OwnedVariant.FromInt32(3), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Row Undo Insert Notification", 3, ReadOnlyAttr, () => OwnedVariant.FromInt32(3), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Row Update Notification", 3, ReadOnlyAttr, () => OwnedVariant.FromInt32(3), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Bookmarks Ordered", 11, ReadOnlyAttr, () => OwnedVariant.FromBoolean(true), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Others' Inserts Visible", 11, ReadOnlyAttr, () => OwnedVariant.FromBoolean(false), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Others' Changes Visible", 11, ReadOnlyAttr, () => OwnedVariant.FromBoolean(false), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Own Inserts Visible", 11, ReadOnlyAttr, () => OwnedVariant.FromBoolean(true), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Own Changes Visible", 11, ReadOnlyAttr, () => OwnedVariant.FromBoolean(true), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Quick Restart", 11, ReadOnlyAttr, () => OwnedVariant.FromBoolean(true), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Reentrant Events", 11, ReadOnlyAttr, () => OwnedVariant.FromBoolean(true), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Remove Deleted Rows", 11, ReadOnlyAttr, () => OwnedVariant.FromBoolean(true), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Report Multiple Changes", 11, ReadOnlyAttr, () => OwnedVariant.FromBoolean(false), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Return Pending Inserts", 11, ReadOnlyAttr, () => OwnedVariant.FromBoolean(true), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Row Privileges", 11, ReadOnlyAttr, () => OwnedVariant.FromBoolean(false), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Asynchronous Rowset Processing", 3, ReadWriteAttr, () => OwnedVariant.FromInt32(16), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Row Threading Model", 3, ReadOnlyAttr, () => OwnedVariant.FromInt32(1), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Server Cursor", 11, ReadOnlyAttr, () => OwnedVariant.FromBoolean(false), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Strong Row Identity", 11, ReadOnlyAttr, () => OwnedVariant.FromBoolean(true), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Objects Transacted", 11, ReadOnlyAttr, () => OwnedVariant.FromBoolean(false), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Unique Rows", 11, ReadOnlyAttr, () => OwnedVariant.FromBoolean(true), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Updatability", 3, ReadWriteAttr, () => OwnedVariant.FromInt32(7), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Batch Size", 3, ReadWriteAttr, () => OwnedVariant.FromInt32(15), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Update Criteria", 3, ReadWriteAttr, () => OwnedVariant.FromInt32(2), PropertySlotKind.ClientRecordsetWritable),
+        ("Background Fetch Size", 3, ReadWriteAttr, () => OwnedVariant.FromInt32(15), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Initial Fetch Size", 3, ReadWriteAttr, () => OwnedVariant.FromInt32(50), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Background thread Priority", 3, ReadWriteAttr, () => OwnedVariant.FromInt32(3), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Cache Child Rows", 11, ReadWriteAttr, () => OwnedVariant.FromBoolean(true), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Maintain Change Status", 11, ReadWriteAttr, () => OwnedVariant.FromBoolean(false), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Auto Recalc", 3, ReadWriteAttr, () => OwnedVariant.FromInt32(1), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Unique Table", 8, ReadWriteAttr, () => OwnedVariant.FromText(""), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Unique Schema", 8, ReadWriteAttr, () => OwnedVariant.FromText(""), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Unique Catalog", 8, ReadWriteAttr, () => OwnedVariant.FromText(""), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Resync Command", 8, ReadWriteAttr, () => OwnedVariant.FromText(""), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Cursor Engine Version", 3, ReadOnlyAttr, () => OwnedVariant.FromInt32(100), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Reshape Name", 8, ReadOnlyAttr, () => OwnedVariant.FromText(""), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Update Resync", 3, ReadWriteAttr, () => OwnedVariant.FromInt32(1), PropertySlotKind.ClientRecordsetWritable),
+        ("Release Shape On Disconnect", 11, ReadWriteAttr, () => OwnedVariant.FromBoolean(false), PropertySlotKind.ClientRecordsetRecordedRead),
+        ("Bookmarkable", 11, ReadOnlyAttr, () => OwnedVariant.FromBoolean(true), PropertySlotKind.ClientRecordsetRecordedRead),
     ];
+
+    public static PropertySlot[] CreateClientRecordsetSlots()
+    {
+        var slots = new PropertySlot[ClientRecordsetInventory.Length];
+        for (int i = 0; i < ClientRecordsetInventory.Length; i++)
+        {
+            var e = ClientRecordsetInventory[i];
+            slots[i] = new PropertySlot(new PropertyDescriptor(e.Name, e.Type, e.Attributes), e.Value(), e.Kind);
+        }
+        return slots;
+    }
 }
 
 internal enum PropertiesMode : byte
@@ -387,10 +508,11 @@ internal enum PropertiesMode : byte
     ServerRecordsetOrCommand,
 
     /// <summary>
-    /// Client batch-optimistic (3,4) Recordset: partial inventory ("Update Criteria", "Update Resync") from
-    /// evidence/r-ado-1b/batch-update-criteria and batch-update-resync.
+    /// Updatable client Recordset ((3,3,4) / (3,3,3)): full 103-property inventory from
+    /// evidence/r-q48-ado-batch-edits/client-props-inventory-accdb, with writable "Update Criteria" (0..3)
+    /// and "Update Resync" (0..15).
     /// </summary>
-    ClientRecordsetPartial,
+    ClientRecordset,
 }
 
 /// <summary>
@@ -481,6 +603,24 @@ internal sealed class PropertiesObject : AdoObject
         return _slots;
     }
 
+    /// <summary>Read an Int32 slot by exact name from an open client Recordset Properties collection (e.g. "Update Criteria", "Update Resync").</summary>
+    public unsafe int ReadClientInt32(string name, int fallback)
+    {
+        if (_invalid)
+        {
+            return fallback;
+        }
+        for (int i = 0; i < _slots.Length; i++)
+        {
+            if (string.Equals(_names[i], name, StringComparison.Ordinal))
+            {
+                OwnedVariant v = _slots[i].Value;
+                return v.Type == VarType.I4 ? (int)v.Pointer->Int64 : fallback;
+            }
+        }
+        return fallback;
+    }
+
     private void EnsureFresh()
     {
         if (_pendingFactory is null)
@@ -508,10 +648,6 @@ internal sealed class PropertiesObject : AdoObject
             return NotImplemented(refusal);
         }
         EnsureFresh();
-        if (_mode == PropertiesMode.ClientRecordsetPartial)
-        {
-            return NotImplemented("Client Recordset.Properties.Count (full client Recordset property inventory is not recorded)");
-        }
         return Int32(_slots.Length);
     }
 
@@ -544,21 +680,24 @@ internal sealed class PropertiesObject : AdoObject
             return NotImplemented(refusal);
         }
         EnsureFresh();
-        if (_mode == PropertiesMode.ClientRecordsetPartial)
+        if (_mode == PropertiesMode.ClientRecordset)
         {
-            string? name = Args.Text(index);
-            if (name is null)
+            if (AdoArgs.Int32(index) is int clientOrd && clientOrd >= 0 && clientOrd < _slots.Length)
             {
-                return NotImplemented("Client Recordset.Properties.Item by ordinal (full client Recordset property inventory is not recorded)");
+                return Object(_wrappers[clientOrd] ??= new PropertyObject(_slots[clientOrd], _onReadOnlyPropertyPut));
             }
-            for (int i = 0; i < _names.Length; i++)
+            if (Args.Text(index) is { } clientName)
             {
-                if (string.Equals(_names[i], name, StringComparison.OrdinalIgnoreCase))
+                for (int i = 0; i < _names.Length; i++)
                 {
-                    return Object(_wrappers[i] ??= new PropertyObject(_slots[i], _onReadOnlyPropertyPut));
+                    if (string.Equals(_names[i], clientName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return Object(_wrappers[i] ??= new PropertyObject(_slots[i], _onReadOnlyPropertyPut));
+                    }
                 }
+                return NotImplemented($"Client Recordset.Properties.Item('{clientName}') miss (not recorded)");
             }
-            return NotImplemented($"Client Recordset.Properties.Item('{name}') (not recorded)");
+            return NotImplemented("Client Recordset.Properties.Item with out-of-range ordinal or unrecorded index form");
         }
         if (_mode == PropertiesMode.ServerRecordsetOrCommand)
         {
@@ -646,12 +785,12 @@ internal sealed unsafe class PropertyObject : AdoObject
         _invalid ? Fail(AdoErrors.ObjectNoLongerValid, publishesErrorInfo: false) : op(this);
 
     private CallResult GetTypeValue() =>
-        _slot.Kind is PropertySlotKind.NameOnlyUnrecorded or PropertySlotKind.ClientRecordsetWritable
+        _slot.Kind == PropertySlotKind.NameOnlyUnrecorded
             ? NotImplemented($"Property.Type of '{_slot.Descriptor.Name}' (not recorded)")
             : Int32(_slot.Descriptor.Type);
 
     private CallResult GetAttributes() =>
-        _slot.Kind is PropertySlotKind.NameOnlyUnrecorded or PropertySlotKind.ClientRecordsetWritable
+        _slot.Kind == PropertySlotKind.NameOnlyUnrecorded
             ? NotImplemented($"Property.Attributes of '{_slot.Descriptor.Name}' (not recorded)")
             : Int32(_slot.Descriptor.Attributes);
 
@@ -666,26 +805,33 @@ internal sealed unsafe class PropertyObject : AdoObject
         {
             return NotImplemented("Property.Value = Missing");
         }
-        if (_slot.Kind == PropertySlotKind.NameOnlyUnrecorded)
+        if (_slot.Kind is PropertySlotKind.NameOnlyUnrecorded or PropertySlotKind.ClientRecordsetRecordedRead)
         {
             return NotImplemented($"Property.Value = ... on '{_slot.Descriptor.Name}' (not recorded)");
         }
         if (_slot.Kind == PropertySlotKind.ClientRecordsetWritable)
         {
+            // r-q48-ado-batch-edits/client-props-inventory-accdb #26-#40, #50-#85:
+            // non-integer -> 0x800A0D5D (ADODB.Property, helpContext 1240652, IErrorInfo absent, Errors.Count 0);
+            // out-of-range Int32 -> 0x80040E21 (ADODB.Property, helpContext 1240640, IErrorInfo absent) + 2 Connection.Errors.
             if (AdoArgs.Int32(arg) is not int intVal)
             {
-                return NotImplemented($"Property.Value = non-integer on '{_slot.Descriptor.Name}' (not recorded)");
+                return Fail(AdoErrors.WrongValueType, publishesErrorInfo: false);
             }
-            // evidence/r-ado-1b/batch-update-criteria (0..3) and evidence/r-ado-1b/batch-update-resync (0, 1, 2, 4, 8, 15).
             bool valid = _slot.Descriptor.Name switch
             {
-                "Update Criteria" => intVal is 0 or 1 or 2 or 3,
-                "Update Resync" => intVal is 0 or 1 or 2 or 4 or 8 or 15,
+                "Update Criteria" => intVal is >= 0 and <= 3,
+                "Update Resync" => intVal is >= 0 and <= 15,
                 _ => false,
             };
             if (!valid)
             {
-                return NotImplemented($"Property.Value = {intVal} on '{_slot.Descriptor.Name}' (not recorded)");
+                _onReadOnlyPropertyPut(
+                [
+                    new AdoErrorEntry(HResultErrorsOccurred, CursorEngineSource, CursorEngineMultipleStepDescription, "", 0, "", 0),
+                    new AdoErrorEntry(HResultErrorsOccurred, "ADODB.Property", InvalidPropertyValueDescription, "", ProviderHelpContext, "", HResultErrorsOccurred),
+                ]);
+                return CallResult.Fail(InvalidPropertyValueFailure("ADODB.Property", Decl.Iid, publishesErrorInfo: false));
             }
             _slot.Value.Dispose();
             _slot.Value = OwnedVariant.FromInt32(intVal);

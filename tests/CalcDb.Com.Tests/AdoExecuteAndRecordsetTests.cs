@@ -498,8 +498,9 @@ public sealed unsafe class AdoExecuteAndRecordsetTests
             Assert.Equal(HResults.E_NOTIMPL, Call(rs, "Open", "SELECT ID FROM K", new Dispatch(cn), 0, 1, 17).Failure!.Value.Scode);
             Assert.Null(Call(rs, "Open", "K", new Dispatch(cn), 1, 3, 2).Failure);
 
-            // Out-of-scope Recordset methods remain refused by name (0-arg Resync has no retained record).
-            Assert.Equal(HResults.E_NOTIMPL, Call(rs, "UpdateBatch").Failure!.Value.Scode);
+            // r-q48-ado-batch-edits/batch-update-scopes-args-accdb: UpdateBatch() on server keyset (2, 1, 3) is a no-op S_OK.
+            Assert.Null(Call(rs, "UpdateBatch").Failure);
+            // Out-of-scope server-cursor Recordset methods remain refused by name (0-arg Resync on server cursor has no retained record).
             Assert.Equal(HResults.E_NOTIMPL, Call(rs, "CancelBatch").Failure!.Value.Scode);
             Assert.Equal(HResults.E_NOTIMPL, Call(rs, "Resync").Failure!.Value.Scode);
             Assert.Equal(HResults.E_NOTIMPL, Call(rs, "Requery").Failure!.Value.Scode);
