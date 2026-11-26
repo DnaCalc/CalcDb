@@ -1656,7 +1656,7 @@ public sealed class SchemaWriterTests
             Assert.Equal(before, session.File.Snapshot());
         }
 
-        // Finding 3 & 4a: ACCDB CREATE INDEX inside BeginTrans (empty, indexed, ADO) and on LVAL + existing index refuse with 0 bytes written.
+        // Finding 3 & 4a: ACCDB CREATE INDEX inside BeginTrans (empty, indexed, ADO), indexing an LVAL column, and ADO on LVAL table refuse with 0 bytes written.
         using (var session = new Session(Fixture()))
         {
             session.Create(
@@ -1671,6 +1671,12 @@ public sealed class SchemaWriterTests
             Assert.False(memoColIndex.Succeeded);
             Assert.False(memoColIndex.PublishedAny);
             Assert.Contains("0x0C", memoColIndex.Refused?.NotWritten);
+
+            // ADO CREATE INDEX on an LVAL table is unrecorded (all LVAL CREATE INDEX records use DAO/SQL).
+            SchemaOutcome adoLvalIndex = session.Writer().CreateIndex(session.Workspace, new("T", new("IX_K_ADO", ["K"], PrimaryKey: false), SchemaRoute.Ado), 2);
+            Assert.False(adoLvalIndex.Succeeded);
+            Assert.False(adoLvalIndex.PublishedAny);
+            Assert.Contains("ADO", adoLvalIndex.Refused?.NotWritten);
             Assert.Equal(before, session.File.Snapshot());
 
             // ACCDB empty table (0-index SQL, 0-index ADO, and indexed SQL) inside BeginTrans refuses with 0 bytes written.
@@ -1757,12 +1763,13 @@ public sealed class SchemaWriterTests
             Assert.Contains("IGNORE NULL", uqIgn.Refused?.NotWritten);
             Assert.Equal(nullImage, session.File.Snapshot());
 
-            // Existing NULL on PRIMARY, DISALLOW NULL, UNIQUE non-IGNORE NULL, and 2-col non-IGNORE NULL/IGNORE NULL refuse by name
-            // (a single Long Null row in a non-unique non-IGNORE NULL index is recorded in r-q43-schema-lval-index/ix-lval-pk-rows-*).
+            // Existing NULL on PRIMARY, DISALLOW NULL, UNIQUE non-IGNORE NULL, DESC non-IGNORE NULL, and 2-col non-IGNORE NULL/IGNORE NULL refuse by name
+            // (only a single ascending Long Null row in a non-unique non-IGNORE NULL index is recorded in r-q43-schema-lval-index/ix-lval-pk-rows-*).
             NewIndex[] nullRefused =
             [
                 new("PK_C", ["C"], PrimaryKey: true, Unique: true),
                 new("IX_C_DIS", ["C"], PrimaryKey: false, DisallowNull: true),
+                new("IX_C_DESC", ["C"], PrimaryKey: false, Descending: [true]),
                 new("IX_BC_PLAIN", ["B", "C"], PrimaryKey: false),
                 new("UK_C", ["C"], PrimaryKey: false, Unique: true),
                 // Partial-NULL (10, NULL) on 2-col IGNORE NULL refuses by name.
@@ -1884,7 +1891,6 @@ public sealed class SchemaWriterTests
         using (var session = new Session(Fixture()))
         {
             session.Create(new("T", [Long("ID"), Long("V"), Text("S", 20)], SchemaRoute.Sql, [new("PK_T", ["ID"], PrimaryKey: true)]), 1, 1);
-            session.Create(new("WithNn", [Long("ID"), new("V", NewFieldType.Long, Required: true)], SchemaRoute.Sql), 1, 1);
             byte[] before = session.File.Snapshot();
 
             // Non-ADO routes refuse without writing.
@@ -2701,18 +2707,22 @@ public sealed class SchemaWriterTests
         Assert.Null(added.NotAdmitted);
         Assert.Equal(request.Expression, added.Expression);
 
-        // If ACE's clock ticked between T.DateUpdate and the Type 9 row's DateCreate/DateUpdate (as in chk-lvprop-azl-accdb
-        // where CK_V.DateUpdate at page 17 +0x892 advanced by 1 tick), substitute only the Type 9 row's 16-byte date pair.
-        byte[] normalized = [.. ours];
-        CatalogEntry ckEntry = cat.Entries.Single(e => e.Name == request.ConstraintName && e.ParentId == CheckConstraintCatalog.RecordedParentId);
-        int dateCreateOff = cat.ObjectTable.Columns.Single(c => c.Name == "DateCreate").FixedOffset;
-        int ckRowStart = DataPages.CheckedSlot(
-            ours.AsSpan((int)(ckEntry.Root.Page * D.PageSize), D.PageSize),
-            ckEntry.Root.Row,
-            D,
-            out _)!.Value.Start;
-        int ckDateOffset = (int)(ckEntry.Root.Page * D.PageSize) + ckRowStart + D.Row.FixedBase + dateCreateOff;
-        aceAfter.AsSpan(ckDateOffset, 16).CopyTo(normalized.AsSpan(ckDateOffset, 16));
+        // In chk-lvprop-azl-accdb ACE's clock ticked +1 between T.DateUpdate (== CK_V.DateCreate) and CK_V.DateUpdate
+        // at page 17 +0x892; normalize only that 8-byte DateUpdate on chk-lvprop-azl-accdb and assert exact bytes on all others.
+        byte[] normalized = ours;
+        if (question == "chk-lvprop-azl-accdb")
+        {
+            normalized = [.. ours];
+            CatalogEntry ckEntry = cat.Entries.Single(e => e.Name == request.ConstraintName && e.ParentId == CheckConstraintCatalog.RecordedParentId);
+            int dateUpdateOff = cat.ObjectTable.Columns.Single(c => c.Name == "DateUpdate").FixedOffset;
+            int ckRowStart = DataPages.CheckedSlot(
+                ours.AsSpan((int)(ckEntry.Root.Page * D.PageSize), D.PageSize),
+                ckEntry.Root.Row,
+                D,
+                out _)!.Value.Start;
+            int ckDateUpdateOffset = (int)(ckEntry.Root.Page * D.PageSize) + ckRowStart + D.Row.FixedBase + dateUpdateOff;
+            aceAfter.AsSpan(ckDateUpdateOffset, 8).CopyTo(normalized.AsSpan(ckDateUpdateOffset, 8));
+        }
         Assert.Equal(aceAfter, normalized);
     }
 
@@ -2772,6 +2782,23 @@ public sealed class SchemaWriterTests
         Assert.False(refused.PublishedAny);
         Assert.Contains("Chain", refused.Refused?.NotWritten);
         Assert.Equal(chainedStart, fresh.File.Snapshot());
+
+        // Unreferenced dictionary name in LvProp (after removing ValidationRule) refuses by name without writing.
+        byte[] orphanedDictStart;
+        using (var setup = new Session(Fixture()))
+        {
+            setup.Create(new("T", [Long("ID"), Long("V"), Text("S", 20)], SchemaRoute.Sql), 1, 1);
+            Assert.True(setup.Writer().SetFieldValidationProperty(setup.Workspace, "T", "S", FieldValidationProperty.ValidationRule, "<> 'x'", 2).Succeeded);
+            Assert.True(setup.Writer().SetFieldValidationProperty(setup.Workspace, "T", "S", FieldValidationProperty.ValidationRule, "", 3).Succeeded);
+            setup.Close();
+            orphanedDictStart = setup.File.Snapshot();
+        }
+        using var freshOrphan = new Session(orphanedDictStart);
+        SchemaOutcome orphanRefused = freshOrphan.Writer().AddCheckConstraint(freshOrphan.Workspace, new("T", "CK_V", "V", "V >= 0", SchemaRoute.Ado), 4, 4);
+        Assert.False(orphanRefused.Succeeded);
+        Assert.False(orphanRefused.PublishedAny);
+        Assert.Contains("unreferenced name", orphanRefused.Refused?.NotWritten);
+        Assert.Equal(orphanedDictStart, freshOrphan.File.Snapshot());
     }
 
     private const string PlainRuleAccdb = "5bd002eaf9f69ab1719d0ebf7e263e6853327f1c42c82f906966dca4854cb0f1";
@@ -2927,8 +2954,35 @@ public sealed class SchemaWriterTests
         Assert.Null(session.Workspace.Rollback().Error);
         Assert.Equal(beforeTx, session.File.Snapshot());
 
-        // 2. Exhausting the reserved extent refuses by name when a further page is needed.
+        // 2. Consuming from the session's reserved extent outside BeginStatement (recordset AddNew/Update) refuses without writing.
+        CompiledChange outsideStmtCompiled = writer.CompileInsert(sem, row, null, session.Workspace.OverlayOf(session.Cache), sessionReservedPages: reserved);
+        Assert.NotNull(outsideStmtCompiled.Change);
+        AcceptOutcome outsideStmtAccept = session.Workspace.Accept(new AcceptedRowChange(sem, RowChangeKind.Insert, null, [], [], null, outsideStmtCompiled));
+        Assert.False(outsideStmtAccept.Accepted);
+        Assert.Equal(MutationOpen.Publication, outsideStmtAccept.Open);
+        Assert.Contains("outside a SQL statement", outsideStmtAccept.Detail);
+        Assert.Equal(beforeTx, session.File.Snapshot());
+
+        // 3. Unrecorded CREATE TABLE shapes while a session reserved extent is pending (DAO, ADO, NOT NULL, FK) refuse without writing.
+        foreach (CreateTableRequest badCreate in new CreateTableRequest[]
+        {
+            new("BadDao", [Long("ID")], SchemaRoute.Dao),
+            new("BadAdo", [Long("ID")], SchemaRoute.Ado),
+            new("BadNn", [Long("ID"), new("V", NewFieldType.Long, Required: true)], SchemaRoute.Sql),
+            new("BadFk", [Long("ID"), Long("K")], SchemaRoute.Sql, [new("PKB", ["ID"], PrimaryKey: true)], new NewForeignKey("FK_B", ["K"], "T", ["ID"])),
+        })
+        {
+            SchemaOutcome badOut = session.Writer().CreateTable(session.Workspace, badCreate, 3, 3);
+            Assert.False(badOut.Succeeded, $"{badCreate.Name} should refuse");
+            Assert.False(badOut.PublishedAny, $"{badCreate.Name} should not publish");
+            Assert.Contains("extent reservation", badOut.Refused?.NotWritten);
+        }
+        Assert.Equal(beforeTx, session.File.Snapshot());
+
+        // 4. Direct PageAllocator.Allocate refuses immediately while a session reserved extent is active or exhausted.
         var allocator = new PageAllocator(session.Cache, D, extent, [reserved[0]]);
+        Assert.Null(allocator.Allocate(null, out _, out string? activeFail));
+        Assert.Contains("active", activeFail);
         Assert.True(allocator.TryAllocateFromReserved(null, out uint taken, out string? fail));
         Assert.Equal(reserved[0], taken);
         Assert.Null(fail);

@@ -144,9 +144,11 @@ public sealed class PageAllocator
             failure = PendingRollbackExtentFailure;
             return null;
         }
-        if (_hadSessionReservedPages && _sessionReservedPages.Count == 0)
+        if (_hadSessionReservedPages)
         {
-            failure = "the session's reserved page-1 extent has no pages left (allocating a second 32-page extent in one session is not recorded: r-q37-valrule-put)";
+            failure = _sessionReservedPages.Count == 0
+                ? "the session's reserved page-1 extent has no pages left (allocating a second 32-page extent in one session is not recorded: r-q37-valrule-put)"
+                : "direct page-1 allocation while a session page-1 extent reservation is active is not recorded (r-q42-field-rule-and)";
             return null;
         }
         ExtentPages = Math.Max(ExtentPages, ExtentOf(_cache, ExtentPages, seen));

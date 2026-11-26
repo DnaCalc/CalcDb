@@ -3198,6 +3198,10 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                     {
                         return new AcceptOutcome(false, null, MutationOpen.Publication, "consuming pages from a session page-1 extent reservation inside BeginTrans is not recorded (r-q42-field-rule-and)");
                     }
+                    if (!InStatement)
+                    {
+                        return new AcceptOutcome(false, null, MutationOpen.Publication, "consuming pages from a session page-1 extent reservation outside a SQL statement (recordset AddNew/Update) is not recorded (r-q42-field-rule-and)");
+                    }
                     int priorInBatch = 0;
                     if (op.DeferredSingle?.Physical is { } dp && ReferenceEquals(dp.File, physical.File))
                     {
