@@ -224,6 +224,32 @@ public sealed class DaoCreateFieldAndRelationReplayTests
         return spans;
     }
 
+    /// <summary>
+    /// Exact 8-byte <c>DateUpdate</c> span of the vacated inline-<c>LvProp</c> copy of <paramref name="tableName"/>'s
+    /// <c>MSysObjects</c> row left on page 17 when a subsequent <c>LvProp</c> step promotes the blob from inline to a
+    /// 12-byte LVAL pointer (same rule as <c>SchemaWriterTests.AssertSqlCreateTableMatchesAce</c>). Checks the ACE
+    /// ghost timestamp is within 5s of <paramref name="referenceBits"/> so every other byte of page 17 is asserted.
+    /// </summary>
+    private static (uint Page, int Start, int Length) GhostDateUpdateSpan(
+        Session session,
+        byte[] ace,
+        string tableName,
+        int inlineBlobLength,
+        ulong referenceBits)
+    {
+        CatalogSnapshot cat = CatalogBootstrap.Open(session.Cache, D, session.Pages, out CatalogFailure? catFail)!;
+        Assert.Null(catFail);
+        CatalogEntry entry = cat.Entries.Single(e => e.Type == 1 && string.Equals(e.Name, tableName, StringComparison.OrdinalIgnoreCase));
+        using PagePin pin = session.Cache.Pin(entry.Root.Page).Pin!;
+        SlotView liveSlot = DataPages.CheckedSlot(pin.Bytes, entry.Root.Row, D, out _)!.Value;
+        int ghostStart = liveSlot.Start - inlineBlobLength;
+        int dateUpdateOff = ghostStart + D.Row.FixedBase + cat.ObjectTable.Columns.Single(c => c.Name == "DateUpdate").FixedOffset;
+        ulong aceGhostBits = BitConverter.ToUInt64(ace, (int)(entry.Root.Page * (ulong)D.PageSize) + dateUpdateOff);
+        TimeSpan delta = DateTime.FromOADate(BitConverter.UInt64BitsToDouble(aceGhostBits)) - DateTime.FromOADate(BitConverter.UInt64BitsToDouble(referenceBits));
+        Assert.True(Math.Abs(delta.TotalSeconds) < 5.0, $"MSysObjects '{tableName}' ghost DateUpdate differed by {delta}");
+        return ((uint)entry.Root.Page, dateUpdateOff, 8);
+    }
+
     private sealed class Session : IPublicationTarget, IDisposable
     {
         public TimeSpan Now { get; set; } = TimeSpan.Zero;
@@ -368,13 +394,16 @@ public sealed class DaoCreateFieldAndRelationReplayTests
         using var s = new Session(start);
         SchemaOutcome o = s.Create(new CreateTableRequest("T", [new NewField("n", type, Size: size)], SchemaRoute.Dao), created, updated);
         Assert.True(o.Succeeded, $"{question}: {o.Refused} {o.Accepted}");
+        if (type == NewFieldType.Counter)
+        {
+            // cf-autoincr-*: ACE writes Commit 1 asynchronously by 1500ms (0 B at return, +1 at 1500ms, +1 at Close);
+            // CalcDb publishes Commit 1 synchronously (+1) with no deferred TableDef commit, then +1 at Close.
+            Assert.Equal(0x0101UL, D.Header.CommitCounter.Read(s.File.Snapshot()));
+        }
         s.Close();
 
         byte[] ours = s.File.Snapshot();
-        // Page 17 holds an intermediate DateUpdate in its vacated row copy for 2-step Text/Memo; all other pages
-        // (including page 0, 1, 2, 3, 6, 7, 8, 10, 41/18, TDEF, map page, LvProp LVAL page) match ACE byte-for-byte.
-        HashSet<uint>? skip = type is NewFieldType.Text or NewFieldType.Memo ? [17u] : null;
-        AssertWholeImageEqual(ace, ours, skipPages: skip);
+        AssertWholeImageEqual(ace, ours);
     }
 
     [Theory]
@@ -410,7 +439,8 @@ public sealed class DaoCreateFieldAndRelationReplayTests
 
         byte[] ours = s.File.Snapshot();
         Assert.Equal(0x010Fu, D.Header.CommitCounter.Read(ours));
-        AssertWholeImageEqual(ace, ours, skipPages: [17u]);
+        byte[] step1Blob = PropertyBlob.Encode([new PropertyMap(PropertySectionKind.ColumnValues, "B", [new StoredProperty("Required", 0x01, NativeTypes.Boolean, [0x00])])]);
+        AssertWholeImageEqual(ace, ours, ignoredSpans: [GhostDateUpdateSpan(s, ace, "T", step1Blob.Length, updated)]);
     }
 
     [Theory]
@@ -446,7 +476,8 @@ public sealed class DaoCreateFieldAndRelationReplayTests
         s.Close();
         byte[] ours = s.File.Snapshot();
         Assert.Equal(0x010AUL, D.Header.CommitCounter.Read(ours));
-        AssertWholeImageEqual(afterClose, ours, skipPages: [17u]);
+        byte[] step1Blob = PropertyBlob.Encode([new PropertyMap(PropertySectionKind.ColumnValues, "ZLong", [new StoredProperty("Required", 0x01, NativeTypes.Boolean, [0xFF])])]);
+        AssertWholeImageEqual(afterClose, ours, ignoredSpans: [GhostDateUpdateSpan(s, afterClose, "T", step1Blob.Length, tUpdated)]);
     }
 
     [Theory]
@@ -572,8 +603,19 @@ public sealed class DaoCreateFieldAndRelationReplayTests
         Assert.True(s.AddRelation(new AddForeignKeyRequest("C4", new NewForeignKey("R_Four", ["PID"], "P", ["ID"]), SchemaRoute.Dao), r4C, pU).Succeeded);
         s.Close();
 
-        // Skip page 17 only because R_Two's vacated Type 8 row holds its run-local timestamp; every catalog/TDEF/map/index page matches byte-for-byte.
-        AssertWholeImageEqual(afterClose, s.File.Snapshot(), skipPages: [17u]);
+        List<(uint Page, int Start, int Length)> clockSpans = DateClockSpans(
+            s,
+            afterClose,
+            pU,
+            ("P", 1),
+            ("C1", 1),
+            ("C2", 1),
+            ("C3", 1),
+            ("C4", 1),
+            ("R_One", 8),
+            ("R_Three", 8),
+            ("R_Four", 8));
+        AssertWholeImageEqual(afterClose, s.File.Snapshot(), ignoredSpans: clockSpans);
     }
 
     [Theory]
@@ -599,7 +641,19 @@ public sealed class DaoCreateFieldAndRelationReplayTests
         Assert.True(s.AddRelation(new AddForeignKeyRequest("Node", new NewForeignKey("R_UniNonUnique", ["ParentID"], "P1", ["ID"], Unique: true), SchemaRoute.Dao), rUniNonUxC, p1U).Succeeded);
         s.Close();
 
-        AssertWholeImageEqual(afterClose, s.File.Snapshot(), skipPages: [17u]);
+        List<(uint Page, int Start, int Length)> clockSpans = DateClockSpans(
+            s,
+            afterClose,
+            p1U,
+            ("Node", 1),
+            ("P1", 1),
+            ("C1", 1),
+            ("C2", 1),
+            ("R_Self", 8),
+            ("R_UniPk", 8),
+            ("R_UniUx", 8),
+            ("R_UniNonUnique", 8));
+        AssertWholeImageEqual(afterClose, s.File.Snapshot(), ignoredSpans: clockSpans);
     }
 
     [Theory]

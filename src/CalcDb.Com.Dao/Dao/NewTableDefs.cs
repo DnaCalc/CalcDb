@@ -121,7 +121,7 @@ internal sealed unsafe class NewFieldsObject : DaoObject
         {
             return CallResult.Fail(Failure.NotImplemented("Fields.Append of an argument that is not a CalcDb draft Field"));
         }
-        if (field.AppendedTo is not null)
+        if (field.AppendedTo is not null || field.IsAttached)
         {
             return Fail(3367, DaoErrors.AlreadyInCollection);
         }
@@ -170,62 +170,49 @@ internal sealed unsafe class NewFieldObject : DaoObject
     private static readonly InterfaceDecl Decl = DaoTypes.Field3;
     private static readonly nint Vtable = DualEntries.Build(Decl);
     private static readonly OperationTable Operations = new OperationTable(Decl)
-        .Get("Name", (self, args) => Live(self, f => Text(f._attachedColumn?.Name ?? f.Name)))
-        .Get("Type", (self, args) => Live(self, f => f._attachedColumn is { } col
-            ? (ColumnFacts.DaoType(col) is int dt ? Int16(dt) : CallResult.Fail(Failure.NotImplemented($"Field.Type of native type {col.TypeCode}")))
-            : Int16(f.Type)))
-        .Get("Size", (self, args) => Live(self, f => f._attachedColumn is { } col
-            ? (ColumnFacts.Size(col) is int sz ? Int32(sz) : CallResult.Fail(Failure.NotImplemented($"Field.Size of native type {col.TypeCode}")))
-            : Int32(f.Size)))
-        .Get("Attributes", (self, args) => Live(self, f => f._attachedColumn is { } col
-            ? (ColumnFacts.Attributes(col, updatable: false) is int attr ? Int32(attr) : CallResult.Fail(Failure.NotModelled("NotModelled.FieldAttributes", $"Field.Attributes of the column {col.Name}")))
-            : Int32(f._attributes)))
-        .Get("OrdinalPosition", (self, args) => Live(self, f => f._attachedTable is not null
-            ? Int16(f._attachedOrdinal)
-            : CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldOrdinalPosition", "Field.OrdinalPosition on an unappended draft Field is not recorded"))))
-        .Get("Required", (self, args) => Live(self, f => f._attachedTable is { } t && f._attachedColumn is { } col
-            ? ColumnFacts.Stored(t.Blob, col, "Required", Bool(false))
-            : CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldRequiredGet", "Field.Required get on an unappended draft Field is not recorded"))))
-        .Get("AllowZeroLength", (self, args) => Live(self, f => f._attachedTable is { } t && f._attachedColumn is { } col
-            ? ColumnFacts.Stored(t.Blob, col, "AllowZeroLength", Bool(false))
-            : CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldAllowZeroLengthGet", "Field.AllowZeroLength get on an unappended draft Field is not recorded"))))
-        .Get("CollatingOrder", (self, args) => Live(self, f => f._attachedColumn is { } col
-            ? Int32(ColumnFacts.CollatingOrder(col))
-            : CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldCollatingOrder", "Field.CollatingOrder on an unappended draft Field is not recorded"))))
-        .Get("SourceTable", (self, args) => Live(self, f => f._attachedTable is { } t
-            ? Text(t.Name)
-            : CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldSourceTable", "Field.SourceTable on an unappended draft Field is not recorded"))))
-        .Get("SourceField", (self, args) => Live(self, f => f._attachedColumn is { } col
-            ? Text(col.Name)
-            : CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldSourceField", "Field.SourceField on an unappended draft Field is not recorded"))))
-        .Get("DefaultValue", (self, args) => Live(self, f => f._attachedTable is { } t && f._attachedColumn is { } col
-            ? ColumnFacts.Stored(t.Blob, col, "DefaultValue", Text(""))
-            : CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldDefaultValueGet", "Field.DefaultValue get on an unappended draft Field is not recorded"))))
-        .Get("ValidationRule", (self, args) => Live(self, f => f._attachedTable is { } t && f._attachedColumn is { } col
-            ? ColumnFacts.Stored(t.Blob, col, "ValidationRule", Text(""))
-            : CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldValidationRuleGet", "Field.ValidationRule get on an unappended draft Field is not recorded"))))
-        .Get("ValidationText", (self, args) => Live(self, f => f._attachedTable is { } t && f._attachedColumn is { } col
-            ? ColumnFacts.Stored(t.Blob, col, "ValidationText", Text(""))
-            : CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldValidationTextGet", "Field.ValidationText get on an unappended draft Field is not recorded"))))
+        .Get("Name", (self, args) => ForwardOrDraft(self, "Name", InvokeKind.PropertyGet, args, f => Text(f.Name)))
+        .Get("Type", (self, args) => ForwardOrDraft(self, "Type", InvokeKind.PropertyGet, args, f => Int16(f.Type)))
+        .Get("Size", (self, args) => ForwardOrDraft(self, "Size", InvokeKind.PropertyGet, args, f => Int32(f.Size)))
+        .Get("Attributes", (self, args) => ForwardOrDraft(self, "Attributes", InvokeKind.PropertyGet, args, f => Int32(f._attributes)))
+        .Get("OrdinalPosition", (self, args) => ForwardOrDraft(self, "OrdinalPosition", InvokeKind.PropertyGet, args, _ => CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldOrdinalPosition", "Field.OrdinalPosition on an unappended draft Field is not recorded"))))
+        .Get("CollectionIndex", (self, args) => ForwardOrDraft(self, "CollectionIndex", InvokeKind.PropertyGet, args, _ => CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldCollectionIndex", "Field.CollectionIndex on an unappended draft Field is not recorded"))))
+        .Get("Required", (self, args) => ForwardOrDraft(self, "Required", InvokeKind.PropertyGet, args, _ => CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldRequiredGet", "Field.Required get on an unappended draft Field is not recorded"))))
+        .Get("AllowZeroLength", (self, args) => ForwardOrDraft(self, "AllowZeroLength", InvokeKind.PropertyGet, args, _ => CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldAllowZeroLengthGet", "Field.AllowZeroLength get on an unappended draft Field is not recorded"))))
+        .Get("CollatingOrder", (self, args) => ForwardOrDraft(self, "CollatingOrder", InvokeKind.PropertyGet, args, _ => CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldCollatingOrder", "Field.CollatingOrder on an unappended draft Field is not recorded"))))
+        .Get("SourceTable", (self, args) => ForwardOrDraft(self, "SourceTable", InvokeKind.PropertyGet, args, _ => CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldSourceTable", "Field.SourceTable on an unappended draft Field is not recorded"))))
+        .Get("SourceField", (self, args) => ForwardOrDraft(self, "SourceField", InvokeKind.PropertyGet, args, _ => CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldSourceField", "Field.SourceField on an unappended draft Field is not recorded"))))
+        .Get("DefaultValue", (self, args) => ForwardOrDraft(self, "DefaultValue", InvokeKind.PropertyGet, args, _ => CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldDefaultValueGet", "Field.DefaultValue get on an unappended draft Field is not recorded"))))
+        .Get("ValidationRule", (self, args) => ForwardOrDraft(self, "ValidationRule", InvokeKind.PropertyGet, args, _ => CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldValidationRuleGet", "Field.ValidationRule get on an unappended draft Field is not recorded"))))
+        .Get("ValidationText", (self, args) => ForwardOrDraft(self, "ValidationText", InvokeKind.PropertyGet, args, _ => CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldValidationTextGet", "Field.ValidationText get on an unappended draft Field is not recorded"))))
+        .Get("AppendOnly", (self, args) => ForwardOrDraft(self, "AppendOnly", InvokeKind.PropertyGet, args, _ => CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldAppendOnly", "Field.AppendOnly on an unappended draft Field is not recorded"))))
+        .Get("Expression", (self, args) => ForwardOrDraft(self, "Expression", InvokeKind.PropertyGet, args, _ => CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldExpression", "Field.Expression on an unappended draft Field is not recorded"))))
+        .Get("Scale", (self, args) => ForwardOrDraft(self, "Scale", InvokeKind.PropertyGet, args, _ => CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldScale", "Field.Scale on an unappended draft Field is not recorded"))))
+        .Get("DataUpdatable", (self, args) => ForwardOrDraft(self, "DataUpdatable", InvokeKind.PropertyGet, args, _ => CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldDataUpdatable", "Field.DataUpdatable on an unappended draft Field is not recorded"))))
+        .Get("Value", (self, args) => ForwardOrDraft(self, "Value", InvokeKind.PropertyGet, args, f => f.Fail(3219, DaoErrors.InvalidOperation, publishesErrorInfo: true)))
+        .Get("ValidateOnSet", (self, args) => ForwardOrDraft(self, "ValidateOnSet", InvokeKind.PropertyGet, args, f => f.Fail(3219, DaoErrors.InvalidOperation)))
+        .Get("ForeignName", (self, args) => ForwardOrDraft(self, "ForeignName", InvokeKind.PropertyGet, args, f => f.Fail(3219, DaoErrors.InvalidOperation)))
+        .Get("ComplexType", (self, args) => ForwardOrDraft(self, "ComplexType", InvokeKind.PropertyGet, args, f => f.Fail(3219, DaoErrors.InvalidOperation)))
+        .Get("FieldSize", (self, args) => ForwardOrDraft(self, "FieldSize", InvokeKind.PropertyGet, args, f => f.Fail(3267, DaoErrors.RecordsetFieldOnly)))
+        .Get("OriginalValue", (self, args) => ForwardOrDraft(self, "OriginalValue", InvokeKind.PropertyGet, args, f => f.Fail(3251, DaoErrors.NotSupportedForType)))
+        .Get("VisibleValue", (self, args) => ForwardOrDraft(self, "VisibleValue", InvokeKind.PropertyGet, args, f => f.Fail(3251, DaoErrors.NotSupportedForType)))
+        .Get("Properties", (self, args) => ForwardOrDraft(self, "Properties", InvokeKind.PropertyGet, args, _ => CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldProperties", "Field.Properties on an unappended draft Field is not recorded"))))
         .Put("Type", (self, args) => ((NewFieldObject)self).SetType(args[^1]))
         .Put("Attributes", (self, args) => ((NewFieldObject)self).SetAttributes(args[^1]))
         .Put("DefaultValue", (self, args) => ((NewFieldObject)self).Keep("DefaultValue", args[^1], v => Args.TypeOf(v) == VarType.Bstr))
-        .Put("ValidationRule", (self, args) => ((NewFieldObject)self).Keep("ValidationRule", args[^1], v => Args.TypeOf(v) == VarType.Bstr))
-        .Put("ValidationText", (self, args) => ((NewFieldObject)self).Keep("ValidationText", args[^1], v => Args.TypeOf(v) == VarType.Bstr))
+        .Put("ValidationRule", (self, args) => { nint val = args[^1]; return ForwardOrDraft(self, "ValidationRule", InvokeKind.PropertyPut, args, f => f.Keep("ValidationRule", val, v => Args.TypeOf(v) == VarType.Bstr)); })
+        .Put("ValidationText", (self, args) => { nint val = args[^1]; return ForwardOrDraft(self, "ValidationText", InvokeKind.PropertyPut, args, f => f.Keep("ValidationText", val, v => Args.TypeOf(v) == VarType.Bstr)); })
         .Put("Required", (self, args) => ((NewFieldObject)self).SetRequired(args[^1]))
-        .Put("AllowZeroLength", (self, args) => ((NewFieldObject)self).SetAllowZeroLength(args[^1]));
+        .Put("AllowZeroLength", (self, args) => { nint val = args[^1]; return ForwardOrDraft(self, "AllowZeroLength", InvokeKind.PropertyPut, args, f => f.SetAllowZeroLength(val)); });
 
     private int _attributes;
-    private TableDefObject? _attachedTable;
     private DefinitionCollection? _attachedOwner;
-    private ColumnDescriptor? _attachedColumn;
-    private int _attachedOrdinal;
+    private DefinitionFieldObject? _attachedField;
 
     /// <summary>The draft Fields this field was appended to, or null.</summary>
     public NewFieldsObject? AppendedTo { get; set; }
 
     /// <summary>True once this field has been appended to an attached TableDef's Fields collection.</summary>
-    public bool IsAttached => _attachedTable is not null;
+    public bool IsAttached => _attachedField is not null;
 
     /// <summary>True when created via attached <c>TableDef.CreateField(name, 20)</c> (dbDecimal).</summary>
     public bool IsAttachedDecimal { get; }
@@ -241,10 +228,39 @@ internal sealed unsafe class NewFieldObject : DaoObject
 
     public override bool Invalid => _attachedOwner is { } owner && owner.Database.Closed;
 
-    private static CallResult Live(ComObject self, Func<NewFieldObject, CallResult> op)
+    private static CallResult ForwardOrDraft(ComObject self, string memberName, InvokeKind kind, ReadOnlySpan<nint> args, Func<NewFieldObject, CallResult> draftOp)
     {
         var f = (NewFieldObject)self;
-        return f.Invalid ? f.Fail(3420, DaoErrors.ObjectInvalid) : op(f);
+        if (f._attachedField is { } attached)
+        {
+            return attached.Run(Decl.Member(memberName, kind), args);
+        }
+        return f.Invalid ? f.Fail(3420, DaoErrors.ObjectInvalid) : draftOp(f);
+    }
+
+    protected override Failure? ScalarArgumentRefusal(MemberDecl member, int parameter, VarType sourceType)
+    {
+        if (!IsAttached || member.Kind != InvokeKind.PropertyPut)
+        {
+            return null;
+        }
+        if (member.Name == "AllowZeroLength")
+        {
+            return sourceType != VarType.Bool
+                ? Failure.NotImplemented($"Field.AllowZeroLength put of variant type {sourceType} (not recorded)")
+                : null;
+        }
+        if (member.Name is "ValidationRule" or "ValidationText")
+        {
+            if (sourceType != VarType.Bstr && Invalid)
+            {
+                return Failure.NotImplemented($"Field.{member.Name} put of variant type {sourceType} on a closed Field (qualified.md r-q37 Open)");
+            }
+            return sourceType is not (VarType.Bstr or VarType.Null)
+                ? Failure.NotImplemented($"Field.{member.Name} put of variant type {sourceType} (qualified.md r-q37 Open)")
+                : null;
+        }
+        return null;
     }
 
     /// <summary>
@@ -410,12 +426,8 @@ internal sealed unsafe class NewFieldObject : DaoObject
     /// <summary>Bind this Field to its persisted column after an attached <c>TableDef.Fields.Append</c> succeeds.</summary>
     public void Attach(TableDefObject table, DefinitionCollection owner, ColumnDescriptor column, int ordinal)
     {
-        _attachedTable = table;
         _attachedOwner = owner;
-        _attachedColumn = column;
-        _attachedOrdinal = ordinal;
-        owner.AddRef();
-        table.AddRef();
+        _attachedField = new DefinitionFieldObject(owner, table, column, indexColumn: null, ordinal);
     }
 
     private CallResult SetType(nint value)
@@ -507,16 +519,15 @@ internal sealed unsafe class NewFieldObject : DaoObject
 
     protected override void OnFinalRelease()
     {
-        if (_attachedTable is not null)
-        {
-            _attachedTable.Release();
-            _attachedTable = null;
-        }
         if (_attachedOwner is not null)
         {
             _attachedOwner.Released(this);
-            _attachedOwner.Release();
             _attachedOwner = null;
+        }
+        if (_attachedField is not null)
+        {
+            _attachedField.Release();
+            _attachedField = null;
         }
     }
 }

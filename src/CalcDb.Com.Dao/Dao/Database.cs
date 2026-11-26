@@ -1153,13 +1153,12 @@ internal sealed unsafe class DatabaseObject : DaoObject
             {
                 return CallResult.Fail(Failure.NotImplemented(stale));
             }
-            tableDef.Refresh();
+            fields.Relist();
             if (tableDef.Definition is { } updatedDef && updatedDef.Columns.Count > 0)
             {
                 int ordinal = updatedDef.Columns.Count - 1;
                 ColumnDescriptor addedCol = updatedDef.Columns[ordinal];
                 field.Attach(tableDef, fields, addedCol, ordinal);
-                fields.Relist();
                 fields.RegisterHeld(addedCol.Name, field);
             }
         }
@@ -1848,6 +1847,10 @@ internal sealed unsafe class DatabaseObject : DaoObject
         {
             return CallResult.Fail(Failure.NotImplemented(notWritten!));
         }
+        if (SharedHold(request.Table) != TableHold.None || SharedHold(request.ForeignKey.ReferencedTable) != TableHold.None)
+        {
+            return CallResult.Fail(Failure.NotImplemented($"Relations.Append while a recordset of '{request.ForeignKey.ReferencedTable}' or '{request.Table}' is open is not recorded"));
+        }
         if (OpenSchemaWriter(out string? writerFailure) is not { } writer)
         {
             return CallResult.Fail(Failure.NotImplemented("Relations.Append: " + writerFailure));
@@ -1904,6 +1907,14 @@ internal sealed unsafe class DatabaseObject : DaoObject
         if (workspace.Depth > 0)
         {
             return CallResult.Fail(Failure.NotImplemented("Relations.Delete inside a transaction is not recorded"));
+        }
+        if (RelationshipCatalog.Read(Cache, Format, Catalog, PageCount, out _) is { } existingRels)
+        {
+            Relationship? existing = existingRels.FirstOrDefault(r => string.Equals(r.Name, name, StringComparison.OrdinalIgnoreCase));
+            if (existing is not null && (SharedHold(existing.Table) != TableHold.None || SharedHold(existing.ForeignTable) != TableHold.None))
+            {
+                return CallResult.Fail(Failure.NotImplemented($"Relations.Delete of '{existing.Name}' while a recordset of '{existing.Table}' or '{existing.ForeignTable}' is open is not recorded"));
+            }
         }
         if (OpenSchemaWriter(out string? writerFailure) is not { } writer)
         {

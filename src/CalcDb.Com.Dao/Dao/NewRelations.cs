@@ -64,6 +64,8 @@ internal sealed unsafe class NewRelationObject : DaoObject
 
     protected override OperationTable Table => Operations;
 
+    protected override void OnFinalRelease() => Fields.Release();
+
     private static CallResult Live(ComObject self, Func<NewRelationObject, CallResult> op)
     {
         var r = (NewRelationObject)self;

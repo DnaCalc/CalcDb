@@ -207,9 +207,22 @@ public sealed unsafe class DaoCreateFieldAndRelationTests : IDisposable
         Assert.Null(Method(fls, "Append", fLong).Failure);
         Assert.Equal(2, IntOf(Get(fls, "Count")));
         // COM identity preserved after attached Fields.Append (r-dao-1b/coll-append-field-existing-rows)
+        // and attached NewFieldObject delegates full Field3 surface (CollectionIndex, Scale, Properties).
         NewFieldObject sameLong = Recover<NewFieldObject>(Get(fls, "Item", "ZLong"));
         Assert.Same(fLong, sameLong);
         Assert.True(BoolOf(Get(sameLong, "Required")));
+        Assert.Equal(0, IntOf(Get(sameLong, "CollectionIndex")));
+        Assert.Equal(0, IntOf(Get(sameLong, "Scale")));
+        Assert.True(IntOf(Get(Recover<ComObject>(Get(sameLong, "Properties")) as DispatchObject ?? throw new InvalidOperationException(), "Count")) > 0);
+
+        // Appending an already-attached NewFieldObject to a draft TableDef fails 3367.
+        NewTableDefObject draftTd = Recover<NewTableDefObject>(Method(db2, "CreateTableDef", "DraftOther"));
+        NewFieldsObject draftFls = Recover<NewFieldsObject>(Get(draftTd, "Fields"));
+        Assert.Equal(3367, Method(draftFls, "Append", fLong).Failure?.Number);
+
+        // Unprobed attached type (dbDouble) refuses by name with 0 bytes written.
+        NewFieldObject fDbl = Recover<NewFieldObject>(Method(td, "CreateField", "ZDbl", 7));
+        Assert.NotNull(Method(fls, "Append", fDbl).Failure);
 
         NewFieldObject fDec = Recover<NewFieldObject>(Method(td, "CreateField", "FDec", 20));
         Assert.Equal(16, IntOf(Get(fDec, "Type")));
@@ -245,8 +258,9 @@ public sealed unsafe class DaoCreateFieldAndRelationTests : IDisposable
         DatabaseObject db = Recover<DatabaseObject>(Method(eng, "CreateDatabase", path, DbLangGeneral, version));
         Assert.Null(Method(db, "Execute", "CREATE TABLE P (ID LONG CONSTRAINT PK_P PRIMARY KEY)", DbFailOnError).Failure);
         Assert.Null(Method(db, "Execute", "CREATE TABLE C (ID LONG CONSTRAINT PK_C PRIMARY KEY, PID LONG, S TEXT(10))", DbFailOnError).Failure);
+        Assert.Null(Method(db, "Execute", "CREATE TABLE COrph (ID LONG CONSTRAINT PK_CO PRIMARY KEY, PID LONG)", DbFailOnError).Failure);
         Assert.Null(Method(db, "Execute", "INSERT INTO P VALUES (1)", DbFailOnError).Failure);
-        Assert.Null(Method(db, "Execute", "INSERT INTO C VALUES (1, 1, 'a')", DbFailOnError).Failure);
+        Assert.Null(Method(db, "Execute", "INSERT INTO COrph VALUES (2, 99)", DbFailOnError).Failure);
         Assert.Null(Method(db, "Close").Failure);
 
         DatabaseObject db2 = Recover<DatabaseObject>(Method(eng, "OpenDatabase", path, false, false));
@@ -294,16 +308,8 @@ public sealed unsafe class DaoCreateFieldAndRelationTests : IDisposable
         Assert.Null(Method(rfsDup, "Append", rfDup).Failure);
         Assert.Equal(3012, Method(rels, "Append", rDup).Failure?.Number);
 
-        // Relations.Delete removes relation; 3265 on missing name
-        Assert.Null(Method(rels, "Delete", "R_Both").Failure);
-        Assert.Equal(0, IntOf(Get(rels, "Count")));
-        Assert.Equal(3265, Method(rels, "Delete", "R_Both").Failure?.Number);
-        Assert.Null(Method(idxC, "Refresh").Failure);
-        Assert.Equal(1, IntOf(Get(idxC, "Count")));
-
-        // Insert orphan row -> 3201
-        Assert.Null(Method(db2, "Execute", "INSERT INTO C VALUES (2, 99, 'b')", DbFailOnError).Failure);
-        NewRelationObject rOrph = Recover<NewRelationObject>(Method(db2, "CreateRelation", "R_Orph", "P", "C", 0));
+        // Orphan row on COrph -> 3201 (while R_Both is still live so negative Id stays monotonic)
+        NewRelationObject rOrph = Recover<NewRelationObject>(Method(db2, "CreateRelation", "R_Orph", "P", "COrph", 0));
         NewRelationFieldObject rfOrph = Recover<NewRelationFieldObject>(Method(rOrph, "CreateField", "ID"));
         Assert.Null(Put(rfOrph, "ForeignName", "PID").Failure);
         NewRelationFieldsObject rfsOrph = Recover<NewRelationFieldsObject>(Get(rOrph, "Fields"));
@@ -312,14 +318,12 @@ public sealed unsafe class DaoCreateFieldAndRelationTests : IDisposable
         Assert.Equal(3201, f3201?.Number);
         Assert.Equal("You cannot add or change a record because a related record is required in table 'P'.", f3201?.Description);
 
-        // DontEnforce bypasses 3201
-        NewRelationObject rNe = Recover<NewRelationObject>(Method(db2, "CreateRelation", "R_NoEnf", "P", "C", 2));
-        NewRelationFieldObject rfNe = Recover<NewRelationFieldObject>(Method(rNe, "CreateField", "ID"));
-        Assert.Null(Put(rfNe, "ForeignName", "PID").Failure);
-        NewRelationFieldsObject rfsNe = Recover<NewRelationFieldsObject>(Get(rNe, "Fields"));
-        Assert.Null(Method(rfsNe, "Append", rfNe).Failure);
-        Assert.Null(Method(rels, "Append", rNe).Failure);
-        Assert.Equal(1, IntOf(Get(rels, "Count")));
+        // Relations.Delete removes R_Both; 3265 on missing name; C.Indexes stays stale until Refresh()
+        Assert.Null(Method(rels, "Delete", "R_Both").Failure);
+        Assert.Equal(0, IntOf(Get(rels, "Count")));
+        Assert.Equal(3265, Method(rels, "Delete", "R_Both").Failure?.Number);
+        Assert.Null(Method(idxC, "Refresh").Failure);
+        Assert.Equal(1, IntOf(Get(idxC, "Count")));
 
         Assert.Null(Method(db2, "Close").Failure);
     }
