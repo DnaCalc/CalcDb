@@ -174,7 +174,7 @@ public static unsafe class ActionExecutor
         {
             if (plan.Kind == ActionKind.MakeTable && source == ActionErrorSource.Database)
             {
-                // r-q52-ddl-make-domain/maketable-errors-dao-{accdb,mdb} call 35: SELECT ... INTO on read-only DB -> 3027.
+                // r-q52-ddl-make-domain/maketable-errors-dao-accdb, maketable-errors-dao-mdb call 35: SELECT ... INTO on read-only DB -> 3027.
                 return ActionOutcome.Fail(SqlFailure.Ace(SqlPhase.Execute, 3027, SqlMessages.CannotUpdateReadOnly));
             }
             // r-fix-cursor-dao/lock-readonly-db-insert-failonerror shows a read-only handle succeeding when the same
@@ -335,7 +335,7 @@ public static unsafe class ActionExecutor
 
         if (plan.HasDuplicateMakeTableField)
         {
-            // r-q52-ddl-make-domain/maketable-errors-dao-{accdb,mdb} call 22: SELECT ID, Qty AS ID INTO MT_DupCol
+            // r-q52-ddl-make-domain/maketable-errors-dao-accdb, maketable-errors-dao-mdb call 22: SELECT ID, Qty AS ID INTO MT_DupCol
             // fails 3191 after SchemaWriter's 2-commit UniqueEntryCount rollback.
             SqlFailure dupFail = SqlFailure.Ace(SqlPhase.Execute, 3191, SqlMessages.CannotDefineFieldMoreThanOnce);
             if (!CallerAcceptsFailure(dupFail, acceptsFailure))
@@ -484,7 +484,7 @@ public static unsafe class ActionExecutor
                         NativeVariant[] rawRow = sourceRows[r];
                         for (int c = 0; c < rawRow.Length; c++)
                         {
-                            if (!ConvertForColumn(rawRow[c], createdTable.Columns[c], plan.Context, errorSource, out converted[c], out SqlFailure? convFail))
+                            if (!ConvertForColumn(rawRow[c], createdTable.Columns[c], plan.Context, errorSource, out converted[c], out SqlFailure? convFail, allowExtendedDateTimeBytes: true))
                             {
                                 ClearAll(converted);
                                 statement.Abort();
@@ -1520,7 +1520,8 @@ public static unsafe class ActionExecutor
         ActionErrorSource errorSource,
         out NativeVariant converted,
         out SqlFailure? failure,
-        bool r8OverflowAs6 = false)
+        bool r8OverflowAs6 = false,
+        bool allowExtendedDateTimeBytes = false)
     {
         converted = default;
         failure = null;
@@ -1535,7 +1536,7 @@ public static unsafe class ActionExecutor
             converted = new NativeVariant { Vt = (ushort)VarType.Null };
             return true;
         }
-        if (column.TypeCode == NativeTypes.ExtendedDateTime && vt == (VarType.Array | VarType.UI1) && incoming.Pointer != 0)
+        if (allowExtendedDateTimeBytes && column.TypeCode == NativeTypes.ExtendedDateTime && vt == (VarType.Array | VarType.UI1) && incoming.Pointer != 0)
         {
             // r-q49-dt2-draftprops/dt2-select-into-accdb: SelectCursor.Read projects a stored DATETIME2 column
             // as its raw 42-byte ASCII VT_ARRAY|VT_UI1 payload; decode and format as US DAO text for EditFrame.Assign.

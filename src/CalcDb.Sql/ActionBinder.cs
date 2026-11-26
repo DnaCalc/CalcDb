@@ -145,7 +145,7 @@ public sealed class BoundAction : IDisposable
 
     private static BoundAction? BindMakeTable(ActionSyntax syntax, ISqlDatabase database, out SqlFailure? failure)
     {
-        // r-q52-ddl-make-domain/maketable-errors-dao-{accdb,mdb} call 27: invalid target name [Bad.Name] -> 3125.
+        // r-q52-ddl-make-domain/maketable-errors-dao-accdb, maketable-errors-dao-mdb call 27: invalid target name [Bad.Name] -> 3125.
         if (!SchemaWriter.IsValidName(syntax.TargetName))
         {
             string bad = syntax.TargetName;
@@ -153,7 +153,7 @@ public sealed class BoundAction : IDisposable
             failure = SqlFailure.Ace(SqlPhase.Bind, 3125, SqlMessages.InvalidObjectName(bad));
             return null;
         }
-        // r-q52-ddl-make-domain/maketable-errors-dao-{accdb,mdb} calls 7, 12; maketable-ado-{accdb,mdb} call 57:
+        // r-q52-ddl-make-domain/maketable-errors-dao-accdb, maketable-errors-dao-mdb calls 7, 12; maketable-ado-accdb, maketable-ado-mdb call 57:
         // existing target table (exact or case-insensitive) -> 3010 with statement spelling.
         if (database.Table(syntax.TargetName) is not null)
         {
@@ -269,7 +269,7 @@ public sealed class BoundAction : IDisposable
 
         if (col.TypeRule == ColumnTypeRule.NullAtOpen && col.FieldType is null)
         {
-            // r-q52-ddl-make-domain/maketable-expr-agg-dao-{accdb,mdb}: Null AS NullCol -> Type=9 (dbBinary), Size=510, Attributes=2.
+            // r-q52-ddl-make-domain/maketable-expr-agg-dao-accdb, maketable-expr-agg-dao-mdb: Null AS NullCol -> Type=9 (dbBinary), Size=510, Attributes=2.
             return new NewField(col.Name, NewFieldType.VarBinary, Size: 510);
         }
 

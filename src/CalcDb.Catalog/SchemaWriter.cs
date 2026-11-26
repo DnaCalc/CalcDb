@@ -593,7 +593,7 @@ public sealed class SchemaWriter
             switch (FieldNameClashOf(request.Fields.Take(i).Select(f => f.Name), name, _sortOrder, out string? undecided))
             {
                 case FieldNameClash.Duplicate when request.IsMakeTable && request.Route is SchemaRoute.Sql or SchemaRoute.Ado:
-                    // r-q52-ddl-make-domain/maketable-errors-dao-{accdb,mdb} call 22 (SELECT ID, Qty AS ID INTO MT_DupCol):
+                    // r-q52-ddl-make-domain/maketable-errors-dao-accdb, maketable-errors-dao-mdb call 22 (SELECT ID, Qty AS ID INTO MT_DupCol):
                     // fails 3191 after incrementing MSysObjects/MSysACEs UniqueEntryCount and writing 2 commits on page 0.
                     return new SchemaRefusal(3191, null);
                 case FieldNameClash.Duplicate when request.Route is SchemaRoute.Sql or SchemaRoute.Ado:

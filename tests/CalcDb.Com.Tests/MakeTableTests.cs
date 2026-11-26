@@ -145,7 +145,7 @@ public sealed unsafe class MakeTableTests : IDisposable
     [InlineData("basic-mdb.mdb", DbVersion40)]
     public void Dao_maketable_basic_preserves_counter_schema_and_empty_tables(string fileName, int version)
     {
-        // Replays r-q52-ddl-make-domain/maketable-basic-dao-{accdb,mdb}:
+        // Replays r-q52-ddl-make-domain/maketable-basic-dao-accdb and maketable-basic-dao-mdb:
         // populated (COUNTER->Attributes 17, MEMO, 0 indexes copied), empty source, and WHERE 1=0.
         DBEngineObject eng = CreateDaoEngine();
         DatabaseObject db = CreateSeededDatabase(eng, fileName, version);
@@ -189,7 +189,7 @@ public sealed unsafe class MakeTableTests : IDisposable
     [InlineData("expr-mdb.mdb", DbVersion40)]
     public void Dao_maketable_expressions_and_aggregates_match_field_metadata(string fileName, int version)
     {
-        // Replays r-q52-ddl-make-domain/maketable-expr-agg-dao-{accdb,mdb}:
+        // Replays r-q52-ddl-make-domain/maketable-expr-agg-dao-accdb and maketable-expr-agg-dao-mdb:
         // computed expressions (variable layout Attributes=2 for Long/Decimal/Currency/Text(255)/VarBinary(510),
         // fixed Attributes=1 for Integer comparison) and LEFT JOIN + GROUP BY aggregates.
         DBEngineObject eng = CreateDaoEngine();
@@ -280,7 +280,7 @@ public sealed unsafe class MakeTableTests : IDisposable
     [InlineData("err-mdb.mdb", DbVersion40)]
     public void Dao_maketable_errors_match_recorded_codes(string fileName, int version)
     {
-        // Replays r-q52-ddl-make-domain/maketable-errors-dao-{accdb,mdb}:
+        // Replays r-q52-ddl-make-domain/maketable-errors-dao-accdb and maketable-errors-dao-mdb:
         // 3010 (exact & case-insensitive), 3078, 3191, 3125, and 3027 (read-only).
         DBEngineObject eng = CreateDaoEngine();
         DatabaseObject db = CreateSeededDatabase(eng, fileName, version);
@@ -324,7 +324,7 @@ public sealed unsafe class MakeTableTests : IDisposable
     [InlineData("ado-mdb.mdb", DbVersion40)]
     public void Ado_maketable_executes_and_maps_3010(string fileName, int version)
     {
-        // Replays r-q52-ddl-make-domain/maketable-ado-{accdb,mdb}:
+        // Replays r-q52-ddl-make-domain/maketable-ado-accdb and maketable-ado-mdb:
         // Connection.Execute with adCmdText|adExecuteNoRecords (129) and ByRef RecordsAffected, plus 3010 (0x80040E14).
         DBEngineObject eng = CreateDaoEngine();
         DatabaseObject seed = CreateSeededDatabase(eng, fileName, version);
