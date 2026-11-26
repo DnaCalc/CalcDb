@@ -1,0 +1,820 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q46-dao-ddl-multi/cf-multi-mixed-accdb",
+  "bookRefs": [
+    "R-CAT-1",
+    "CAT-X",
+    "R-FMT-1",
+    "R-DAO-1",
+    "II-04",
+    "II-06",
+    "W-07",
+    "W-08"
+  ],
+  "description": "ACCDB: DAO CreateTableDef('T') with 12 mixed fields (ID Long+dbAutoIncrField, B Byte, I Integer, S Single, D Double, C Currency, Dt Date, Yn YesNo, T Text(30), M Memo, O LongBinary, G GUID) + TableDefs.Append. Keeps all pages before, at-return, after 1500ms pause, and after Close; then read-only reopen reads every Field's metadata.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-cat-1-accdb-empty.accdb",
+      "sha256": "ea467b4c6d6472bc6819b0ddbe535612db76cc9d6bf2bf581d08f149c3765df8",
+      "length": 172032,
+      "provenance": "r-cat-1.create-accdb-empty.b0170e8e97.a1 qk1-b0170e8e97f4a900a587bc7248e12dc62914f621847a55144e7f596e8a500961 output:r-cat-1-accdb-empty.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before",
+      "keep": false,
+      "pageSize": 4096
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "pg0",
+      "file": "input:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg0",
+      "offset": 0,
+      "count": 524288,
+      "keep": true
+    },
+    {
+      "op": "nativeClose",
+      "handle": "pg0"
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateTableDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        }
+      ],
+      "bind": "td"
+    },
+    {
+      "op": "invoke",
+      "target": "td",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tfs"
+    },
+    {
+      "op": "invoke",
+      "target": "td",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ID"
+        },
+        {
+          "type": "i4",
+          "value": 4
+        }
+      ],
+      "bind": "f0"
+    },
+    {
+      "op": "invoke",
+      "target": "f0",
+      "member": "Attributes",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "tfs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "f0"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "f0"
+    },
+    {
+      "op": "invoke",
+      "target": "td",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "B"
+        },
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ],
+      "bind": "f1"
+    },
+    {
+      "op": "invoke",
+      "target": "tfs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "f1"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "f1"
+    },
+    {
+      "op": "invoke",
+      "target": "td",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "I"
+        },
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ],
+      "bind": "f2"
+    },
+    {
+      "op": "invoke",
+      "target": "tfs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "f2"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "f2"
+    },
+    {
+      "op": "invoke",
+      "target": "td",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "S"
+        },
+        {
+          "type": "i4",
+          "value": 6
+        }
+      ],
+      "bind": "f3"
+    },
+    {
+      "op": "invoke",
+      "target": "tfs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "f3"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "f3"
+    },
+    {
+      "op": "invoke",
+      "target": "td",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "D"
+        },
+        {
+          "type": "i4",
+          "value": 7
+        }
+      ],
+      "bind": "f4"
+    },
+    {
+      "op": "invoke",
+      "target": "tfs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "f4"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "f4"
+    },
+    {
+      "op": "invoke",
+      "target": "td",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "C"
+        },
+        {
+          "type": "i4",
+          "value": 5
+        }
+      ],
+      "bind": "f5"
+    },
+    {
+      "op": "invoke",
+      "target": "tfs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "f5"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "f5"
+    },
+    {
+      "op": "invoke",
+      "target": "td",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Dt"
+        },
+        {
+          "type": "i4",
+          "value": 8
+        }
+      ],
+      "bind": "f6"
+    },
+    {
+      "op": "invoke",
+      "target": "tfs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "f6"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "f6"
+    },
+    {
+      "op": "invoke",
+      "target": "td",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Yn"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ],
+      "bind": "f7"
+    },
+    {
+      "op": "invoke",
+      "target": "tfs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "f7"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "f7"
+    },
+    {
+      "op": "invoke",
+      "target": "td",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        },
+        {
+          "type": "i4",
+          "value": 10
+        },
+        {
+          "type": "i4",
+          "value": 30
+        }
+      ],
+      "bind": "f8"
+    },
+    {
+      "op": "invoke",
+      "target": "tfs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "f8"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "f8"
+    },
+    {
+      "op": "invoke",
+      "target": "td",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "M"
+        },
+        {
+          "type": "i4",
+          "value": 12
+        }
+      ],
+      "bind": "f9"
+    },
+    {
+      "op": "invoke",
+      "target": "tfs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "f9"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "f9"
+    },
+    {
+      "op": "invoke",
+      "target": "td",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "O"
+        },
+        {
+          "type": "i4",
+          "value": 11
+        }
+      ],
+      "bind": "f10"
+    },
+    {
+      "op": "invoke",
+      "target": "tfs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "f10"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "f10"
+    },
+    {
+      "op": "invoke",
+      "target": "td",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "G"
+        },
+        {
+          "type": "i4",
+          "value": 15
+        }
+      ],
+      "bind": "f11"
+    },
+    {
+      "op": "invoke",
+      "target": "tfs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "f11"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "f11"
+    },
+    {
+      "op": "release",
+      "target": "tfs"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tds"
+    },
+    {
+      "op": "invoke",
+      "target": "tds",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "td"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "release",
+      "target": "tds"
+    },
+    {
+      "op": "release",
+      "target": "td"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-append-return",
+      "keep": false,
+      "pageSize": 4096
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "pg1",
+      "file": "input:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg1",
+      "offset": 0,
+      "count": 524288,
+      "keep": true
+    },
+    {
+      "op": "nativeClose",
+      "handle": "pg1"
+    },
+    {
+      "op": "pause",
+      "ms": 1500
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-append-1500ms",
+      "keep": false,
+      "pageSize": 4096
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "pg2",
+      "file": "input:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg2",
+      "offset": 0,
+      "count": 524288,
+      "keep": true
+    },
+    {
+      "op": "nativeClose",
+      "handle": "pg2"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false,
+      "pageSize": 4096
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "pg3",
+      "file": "input:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg3",
+      "offset": 0,
+      "count": 524288,
+      "keep": true
+    },
+    {
+      "op": "nativeClose",
+      "handle": "pg3"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "dbro"
+    },
+    {
+      "op": "invoke",
+      "target": "dbro",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tdsr"
+    },
+    {
+      "op": "invoke",
+      "target": "tdsr",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "T"
+        }
+      ],
+      "bind": "tdr"
+    },
+    {
+      "op": "invoke",
+      "target": "tdr",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "flsr"
+    },
+    {
+      "op": "invoke",
+      "target": "flsr",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "flsr",
+      "bind": "fr",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "fr",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fr",
+          "member": "Type",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fr",
+          "member": "Size",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fr",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fr",
+          "member": "Required",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "fr",
+          "member": "AllowZeroLength",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "flsr"
+    },
+    {
+      "op": "release",
+      "target": "tdr"
+    },
+    {
+      "op": "release",
+      "target": "tdsr"
+    },
+    {
+      "op": "invoke",
+      "target": "dbro",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "dbro"
+    },
+    {
+      "op": "release",
+      "target": "eng"
+    }
+  ]
+}

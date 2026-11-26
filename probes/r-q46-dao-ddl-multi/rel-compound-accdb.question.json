@@ -1,0 +1,752 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q46-dao-ddl-multi/rel-compound-accdb",
+  "bookRefs": [
+    "R-CAT-1",
+    "CAT-D",
+    "CAT-X",
+    "R-DAO-1",
+    "II-06",
+    "W-07",
+    "W-08"
+  ],
+  "description": "ACCDB: session 1 creates P2(A LONG, B LONG, PK(A,B)) and C2(ID LONG PK, PA LONG, PB LONG) and closes; session 2 creates 2-column Relation 'R_Comp' via CreateRelation + 2x Relation.CreateField/ForeignName + Relations.Append (Attributes=0). Keeps all pages after setup, at-return, after 1500ms, and after Close.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-cat-1-accdb-empty.accdb",
+      "sha256": "ea467b4c6d6472bc6819b0ddbe535612db76cc9d6bf2bf581d08f149c3765df8",
+      "length": 172032,
+      "provenance": "r-cat-1.create-accdb-empty.b0170e8e97.a1 qk1-b0170e8e97f4a900a587bc7248e12dc62914f621847a55144e7f596e8a500961 output:r-cat-1-accdb-empty.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db0"
+    },
+    {
+      "op": "invoke",
+      "target": "db0",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE P2 (A LONG, B LONG, CONSTRAINT PK_P2 PRIMARY KEY (A, B))"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db0",
+      "member": "Execute",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "CREATE TABLE C2 (ID LONG CONSTRAINT PK_C2 PRIMARY KEY, PA LONG, PB LONG)"
+        },
+        {
+          "type": "i4",
+          "value": 128
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "db0",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db0"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-setup",
+      "keep": false,
+      "pageSize": 4096
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "pg0",
+      "file": "input:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg0",
+      "offset": 0,
+      "count": 524288,
+      "keep": true
+    },
+    {
+      "op": "nativeClose",
+      "handle": "pg0"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "CreateRelation",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "R_Comp"
+        },
+        {
+          "type": "bstr",
+          "text": "P2"
+        },
+        {
+          "type": "bstr",
+          "text": "C2"
+        },
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ],
+      "bind": "rel"
+    },
+    {
+      "op": "invoke",
+      "target": "rel",
+      "member": "Name",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rel",
+      "member": "Table",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rel",
+      "member": "ForeignTable",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rel",
+      "member": "Attributes",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rel",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "A"
+        }
+      ],
+      "bind": "rf1"
+    },
+    {
+      "op": "invoke",
+      "target": "rf1",
+      "member": "ForeignName",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "PA"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rel",
+      "member": "CreateField",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "B"
+        }
+      ],
+      "bind": "rf2"
+    },
+    {
+      "op": "invoke",
+      "target": "rf2",
+      "member": "ForeignName",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "PB"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rel",
+      "member": "Fields",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rfs"
+    },
+    {
+      "op": "invoke",
+      "target": "rfs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "rf1"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rfs",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "rf2"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "rfs"
+    },
+    {
+      "op": "release",
+      "target": "rf2"
+    },
+    {
+      "op": "release",
+      "target": "rf1"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Relations",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "rels"
+    },
+    {
+      "op": "invoke",
+      "target": "rels",
+      "member": "Append",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "rel"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "Errors",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "errs"
+    },
+    {
+      "op": "forEachItem",
+      "target": "errs",
+      "bind": "e",
+      "maxItems": 16,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Number",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Description",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "e",
+          "member": "Source",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "errs"
+    },
+    {
+      "op": "release",
+      "target": "rels"
+    },
+    {
+      "op": "release",
+      "target": "rel"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-append-return",
+      "keep": false,
+      "pageSize": 4096
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "pg1",
+      "file": "input:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg1",
+      "offset": 0,
+      "count": 524288,
+      "keep": true
+    },
+    {
+      "op": "nativeClose",
+      "handle": "pg1"
+    },
+    {
+      "op": "pause",
+      "ms": 1500
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-append-1500ms",
+      "keep": false,
+      "pageSize": 4096
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "pg2",
+      "file": "input:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg2",
+      "offset": 0,
+      "count": 524288,
+      "keep": true
+    },
+    {
+      "op": "nativeClose",
+      "handle": "pg2"
+    },
+    {
+      "op": "invoke",
+      "target": "db",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false,
+      "pageSize": 4096
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "pg3",
+      "file": "input:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg3",
+      "offset": 0,
+      "count": 524288,
+      "keep": true
+    },
+    {
+      "op": "nativeClose",
+      "handle": "pg3"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "dbro"
+    },
+    {
+      "op": "invoke",
+      "target": "dbro",
+      "member": "Relations",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "relsr"
+    },
+    {
+      "op": "invoke",
+      "target": "relsr",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "relsr",
+      "bind": "rr",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "rr",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "rr",
+          "member": "Table",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "rr",
+          "member": "ForeignTable",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "rr",
+          "member": "Attributes",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "rr",
+          "member": "Fields",
+          "kind": "propertyGet",
+          "args": [],
+          "bind": "rfsr"
+        },
+        {
+          "op": "invoke",
+          "target": "rfsr",
+          "member": "Count",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "forEachItem",
+          "target": "rfsr",
+          "bind": "rfr",
+          "maxItems": 4,
+          "body": [
+            {
+              "op": "invoke",
+              "target": "rfr",
+              "member": "Name",
+              "kind": "propertyGet",
+              "args": []
+            },
+            {
+              "op": "invoke",
+              "target": "rfr",
+              "member": "ForeignName",
+              "kind": "propertyGet",
+              "args": []
+            }
+          ]
+        },
+        {
+          "op": "release",
+          "target": "rfsr"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "relsr"
+    },
+    {
+      "op": "invoke",
+      "target": "dbro",
+      "member": "TableDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "tdsr"
+    },
+    {
+      "op": "invoke",
+      "target": "tdsr",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "P2"
+        }
+      ],
+      "bind": "tdp"
+    },
+    {
+      "op": "invoke",
+      "target": "tdp",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ixp"
+    },
+    {
+      "op": "invoke",
+      "target": "ixp",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "ixp",
+      "bind": "ixpr",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ixpr",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixpr",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixpr",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixpr",
+          "member": "Foreign",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ixp"
+    },
+    {
+      "op": "release",
+      "target": "tdp"
+    },
+    {
+      "op": "invoke",
+      "target": "tdsr",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "C2"
+        }
+      ],
+      "bind": "tdc"
+    },
+    {
+      "op": "invoke",
+      "target": "tdc",
+      "member": "Indexes",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "ixc"
+    },
+    {
+      "op": "invoke",
+      "target": "ixc",
+      "member": "Count",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "forEachItem",
+      "target": "ixc",
+      "bind": "ixcr",
+      "maxItems": 8,
+      "body": [
+        {
+          "op": "invoke",
+          "target": "ixcr",
+          "member": "Name",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixcr",
+          "member": "Primary",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixcr",
+          "member": "Unique",
+          "kind": "propertyGet",
+          "args": []
+        },
+        {
+          "op": "invoke",
+          "target": "ixcr",
+          "member": "Foreign",
+          "kind": "propertyGet",
+          "args": []
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "ixc"
+    },
+    {
+      "op": "release",
+      "target": "tdc"
+    },
+    {
+      "op": "release",
+      "target": "tdsr"
+    },
+    {
+      "op": "invoke",
+      "target": "dbro",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "dbro"
+    },
+    {
+      "op": "release",
+      "target": "eng"
+    }
+  ]
+}
