@@ -24,11 +24,12 @@ public sealed unsafe class DaoBigIntDateTime2Tests : IDisposable
     private const int DbOpenDynaset = 2;
     private const int DbOpenSnapshot = 4;
 
+    private static long s_nextHost = 0xDA0_B1D2;
     private readonly string _dir = Directory.CreateTempSubdirectory("calcdb-dao-bi-dt2-").FullName;
     private readonly List<nint> _cells = [];
     private readonly List<nint> _held = [];
     private readonly Dictionary<ComObject, nint> _ptrs = new(ReferenceEqualityComparer.Instance);
-    private readonly EngineState _engine = new(new HostBinding(0xDA0_B1D2, Standalone: true, 0, 0, 0, 0, 0));
+    private readonly EngineState _engine = new(new HostBinding(checked((nuint)Interlocked.Increment(ref s_nextHost)), Standalone: true, 0, 0, 0, 0, 0));
 
     public void Dispose()
     {
@@ -467,5 +468,133 @@ public sealed unsafe class DaoBigIntDateTime2Tests : IDisposable
         Assert.Null(Method(dyn, "Close").Failure);
 
         Assert.Null(Method(db2, "Close").Failure);
+    }
+
+    [Fact]
+    public void Gate4_regression_excep_null_strings_bigint_div_mixed_agg_r8_overflow_and_dt2_actions()
+    {
+        string path = Path.Combine(_dir, "gate4-reg.accdb");
+        DBEngineObject eng = CreateEngine();
+        DatabaseObject db = Recover<DatabaseObject>(Method(eng, "CreateDatabase", path, DbLangGeneral, DbVersion120));
+
+        // 1. Invalid DATETIME2 put with empty DBEngine.Errors emits null EXCEPINFO source/description pointers
+        // (evidence/r-q49-dt2-draftprops/dt2-update-invalid-accdb calls 196/216/236/256/276).
+        Assert.Null(Method(db, "Execute", "CREATE TABLE TD (ID LONG CONSTRAINT PK_TD PRIMARY KEY, D DATETIME2, D2 DATETIME2)", DbFailOnError).Failure);
+        Assert.Null(Method(db, "Execute", "INSERT INTO TD VALUES (1, '2026-03-05 00:00:00', '2026-03-06 00:00:00')", DbFailOnError).Failure);
+
+        RecordsetObject rsDt = Recover<RecordsetObject>(Method(db, "OpenRecordset", "TD", DbOpenTable));
+        Assert.Null(Method(rsDt, "AddNew").Failure);
+        FieldObject fDt = Recover<FieldObject>(Get(Recover<FieldsObject>(Get(rsDt, "Fields")), "Item", "D"));
+        nint badBstr = Marshal.StringToBSTR("not-a-date");
+        try
+        {
+            var badVal = new NativeVariant { Vt = (ushort)VarType.Bstr, Pointer = badBstr };
+            int propPutId = -3;
+            var dp = new DispParams { Args = (nint)(&badVal), ArgCount = 1, NamedArgs = (nint)(&propPutId), NamedArgCount = 1 };
+            NativeVariant res = default;
+            ExcepInfo ex = default;
+            uint argErr = 0;
+            int hr = fDt.Invoke(fDt.Declaration.Member("Value", InvokeKind.PropertyPut).MemberId, (ushort)InvokeKind.PropertyPut, &dp, &res, &ex, &argErr);
+            Assert.Equal(HResults.DISP_E_EXCEPTION, hr);
+            Assert.Equal(unchecked((int)0x800A000D), ex.Scode);
+            Assert.Equal(0, ex.Source);
+            Assert.Equal(0, ex.Description);
+            Assert.Equal(0, ex.HelpFile);
+            Assert.Equal(0u, ex.HelpContext);
+            Assert.False(NativeRoute.GetErrorInfo(0, out nint ei) == 0 && ei != 0);
+        }
+        finally
+        {
+            Marshal.FreeBSTR(badBstr);
+        }
+        Assert.Null(Method(rsDt, "CancelUpdate").Failure);
+        Assert.Null(Method(rsDt, "Close").Failure);
+
+        // 2. DATETIME2 column-to-column UPDATE refuses via NotModelled.ActionConversion (never 3464).
+        Failure? dtUpdFail = Method(db, "Execute", "UPDATE TD SET D = D2 WHERE ID = 1", DbFailOnError).Failure;
+        Assert.Equal(FailureKind.NotModelled, dtUpdFail?.Kind);
+        Assert.Contains("NotModelled.ActionConversion", dtUpdFail!.Description);
+
+        // 3. Action QueryDef with DateTime2 parameter (DaoType 20): unset or VT_DATE-coerced-to-VT_DECIMAL
+        // fails 3061 with total declared parameter count "Too few parameters. Expected 2."
+        // (evidence/r-q49-dt2-draftprops/dt2-params-dao-querydef-accdb call 292).
+        QueryDefObject qIns = Recover<QueryDefObject>(Method(db, "CreateQueryDef", "", "PARAMETERS pid Long, pv DateTime2; INSERT INTO TD (ID, D) VALUES (pid, pv);"));
+        DefinitionCollection qInsPs = Recover<DefinitionCollection>(Get(qIns, "Parameters"));
+        ParameterObject pId = Recover<ParameterObject>(Get(qInsPs, "Item", "pid"));
+        ParameterObject pV = Recover<ParameterObject>(Get(qInsPs, "Item", "pv"));
+        Assert.Null(Put(pId, "Value", 99).Failure);
+        Failure? fUnset = Method(qIns, "Execute", DbFailOnError).Failure;
+        Assert.Equal(3061, fUnset?.Number);
+        Assert.Equal("Too few parameters. Expected 2.", fUnset?.Description);
+        Assert.Null(Put(pV, "Value", new DateTime(2026, 3, 5)).Failure);
+        Failure? fDec = Method(qIns, "Execute", DbFailOnError).Failure;
+        Assert.Equal(3061, fDec?.Number);
+        Assert.Equal("Too few parameters. Expected 2.", fDec?.Description);
+
+        // 4. BIGINT B / 2 metadata & oleaut32 VarDiv semantics (r-def-expr-sql/expr-bigint-stored-arith #364/#369/#554/#784)
+        // + strict operand pairs in SqlBinder + r8OverflowAs6 scoping on UPDATE vs INSERT...SELECT.
+        Assert.Null(Method(db, "Execute", "CREATE TABLE TB (ID LONG CONSTRAINT PK_TB PRIMARY KEY, G LONG, B BIGINT)", DbFailOnError).Failure);
+        Assert.Null(Method(db, "Execute", "INSERT INTO TB VALUES (1, 1, 9223372036854775807)", DbFailOnError).Failure);
+        Assert.Null(Method(db, "Execute", "INSERT INTO TB VALUES (2, 1, -9223372036854775808)", DbFailOnError).Failure);
+        Assert.Null(Method(db, "Execute", "INSERT INTO TB VALUES (3, 2, 4611686018427387904)", DbFailOnError).Failure);
+        Assert.Null(Method(db, "Execute", "INSERT INTO TB VALUES (4, 3, 0)", DbFailOnError).Failure);
+        Assert.Null(Method(db, "Execute", "INSERT INTO TB VALUES (5, 3, 2147483648)", DbFailOnError).Failure);
+        Assert.Null(Method(db, "Execute", "INSERT INTO TB VALUES (6, 4, -1)", DbFailOnError).Failure);
+        Assert.Null(Method(db, "Execute", "INSERT INTO TB VALUES (7, 5, 9223372036854775807)", DbFailOnError).Failure);
+
+        // #364/#369: long.MaxValue / 2 -> Field.Type 16, Field.Value fails 6 (Overflow), VarType(B / 2) == 5 (VT_R8)
+        SelectRecordsetObject qDivMax = Recover<SelectRecordsetObject>(Method(db, "OpenRecordset", "SELECT B / 2 AS v, VarType(B / 2) AS vt FROM TB WHERE ID = 1", DbOpenSnapshot));
+        SelectFieldsObject qDivMaxF = Recover<SelectFieldsObject>(Get(qDivMax, "Fields"));
+        SelectFieldObject fDivV = Recover<SelectFieldObject>(Get(qDivMaxF, "Item", "v"));
+        Assert.Equal(16, IntOf(Get(fDivV, "Type")));
+        Assert.Equal(6, Get(fDivV, "Value").Failure?.Number);
+        Assert.Equal(5, IntOf(Get(Recover<SelectFieldObject>(Get(qDivMaxF, "Item", "vt")), "Value")));
+        Assert.Null(Method(qDivMax, "Close").Failure);
+
+        // #554/#784: long.MinValue / 2 and 2^62 / 2 return exact VT_I8 with VarType == 5
+        SelectRecordsetObject qDivExact = Recover<SelectRecordsetObject>(Method(db, "OpenRecordset", "SELECT ID, B / 2 AS v, VarType(B / 2) AS vt FROM TB WHERE ID IN (2, 3) ORDER BY ID", DbOpenSnapshot));
+        SelectFieldsObject qDivExactF = Recover<SelectFieldsObject>(Get(qDivExact, "Fields"));
+        Assert.Equal(-4611686018427387904L, LongOf(Get(Recover<SelectFieldObject>(Get(qDivExactF, "Item", "v")), "Value")));
+        Assert.Equal(5, IntOf(Get(Recover<SelectFieldObject>(Get(qDivExactF, "Item", "vt")), "Value")));
+        Assert.Null(Method(qDivExact, "MoveNext").Failure);
+        Assert.Equal(2305843009213693952L, LongOf(Get(Recover<SelectFieldObject>(Get(qDivExactF, "Item", "v")), "Value")));
+        Assert.Equal(5, IntOf(Get(Recover<SelectFieldObject>(Get(qDivExactF, "Item", "vt")), "Value")));
+        Assert.Null(Method(qDivExact, "Close").Failure);
+
+        // Unprobed BIGINT operand pairs leave static Field.Type Unknown -> NotModelled (no generalization beyond recorded pairs)
+        foreach (string unprobedSql in new[] { "SELECT 1 + B AS v FROM TB WHERE ID = 4", "SELECT B / B AS v FROM TB WHERE ID = 3" })
+        {
+            SelectRecordsetObject qUnprobed = Recover<SelectRecordsetObject>(Method(db, "OpenRecordset", unprobedSql, DbOpenSnapshot));
+            SelectFieldObject fUnprobed = Recover<SelectFieldObject>(Get(Recover<SelectFieldsObject>(Get(qUnprobed, "Fields")), "Item", "v"));
+            Assert.Equal(FailureKind.NotModelled, Get(fUnprobed, "Type").Failure?.Kind);
+            Assert.Null(Method(qUnprobed, "Close").Failure);
+        }
+
+        // 5. Group 5 mixed SUM+MIN/MAX over BIGINT (r-q48-ado-batch-edits/bi-agg-g5-isolate-accdb):
+        // G=3 {0, 2^31} succeeds; G=4 {-1} and isolated G=5 {MaxValue} refuse NotModelled.BigIntMixedAggregateThreshold;
+        // G=1 {MaxValue first, MinValue second} still fails 6 regardless of scan order!
+        SelectRecordsetObject qG3 = Recover<SelectRecordsetObject>(Method(db, "OpenRecordset", "SELECT SUM(B) AS s, MIN(B) AS mn FROM TB WHERE G = 3", DbOpenSnapshot));
+        Assert.Equal(2147483648.0, DoubleOf(Get(Recover<SelectFieldObject>(Get(Recover<SelectFieldsObject>(Get(qG3, "Fields")), "Item", "s")), "Value")));
+        Assert.Null(Method(qG3, "Close").Failure);
+
+        Failure? fNeg = Method(db, "OpenRecordset", "SELECT SUM(B) AS s, MIN(B) AS mn FROM TB WHERE G = 4", DbOpenSnapshot).Failure;
+        Assert.Equal(FailureKind.NotModelled, fNeg?.Kind);
+        Assert.Contains("NotModelled.BigIntMixedAggregateThreshold", fNeg!.Description);
+
+        Failure? fMaxOnly = Method(db, "OpenRecordset", "SELECT SUM(B) AS s, MIN(B) AS mn FROM TB WHERE G = 5", DbOpenSnapshot).Failure;
+        Assert.Equal(FailureKind.NotModelled, fMaxOnly?.Kind);
+        Assert.Contains("NotModelled.BigIntMixedAggregateThreshold", fMaxOnly!.Description);
+
+        Failure? fReversed = Method(db, "OpenRecordset", "SELECT SUM(B) AS s, MIN(B) AS mn FROM TB WHERE G = 1", DbOpenSnapshot).Failure;
+        Assert.Equal(6, fReversed?.Number);
+
+        // 6. r8OverflowAs6 scoping: literal VT_R8 1E19 fails 3464 in UPDATE and INSERT...SELECT,
+        // while BIGINT expression overflow (B + 1 on long.MaxValue) fails 6 in both.
+        Assert.Equal(3464, Method(db, "Execute", "UPDATE TB SET B = 1E19 WHERE ID = 4", DbFailOnError).Failure?.Number);
+        Assert.Equal(3464, Method(db, "Execute", "INSERT INTO TB (ID, G, B) SELECT 99, 9, 1E19 FROM TB WHERE ID = 4", DbFailOnError).Failure?.Number);
+        Assert.Equal(6, Method(db, "Execute", "UPDATE TB SET B = B + 1 WHERE ID = 1", DbFailOnError).Failure?.Number);
+        Assert.Equal(6, Method(db, "Execute", "INSERT INTO TB (ID, G, B) SELECT 99, 9, B + 1 FROM TB WHERE ID = 1", DbFailOnError).Failure?.Number);
+
+        Assert.Null(Method(db, "Close").Failure);
     }
 }

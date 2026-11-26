@@ -2580,7 +2580,7 @@ internal sealed unsafe class FieldObject : DaoObject
                 : FieldFailure(MutationError.NoEdit, "Update or CancelUpdate without AddNew or Edit.");
         }
         NativeVariant incoming = ByRefValues.Dereference(Args.Cell(value));
-        EditOutcome outcome = frame.Assign(column, incoming);
+        EditOutcome outcome = frame.Assign(column, incoming, allowEmptyBstrBinaryNull: true);
         if (outcome.Error is { Number: MutationError.ExtendedDateTimeInvalid })
         {
             return PublishExtendedDateTimeInvalid(recordset.Engine);
@@ -2594,7 +2594,8 @@ internal sealed unsafe class FieldObject : DaoObject
     /// ACE's <c>DATETIME2</c> invalid DAO put behavior (<c>evidence/r-q49-dt2-draftprops/dt2-update-invalid-accdb</c>,
     /// <c>dt2-dao-createfield-addnew-accdb</c>, <c>evidence/r-q-fmt-sort/dt2-ticks-accdb</c>): never overwrites
     /// <c>DBEngine.Errors</c>; if an unconsumed prior DAO error sits in <c>DBEngine.Errors</c>, surfaces that error's
-    /// EXCEPINFO once (consuming it); otherwise returns <c>0x800A000D</c> with empty source/description.
+    /// EXCEPINFO once (consuming it); otherwise returns <c>0x800A000D</c> with null source/description
+    /// (<see cref="Failure.NullExcepStrings"/>).
     /// </summary>
     internal static CallResult PublishExtendedDateTimeInvalid(EngineState engine)
     {
@@ -2605,7 +2606,7 @@ internal sealed unsafe class FieldObject : DaoObject
             LastConsumedStaleError.AddOrUpdate(engine, latest);
             return CallResult.Fail(latest with { Kind = FailureKind.Ado, PublishesErrorInfo = false });
         }
-        return CallResult.Fail(new Failure(FailureKind.Ado, unchecked((int)0x800A000D), "", "", null, 0));
+        return CallResult.Fail(new Failure(FailureKind.Ado, unchecked((int)0x800A000D), "", "", null, 0) { NullExcepStrings = true });
     }
 
     /// <summary>ValidateOnSet (EXPR-STAGE): True runs the field's rule at the put, False at Update.</summary>

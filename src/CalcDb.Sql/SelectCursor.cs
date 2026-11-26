@@ -275,7 +275,9 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
         }
         if (missing > 0)
         {
-            failure = SqlFailure.Ace(SqlPhase.Open, 3061, SqlMessages.TooFewParameters(missing));
+            // r-oledb-odbc/param-order-binding, r-q49-dt2-draftprops/dt2-params-dao-querydef-accdb:
+            // ACE reports the total declared/expected parameter count (e.g. 1 of 2 set -> "Expected 2.").
+            failure = SqlFailure.Ace(SqlPhase.Open, 3061, SqlMessages.TooFewParameters(plan.Parameters.Count));
             return null;
         }
         for (int i = 0; i < plan.Parameters.Count; i++)
@@ -2945,6 +2947,7 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                 }
             }
             NativeVariant[] probe = new NativeVariant[Math.Max(keys, 1)];
+            SqlFailure? unprobedMixedBigInt = null;
             foreach (ResultRow root in roots)
             {
                 Stand(root);
@@ -3027,11 +3030,16 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                 }
                 for (int a = 0; a < aggregates.Count; a++)
                 {
-                    if (Step(aggregates[a], ref CollectionsMarshal.AsSpan(states)[(group * aggregates.Count) + a], mixedBigIntSumColumns, out failure) is false)
+                    if (Step(aggregates[a], ref CollectionsMarshal.AsSpan(states)[(group * aggregates.Count) + a], mixedBigIntSumColumns, ref unprobedMixedBigInt, out failure) is false)
                     {
                         return null;
                     }
                 }
+            }
+            if (unprobedMixedBigInt is not null)
+            {
+                failure = unprobedMixedBigInt;
+                return null;
             }
             int groupCount = _slots.Count / _slotWidth;
             for (int g = 0; g < groupCount; g++)
@@ -3135,7 +3143,7 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
             public bool Seen;
         }
 
-        private bool Step(AggregateSpec a, ref AggregateState s, HashSet<ColumnDescriptor>? mixedBigIntSumColumns, out SqlFailure? failure)
+        private bool Step(AggregateSpec a, ref AggregateState s, HashSet<ColumnDescriptor>? mixedBigIntSumColumns, ref SqlFailure? unprobedMixedBigInt, out SqlFailure? failure)
         {
             failure = null;
             if (a.Kind == AggregateKind.CountRows)
@@ -3161,18 +3169,22 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                         && mixedBigIntSumColumns.Contains(col) && v.Vt == (ushort)VarType.I8)
                     {
                         long raw = v.Int64;
-                        if (raw is long.MinValue or (long.MinValue + 1) or long.MaxValue)
+                        // evidence/r-q48-ado-batch-edits/bi-agg-g5-isolate-accdb: G1 {0,1,2^31-1,Null} and G2 {2^31-1,2^31}
+                        // succeed; G5 {MinValue,MaxValue}, G6 {MinValue}, and G9 {MinValue+1,MaxValue} fail 6 (Overflow).
+                        // Negative values and isolated > 2^31 (including isolated MaxValue) were not probed in mixed
+                        // SUM+MIN/MAX; defer that refusal until after scanning so any recorded MinValue/MinValue+1 row
+                        // in the same query still raises 6 regardless of scan order.
+                        if (raw is long.MinValue or (long.MinValue + 1))
                         {
                             failure = SqlFailure.Ace(SqlPhase.Open, AceError.Overflow, AceError.Describe(AceError.Overflow));
                             return false;
                         }
-                        if (raw is < -2147483648L or > 2147483648L)
+                        if (raw is < 0 or > 2147483648L)
                         {
-                            failure = SqlFailure.Open(
+                            unprobedMixedBigInt ??= SqlFailure.Open(
                                 SqlPhase.Open,
                                 "NotModelled.BigIntMixedAggregateThreshold",
-                                $"SUM({col.Name}) co-occurring with MIN/MAX({col.Name}) over BIGINT value {raw} in unprobed range (2^31, 2^63-1) (r-q48-ado-batch-edits/bi-agg-g5-isolate-accdb)");
-                            return false;
+                                $"SUM({col.Name}) co-occurring with MIN/MAX({col.Name}) over BIGINT value {raw} outside recorded passing range [0, 2147483648] (r-q48-ado-batch-edits/bi-agg-g5-isolate-accdb)");
                         }
                     }
                     s.Seen = true;

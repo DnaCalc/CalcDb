@@ -44,6 +44,13 @@ public sealed record Failure(FailureKind Kind, int Scode, string Source, string 
     /// <summary>The GUID of the IErrorInfo the dispatch lane publishes: zero for DAO, the interface's IID for ADO.</summary>
     public Guid ErrorInfoIid { get; init; }
 
+    /// <summary>
+    /// When true, <see cref="ErrorPublication.ToExcepInfo"/> leaves <c>bstrSource</c> and <c>bstrDescription</c> as null
+    /// pointers (<c>0</c>) instead of allocating empty BSTRs (evidence/r-q49-dt2-draftprops/dt2-update-invalid-accdb
+    /// calls 196/216/236/256/276 and dt2-dao-createfield-addnew-accdb call 146).
+    /// </summary>
+    public bool NullExcepStrings { get; init; }
+
     /// <summary>The DAO error number (Error.Number): the scode's low word.</summary>
     public int Number => Scode & 0xFFFF;
 
@@ -98,8 +105,8 @@ internal static unsafe partial class ErrorPublication
         if (info is not null)
         {
             *info = default;
-            info->Source = Bstr(failure.Source);
-            info->Description = Bstr(failure.Description);
+            info->Source = failure.NullExcepStrings ? 0 : Bstr(failure.Source);
+            info->Description = failure.NullExcepStrings ? 0 : Bstr(failure.Description);
             info->HelpFile = failure.HelpFile is null ? 0 : Bstr(failure.HelpFile);
             info->HelpContext = (uint)failure.HelpContext;
             info->Scode = failure.Scode;

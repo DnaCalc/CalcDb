@@ -1000,7 +1000,6 @@ public static class DdlParser
                 // evidence/r-q51-codecs-props-compact/dec-desc-keys-accdb, seek-args-decimal-accdb:
                 // ADO CREATE TABLE accepts DECIMAL and DECIMAL(precision, scale), and ADO ALTER TABLE ADD COLUMN
                 // accepts DECIMAL(precision, scale); DAO ANSI-89 keeps failing 3292.
-                int saved = _p;
                 _p += word.Length;
                 if (TakeSymbol('('))
                 {
@@ -1026,12 +1025,6 @@ public static class DdlParser
                     }
                     failure = null;
                     return new DdlDataType(DdlTypeKind.Decimal, Precision: precision, Scale: scale);
-                }
-                if (isAlter)
-                {
-                    _p = saved;
-                    failure = InvalidType();
-                    return null;
                 }
                 failure = null;
                 return new DdlDataType(DdlTypeKind.Decimal);

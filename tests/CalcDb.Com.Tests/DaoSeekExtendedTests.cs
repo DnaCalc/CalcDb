@@ -5,7 +5,10 @@ using CalcDb.Com.Com;
 using CalcDb.Com.Dao;
 using CalcDb.Com.Declarations;
 using CalcDb.Com.Host;
+using CalcDb.Format;
 using CalcDb.Foundation;
+using CalcDb.Isam;
+using CalcDb.Isam.Edit;
 using CalcDb.Values;
 
 namespace CalcDb.Com.Tests;
@@ -307,5 +310,57 @@ public sealed unsafe class DaoSeekExtendedTests : IDisposable
 
         Assert.Null(Method(rsG, "Close").Failure);
         Assert.Null(Method(db, "Close").Failure);
+    }
+
+    [Fact]
+    public void Gate4_regression_decimal_scale_overflow_guard_binary_empty_bstr_gate_and_bare_ado_alter_decimal()
+    {
+        // 1. AssignmentConversion.Numeric guards UInt128 magnitude scaling against wrap before multiplication.
+        var dec28_28 = new ColumnDescriptor
+        {
+            Name = "D", TypeCode = NativeTypes.Numeric, PhysicalNumber = 1, VariableIndex = 0, ColumnId = 1,
+            TypeInfo = 0, Flags = 0x01, ExtendedFlags = 0, FixedOffset = 0, Length = 17, IsFixed = true,
+            NumericPrecision = 28, NumericScale = 28,
+        };
+        var dec18_4 = dec28_28 with { NumericPrecision = 18, NumericScale = 4 };
+        using OwnedVariant decMax = OwnedVariant.FromDecimal(DecimalValue.FromDecimal(decimal.MaxValue));
+        Assert.Equal(MutationOpen.ConversionNotRecorded, AssignmentConversion.Convert(*decMax.Pointer, dec28_28, 1033).Open);
+        Assert.Equal(MutationOpen.ConversionNotRecorded, AssignmentConversion.Convert(*decMax.Pointer, dec18_4, 1033).Open);
+
+        // 2. Empty BSTR -> Null on BINARY/VARBINARY is gated to DAO table puts (allowEmptyBstrBinaryNull: true);
+        // default (ADO immediate edit) keeps MutationOpen.ColumnType.
+        var binCol = new ColumnDescriptor
+        {
+            Name = "B", TypeCode = NativeTypes.Binary, PhysicalNumber = 1, VariableIndex = 0, ColumnId = 1,
+            TypeInfo = 0, Flags = 0x00, ExtendedFlags = 0, FixedOffset = 0, Length = 16, IsFixed = false,
+        };
+        nint emptyBstr = Marshal.StringToBSTR("");
+        try
+        {
+            var emptyVar = new NativeVariant { Vt = (ushort)VarType.Bstr, Pointer = emptyBstr };
+            Assert.Equal(MutationOpen.ColumnType, AssignmentConversion.Convert(emptyVar, binCol, 1033).Open);
+            ConversionResult daoOk = AssignmentConversion.Convert(emptyVar, binCol, 1033, allowEmptyBstrBinaryNull: true);
+            Assert.True(daoOk.Succeeded);
+            Assert.Equal(NativeKind.Null, daoOk.Value.Kind);
+        }
+        finally
+        {
+            Marshal.FreeBSTR(emptyBstr);
+        }
+
+        // 3. Bare ADO ALTER TABLE ADD COLUMN N DECIMAL reaches DdlBinder's NotModelled.DdlAlterTable
+        // (not NotModelled.DdlAlterTypeSyntax).
+        string path = Path.Combine(_dir, "bare-alter-dec.accdb");
+        DBEngineObject eng = CreateEngine();
+        DatabaseObject created = Recover<DatabaseObject>(Method(eng, "CreateDatabase", path, DbLangGeneral, DbVersion120));
+        Assert.Null(Method(created, "Execute", "CREATE TABLE T (ID LONG CONSTRAINT PK_T PRIMARY KEY)", DbFailOnError).Failure);
+        Assert.Null(Method(created, "Close").Failure);
+
+        AdoConnectionObject conn = CreateConnection();
+        Assert.Null(Method(conn, "Open", $"Provider=Microsoft.ACE.OLEDB.12.0;Data Source={path}", null, null, null).Failure);
+        Failure? alterFail = Method(conn, "Execute", "ALTER TABLE T ADD COLUMN N DECIMAL", null, null).Failure;
+        Assert.Equal(FailureKind.NotModelled, alterFail?.Kind);
+        Assert.Contains("NotModelled.DdlAlterTable", alterFail!.Description);
+        Assert.Null(Method(conn, "Close").Failure);
     }
 }

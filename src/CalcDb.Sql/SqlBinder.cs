@@ -3206,12 +3206,9 @@ public sealed class BoundSelect : IDisposable
                 or (OperandKind.Text, OperandKind.Text) => new(OperandKind.Double, 7, bothInner),
             // r-expr-1b/arith-overflow-promotion: CSng(1) / CSng(3) is 7 (Double), inner is VT_R4.
             (OperandKind.Single, OperandKind.Single) => new(OperandKind.Double, 7, false),
-            // r-q47-bigint-expr-edges/bi-select-arith-dao-ado-accdb: B / 2 is 16 (BigInt, VT_I8 half-to-even).
-            (OperandKind.BigInt, OperandKind.BigInt)
-                or (OperandKind.BigInt, OperandKind.LongLiteral)
-                or (OperandKind.LongLiteral, OperandKind.BigInt)
-                or (OperandKind.BigInt, OperandKind.Long)
-                or (OperandKind.Long, OperandKind.BigInt) => new(OperandKind.BigInt, 16, bothInner),
+            // r-q47-bigint-expr-edges/bi-select-arith-dao-ado-accdb, r-def-expr-sql/expr-bigint-stored-arith (#364/#369):
+            // B / 2 is DAO Field.Type 16 (BigInt), while inner oleaut32 VarDiv returns VT_R8 (VarType 5).
+            (OperandKind.BigInt, OperandKind.LongLiteral) => new(OperandKind.BigInt, 16, false),
             _ => StaticTypeResult.Unknown,
         };
 
@@ -3239,11 +3236,7 @@ public sealed class BoundSelect : IDisposable
             (OperandKind.CByte, OperandKind.CByte)
                 or (OperandKind.Integer, OperandKind.Integer) => new(OperandKind.Long, 4, false),
             // r-q47-bigint-expr-edges/bi-select-arith-dao-ado-accdb, bi-select-arith-overflow-accdb: B \ 2 and B \ -1 are 16 (BigInt).
-            (OperandKind.BigInt, OperandKind.BigInt)
-                or (OperandKind.BigInt, OperandKind.LongLiteral)
-                or (OperandKind.LongLiteral, OperandKind.BigInt)
-                or (OperandKind.BigInt, OperandKind.Long)
-                or (OperandKind.Long, OperandKind.BigInt) => new(OperandKind.BigInt, 16, bothInner),
+            (OperandKind.BigInt, OperandKind.LongLiteral) => new(OperandKind.BigInt, 16, bothInner),
             _ => StaticTypeResult.Unknown,
         };
 
@@ -3271,11 +3264,7 @@ public sealed class BoundSelect : IDisposable
             (OperandKind.CByte, OperandKind.CByte)
                 or (OperandKind.Integer, OperandKind.Integer) => new(OperandKind.Long, 4, false),
             // r-q47-bigint-expr-edges/bi-select-arith-dao-ado-accdb, bi-select-arith-overflow-accdb: B Mod 7 and B Mod -1 are 16 (BigInt).
-            (OperandKind.BigInt, OperandKind.BigInt)
-                or (OperandKind.BigInt, OperandKind.LongLiteral)
-                or (OperandKind.LongLiteral, OperandKind.BigInt)
-                or (OperandKind.BigInt, OperandKind.Long)
-                or (OperandKind.Long, OperandKind.BigInt) => new(OperandKind.BigInt, 16, bothInner),
+            (OperandKind.BigInt, OperandKind.LongLiteral) => new(OperandKind.BigInt, 16, bothInner),
             _ => StaticTypeResult.Unknown,
         };
 
@@ -3320,10 +3309,7 @@ public sealed class BoundSelect : IDisposable
                     or (OperandKind.Long, OperandKind.Long) => new(OperandKind.Long, 4, bothInner),
                 // r-q47-bigint-expr-edges/bi-select-arith-dao-ado-accdb, bi-select-arith-overflow-accdb: B + 1 and B + B are 16 (BigInt).
                 (OperandKind.BigInt, OperandKind.BigInt)
-                    or (OperandKind.BigInt, OperandKind.LongLiteral)
-                    or (OperandKind.LongLiteral, OperandKind.BigInt)
-                    or (OperandKind.BigInt, OperandKind.Long)
-                    or (OperandKind.Long, OperandKind.BigInt) => new(OperandKind.BigInt, 16, bothInner),
+                    or (OperandKind.BigInt, OperandKind.LongLiteral) => new(OperandKind.BigInt, 16, bothInner),
                 // r-expr-1/b-fixed-point-fidelity, r-expr-1b/meta-conversion-field-types, r-expr-1/b-mixed-precedence,
                 // r-fix-expr-sql/dec-mixed-precedence: Currency + Currency/Long is 5 (Currency).
                 (OperandKind.Currency, OperandKind.Currency)
@@ -3406,11 +3392,7 @@ public sealed class BoundSelect : IDisposable
                 // r-expr-1b/op-precedence: (10 - 3) - 2 is 4 (Long).
                 (OperandKind.Long, OperandKind.LongLiteral) => new(OperandKind.Long, 4, bothInner),
                 // r-q47-bigint-expr-edges/bi-select-arith-dao-ado-accdb, bi-select-arith-overflow-accdb: B - 1 is 16 (BigInt).
-                (OperandKind.BigInt, OperandKind.BigInt)
-                    or (OperandKind.BigInt, OperandKind.LongLiteral)
-                    or (OperandKind.LongLiteral, OperandKind.BigInt)
-                    or (OperandKind.BigInt, OperandKind.Long)
-                    or (OperandKind.Long, OperandKind.BigInt) => new(OperandKind.BigInt, 16, bothInner),
+                (OperandKind.BigInt, OperandKind.LongLiteral) => new(OperandKind.BigInt, 16, bothInner),
                 // r-expr-1/b-fixed-point-fidelity: Currency - Currency is 5 (Currency).
                 (OperandKind.Currency, OperandKind.Currency) => new(OperandKind.Currency, 5, bothInner),
                 // r-expr-1/b-floating-fidelity: Double - Double and Single - Double are 7 (Double).
@@ -3460,12 +3442,10 @@ public sealed class BoundSelect : IDisposable
                     or (OperandKind.Integer, OperandKind.LongLiteral)
                     or (OperandKind.Long, OperandKind.LongLiteral)
                     or (OperandKind.Long, OperandKind.Long) => new(OperandKind.Long, 4, bothInner),
-                // r-q47-bigint-expr-edges/bi-select-arith-dao-ado-accdb, bi-select-arith-overflow-accdb: B * 2 is 16 (BigInt).
+                // r-q47-bigint-expr-edges/bi-select-arith-dao-ado-accdb, bi-select-arith-overflow-accdb, r-def-expr-sql/expr-bigint-stored-arith:
+                // B * 2 and B * B are 16 (BigInt).
                 (OperandKind.BigInt, OperandKind.BigInt)
-                    or (OperandKind.BigInt, OperandKind.LongLiteral)
-                    or (OperandKind.LongLiteral, OperandKind.BigInt)
-                    or (OperandKind.BigInt, OperandKind.Long)
-                    or (OperandKind.Long, OperandKind.BigInt) => new(OperandKind.BigInt, 16, bothInner),
+                    or (OperandKind.BigInt, OperandKind.LongLiteral) => new(OperandKind.BigInt, 16, bothInner),
                 // r-expr-1/b-fixed-point-fidelity, r-fix-expr-sql/dec-fixed-point-fidelity, r-expr-1b/arith-overflow-promotion:
                 // Currency * Currency/LongLiteral is 5 (Currency).
                 (OperandKind.Currency, OperandKind.Currency)

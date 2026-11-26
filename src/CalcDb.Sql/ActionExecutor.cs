@@ -200,15 +200,20 @@ public static unsafe class ActionExecutor
         int missing = 0;
         for (int i = 0; i < plan.Parameters.Count; i++)
         {
-            if (parameters is null || i >= parameters.Count || parameters[i] is null)
+            // evidence/r-q49-dt2-draftprops/dt2-params-dao-querydef-accdb: a DateTime2 parameter (DaoType 20) set via
+            // VT_DATE coerces to VT_DECIMAL and still counts as missing (3061) at Execute.
+            bool absent = parameters is null || i >= parameters.Count || parameters[i] is null
+                || (plan.Parameters[i].DaoType == 20 && parameters[i]!.Value.Vt == (ushort)VarType.Decimal);
+            if (absent)
             {
                 missing++;
             }
         }
         if (missing > 0)
         {
-            // qualified.md R-SQL-1 SQL-B, r-cat-1b/qd-execute-param-action, r-sql-2-3/act-qdef-params.
-            return ActionOutcome.Fail(SqlFailure.Ace(SqlPhase.Execute, 3061, SqlMessages.TooFewParameters(missing)));
+            // qualified.md R-SQL-1 SQL-B, r-cat-1b/qd-execute-param-action, r-sql-2-3/act-qdef-params,
+            // evidence/r-q49-dt2-draftprops/dt2-params-dao-querydef-accdb call 292 (QDtIns: 1 of 2 set -> "Expected 2.").
+            return ActionOutcome.Fail(SqlFailure.Ace(SqlPhase.Execute, 3061, SqlMessages.TooFewParameters(plan.Parameters.Count)));
         }
         for (int i = 0; i < plan.Parameters.Count; i++)
         {
@@ -563,7 +568,7 @@ public static unsafe class ActionExecutor
                         NativeVariant[] rawRow = sourceRows[r];
                         for (int c = 0; c < rawRow.Length; c++)
                         {
-                            if (!ConvertForColumn(rawRow[c], plan.InsertColumns[c], plan.Context, errorSource, out converted[c], out SqlFailure? convFail, r8OverflowAs6: true))
+                            if (!ConvertForColumn(rawRow[c], plan.InsertColumns[c], plan.Context, errorSource, out converted[c], out SqlFailure? convFail))
                             {
                                 ClearAll(converted);
                                 if (!convFail!.IsNotModelled
@@ -808,7 +813,8 @@ public static unsafe class ActionExecutor
                             continue;
                         }
 
-                        if (!ConvertForColumn(assign.Value.Value, assign.Column, plan.Context, errorSource, out evaluated[i], out SqlFailure? convFail, r8OverflowAs6: true))
+                        bool bigintExpr = assign.Value.Fields.Any(f => f.Column.TypeCode == NativeTypes.BigInt);
+                        if (!ConvertForColumn(assign.Value.Value, assign.Column, plan.Context, errorSource, out evaluated[i], out SqlFailure? convFail, r8OverflowAs6: bigintExpr))
                         {
                             if (convFail!.IsNotModelled || failOnError)
                             {

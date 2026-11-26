@@ -134,7 +134,7 @@ public enum NotModelledCase : byte
     /// <summary>An oleaut32 failure whose ACE number no record shows.</summary>
     UnmappedAutomationFailure,
 
-    /// <summary>CStr(Null), Sgn(Null): not recorded.</summary>
+    /// <summary>Sgn(Null) and other unrecorded Null-argument conversions (CStr(Null) is recorded as VBA error 94).</summary>
     NullArgument,
 
     /// <summary>CDate of a text that reads both as a date and, differently, as a number of days.</summary>

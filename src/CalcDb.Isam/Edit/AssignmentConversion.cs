@@ -31,7 +31,8 @@ public static unsafe class AssignmentConversion
         in NativeVariant incoming,
         ColumnDescriptor column,
         uint lcid,
-        ExtendedDateTimeWriteMode dt2Mode = ExtendedDateTimeWriteMode.DaoTable)
+        ExtendedDateTimeWriteMode dt2Mode = ExtendedDateTimeWriteMode.DaoTable,
+        bool allowEmptyBstrBinaryNull = false)
     {
         VarType vt = incoming.Type;
         if (vt == VarType.Null)
@@ -46,7 +47,7 @@ public static unsafe class AssignmentConversion
         }
         if (column.TypeCode == NativeTypes.Binary)
         {
-            return Binary(incoming, column);
+            return Binary(incoming, column, allowEmptyBstrBinaryNull);
         }
         if (vt is VarType.Empty or VarType.Error || ((ushort)vt & 0xF000) != 0)
         {
@@ -113,20 +114,20 @@ public static unsafe class AssignmentConversion
 
     /// <summary>
     /// Assignment into fixed <c>BINARY(n)</c> or variable <c>VARBINARY(n)</c> (evidence/r-q51-codecs-props-compact/bin-desc-keys-accdb,
-    /// bin-desc-keys-mdb): a 0-byte <c>VT_ARRAY|VT_UI1</c> or empty <c>VT_BSTR ""</c> stores Null; a non-empty 1D
-    /// <c>VT_ARRAY|VT_UI1</c> up to <c>column.Length</c> bytes is right-zero-padded to <c>column.Length</c> when fixed
-    /// (<c>BINARY(n)</c>) and kept at exact length when variable (<c>VARBINARY(n)</c>). Over-length or non-empty string
-    /// puts are not recorded.
+    /// bin-desc-keys-mdb): a 0-byte <c>VT_ARRAY|VT_UI1</c> (or empty <c>VT_BSTR ""</c> when <paramref name="allowEmptyBstrBinaryNull"/>
+    /// is true on the DAO table-recordset route) stores Null; a non-empty 1D <c>VT_ARRAY|VT_UI1</c> up to <c>column.Length</c>
+    /// bytes is right-zero-padded to <c>column.Length</c> when fixed (<c>BINARY(n)</c>) and kept at exact length when
+    /// variable (<c>VARBINARY(n)</c>). Over-length or unprobed string puts stay refused by name.
     /// </summary>
-    private static ConversionResult Binary(in NativeVariant incoming, ColumnDescriptor column)
+    private static ConversionResult Binary(in NativeVariant incoming, ColumnDescriptor column, bool allowEmptyBstrBinaryNull)
     {
         VarType vt = incoming.Type;
         if (vt == VarType.Bstr)
         {
             ReadOnlySpan<char> chars = incoming.Pointer == 0 ? default : Bstrs.Chars(incoming.Pointer);
-            // Empty BSTR stores Null (evidence/r-q51-codecs-props-compact/bin-desc-keys-accdb, bin-desc-keys-mdb);
-            // non-empty BSTR stays ColumnType so ADO immediate edit maps to 0x80040E21 (AdoImmediateEditTests).
-            return chars.IsEmpty ? new ConversionResult(NativeValue.Null) : Open(MutationOpen.ColumnType);
+            // DAO empty BSTR stores Null (evidence/r-q51-codecs-props-compact/bin-desc-keys-accdb, bin-desc-keys-mdb);
+            // ADO immediate edit and non-empty BSTR stay ColumnType so ADO keeps 0x80040E21 (AdoImmediateEditTests).
+            return allowEmptyBstrBinaryNull && chars.IsEmpty ? new ConversionResult(NativeValue.Null) : Open(MutationOpen.ColumnType);
         }
         if (vt != (VarType.Array | VarType.UI1) || incoming.Pointer == 0)
         {
@@ -193,15 +194,20 @@ public static unsafe class AssignmentConversion
         {
             return Open(MutationOpen.ConversionNotRecorded);
         }
-        while (scale < column.NumericScale)
-        {
-            magnitude *= 10;
-            scale++;
-        }
         UInt128 limit = UInt128.One;
         for (int i = 0; i < column.NumericPrecision; i++)
         {
             limit *= 10;
+        }
+        UInt128 maxBeforeScale = (limit - UInt128.One) / 10;
+        while (scale < column.NumericScale)
+        {
+            if (magnitude > maxBeforeScale)
+            {
+                return Open(MutationOpen.ConversionNotRecorded);
+            }
+            magnitude *= 10;
+            scale++;
         }
         if (magnitude >= limit)
         {

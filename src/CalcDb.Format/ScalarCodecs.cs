@@ -20,11 +20,12 @@ public sealed record ScalarPayloadRules
     public required int GuidBytes { get; init; }
 
     /// <summary>
-    /// The Extended Date/Time payload width. <b>ACE's digit layout is not the pinned reference's.</b> II-04 §5.5 gives
-    /// 19 day digits, a colon, 12 second digits, 7 fraction digits, then ":7" and one NUL; the values in
-    /// r-sort-3/create-nums-accdb (NU.DX) are 15 day digits, a colon at 15, 12 second and 7 fraction digits, ":7" at 35
-    /// and five NULs ("000000000693594:0000000432000000000:7" for 1899-12-30 12:00). The value's meaning is therefore
-    /// not modelled (reported to the book, W-04/private-codecs); the exact bytes are kept and keyed.
+    /// The Extended Date/Time (<c>DATETIME2</c>, type <c>0x14</c>) payload width (42 ASCII bytes; II-04 §5.5,
+    /// qualified.md R-FMT-2 / R-SORT-3, <c>evidence/r-q49-dt2-draftprops/dt2-*</c>, <c>evidence/r-q-fmt-sort/dt2-ticks-accdb</c>).
+    /// ACE writes three fixed-width layouts decoded/encoded by <see cref="ExtendedDateTimeCodec"/>: 19 day digits
+    /// <c>%019:%019:7\0</c> on SQL INSERT, 15 day digits <c>%015:%019:7\0</c> + 4 trailing slack bytes on DAO table
+    /// puts (where byte 40 is non-deterministic in ACE; CalcDb writes <c>0x00</c>), and 19 day digits
+    /// <c>%019:%019:0\0</c> on SQL UPDATE / dynaset Edit.
     /// </summary>
     public required int ExtendedBytes { get; init; }
 
@@ -401,7 +402,8 @@ public static class ExtendedDateTimeCodec
 
     /// <summary>
     /// Parse an ACE <c>DATETIME2</c> text value: ISO <c>YYYY-MM-DD[ HH:MM:SS[.f...]]</c>, time-only
-    /// <c>HH:MM:SS[.f...]</c> (defaulting to <c>1899-12-30</c>), or US <c>MM/DD/YYYY HH:MM:SS[.f...]</c>.
+    /// <c>HH:MM:SS[.f...]</c> (defaulting to <c>1899-12-30</c>), or US date+time <c>MM/DD/YYYY HH:MM:SS[.f...]</c>
+    /// (ACE's readback format; US date-only <c>MM/DD/YYYY</c> is unprobed and refused).
     /// Rounds half-up at the 8th fractional digit (carrying into the next second/day, or holding
     /// <c>9999-12-31 24:00:00.0000000</c> at max day; <c>dt2-ticks-accdb</c>, <c>dt2-ddl-insert-bounds-accdb</c>,
     /// <c>dt2-update-invalid-accdb</c>).
