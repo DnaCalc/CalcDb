@@ -136,7 +136,11 @@ public readonly record struct OperandContract(OperandOrigin Origin, VarType Decl
 
     public static OperandContract FunctionResult => new(OperandOrigin.FunctionResult);
 
+    public static OperandContract BooleanFunctionResult => new(OperandOrigin.FunctionResult, VarType.Bool);
+
     public static OperandContract Expression => new(OperandOrigin.Expression);
+
+    public static OperandContract BooleanExpression => new(OperandOrigin.Expression, VarType.Bool);
 
     /// <summary>Whether the operand is a stored or bound value rather than text of the expression or its computation.</summary>
     public bool IsTypedSource => Origin is OperandOrigin.Field or OperandOrigin.Parameter or OperandOrigin.FunctionResult;

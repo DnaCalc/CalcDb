@@ -1758,7 +1758,25 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
             RowTest t = where.Test(this);
             if (t == RowTest.Failed)
             {
-                failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.WhereFailureAtOpen", where.LastFailure!.ToString());
+                ExpressionFailure wf = where.LastFailure!;
+                if (wf.IsNotModelled)
+                {
+                    failure = At(wf);
+                    return null;
+                }
+                if (wf.Number == AceError.TypeMismatch
+                    && plan.Tree is null
+                    && plan.Sources.Count == 1
+                    && plan.Sources[0].Subquery is null
+                    && !plan.Grouped
+                    && plan.Order.Count > 0)
+                {
+                    // r-q43-schema-lval-index/bool-cmp-origin-accdb calls 166, 170, 174, 182:
+                    // WHERE type mismatch (3464) on a single-table ordered SELECT fails OpenRecordset with 3464.
+                    failure = At(wf);
+                    return null;
+                }
+                failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.WhereFailureAtOpen", wf.ToString());
                 return null;
             }
             return t == RowTest.Match;

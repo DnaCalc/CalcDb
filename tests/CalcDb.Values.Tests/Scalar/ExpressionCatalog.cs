@@ -442,14 +442,14 @@ public static class ExpressionCatalog
         Typed(Power, "2 ^ 'x'", Pow(I(2), S("x")));
 
         // ---- Comparison across types (T-EXPR-12, T-EXPR-19, T-EXPR-20), r-expr-1b cmp-cross-types ----
-        Plain(CrossTypes, "True = 1", Eq(T, I(1)), NotModelledCase.BooleanComparison);
-        Plain(CrossTypes, "True = -1", Eq(T, I(-1)), NotModelledCase.BooleanComparison);
-        Plain(CrossTypes, "True = '1'", Eq(T, S("1")), NotModelledCase.BooleanComparison);
-        Plain(CrossTypes, "True = 'x'", Eq(T, S("x")), NotModelledCase.BooleanComparison);
-        Plain(CrossTypes, "False = 0", Eq(F, I(0)), NotModelledCase.BooleanComparison);
-        Plain(CrossTypes, "True < 1", Lt(T, I(1)), NotModelledCase.BooleanComparison);
-        Plain(CrossTypes, "True < 'a'", Lt(T, S("a")), NotModelledCase.BooleanComparison);
-        Plain(CrossTypes, "1 = True", Eq(I(1), T), NotModelledCase.BooleanComparison);
+        Plain(CrossTypes, "True = 1", Eq(T, I(1)));
+        Plain(CrossTypes, "True = -1", Eq(T, I(-1)));
+        Plain(CrossTypes, "True = '1'", Eq(T, S("1")));
+        Plain(CrossTypes, "True = 'x'", Eq(T, S("x")));
+        Plain(CrossTypes, "False = 0", Eq(F, I(0)));
+        Plain(CrossTypes, "True < 1", Lt(T, I(1)));
+        Plain(CrossTypes, "True < 'a'", Lt(T, S("a")));
+        Plain(CrossTypes, "1 = True", Eq(I(1), T));
         Plain(CrossTypes, "1 = 1.0", Eq(I(1), Dc("1.0")));
         Plain(CrossTypes, "1 = CCur(1)", Eq(I(1), Fn(CCur, I(1))));
         Plain(CrossTypes, "0.1 = CSng(0.1)", Eq(Dc("0.1"), Fn(CSng, Dc("0.1"))));

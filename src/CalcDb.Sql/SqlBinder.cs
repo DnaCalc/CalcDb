@@ -1088,7 +1088,7 @@ public sealed class BoundSelect : IDisposable
                 index = parameters.Count - 1;
             }
             QueryParameter p = parameters[index];
-            return new SlotBinding(ParameterSlot0 + index, p.Declaring, p.DaoType == 1 ? StaticType.Boolean : StaticType.Value);
+            return new SlotBinding(ParameterSlot0 + index, p.Declaring, p.DaoType == 1 ? StaticType.Boolean : StaticType.Value, OperandOrigin.Parameter);
         }
 
         /// <summary>The slot of a field reference, or null; an ambiguous name sets <paramref name="ambiguous"/>.</summary>

@@ -28,10 +28,11 @@ public enum StaticType : byte
 public readonly record struct ColumnBinding(int Source, ColumnDescriptor Column);
 
 /// <summary>
-/// A node the row supplies as a value instead of computing it (a SQL group key or aggregate result, W-06/parser-binder-scan):
-/// its slot in <see cref="IExpressionRow.Slot"/>, its declared type and its static type.
+/// A node the row supplies as a value instead of computing it (a SQL group key, parameter, derived column, or aggregate
+/// result, W-06/parser-binder-scan): its slot in <see cref="IExpressionRow.Slot"/>, its declared type, its static type,
+/// and its operand origin.
 /// </summary>
-public readonly record struct SlotBinding(int Slot, VarType Declared, StaticType Type);
+public readonly record struct SlotBinding(int Slot, VarType Declared, StaticType Type, OperandOrigin Origin = OperandOrigin.Field);
 
 /// <summary>
 /// The row an expression is evaluated on (II-10 §4: a native row reaches the evaluator without a second value system):
@@ -1083,7 +1084,7 @@ public sealed unsafe partial class BoundExpression : IDisposable
                 Program.Add(new Instruction(Op.LoadSlot, slot.Slot, 0));
                 UsesSlots = true;
                 MaxDepth = Math.Max(MaxDepth, at + 1);
-                return new Bound(slot.Type, OperandContract.Field(slot.Declared), 1);
+                return new Bound(slot.Type, new OperandContract(slot.Origin, slot.Declared), 1);
             }
             Bound result = node.Kind switch
             {
@@ -1181,7 +1182,7 @@ public sealed unsafe partial class BoundExpression : IDisposable
             ? new BindError(ExpressionFailure.Ace(ExpressionPhase.Bind, 3075, ExpressionMessages.WrongArgumentCount) with { Site = site, Subject = name })
             : Open("NotModelled.FunctionArity", $"{name} with {arity} arguments in a criteria (ACE's message there is not recorded)");
 
-        private static readonly OperandContract BooleanExpression = new(OperandOrigin.Expression, VarType.Bool);
+        private static readonly OperandContract BooleanExpression = OperandContract.BooleanExpression;
 
         private Bound Unary(SyntaxNode node, int at)
         {
@@ -1198,7 +1199,7 @@ public sealed unsafe partial class BoundExpression : IDisposable
             Bound operand = Bind(node.Left!, at);
             Program.Add(new Instruction(Op.Unary, 0, Descriptor(node.Operation, node.Offset, 1, operand.Contract, default)));
             bool isNot = node.Operation == ScalarOperation.Not;
-            OperandContract contract = isNot && operand.Contract.Declared == VarType.Bool ? BooleanExpression : OperandContract.Expression;
+            OperandContract contract = isNot ? BooleanExpression : OperandContract.Expression;
             return new Bound(isNot ? StaticType.Boolean : StaticType.Value, contract, operand.Depth);
         }
 
@@ -1216,9 +1217,7 @@ public sealed unsafe partial class BoundExpression : IDisposable
             Program.Add(new Instruction(Op.Binary, 0, Descriptor(node.Operation, node.Offset, 2, left.Contract, right.Contract)));
             bool comparison = node.Operation is >= ScalarOperation.Equal and <= ScalarOperation.GreaterOrEqual;
             bool logical = node.Operation is >= ScalarOperation.And and <= ScalarOperation.Imp;
-            OperandContract contract = comparison || (logical && left.Contract.Declared == VarType.Bool && right.Contract.Declared == VarType.Bool)
-                ? BooleanExpression
-                : OperandContract.Expression;
+            OperandContract contract = comparison || logical ? BooleanExpression : OperandContract.Expression;
             return new Bound(comparison || logical ? StaticType.Boolean : StaticType.Value, contract, Math.Max(left.Depth, right.Depth + 1));
         }
 
@@ -1356,7 +1355,7 @@ public sealed unsafe partial class BoundExpression : IDisposable
             int d = Descriptor(op, node.Offset, n, contracts[0], contracts[1]);
             bool booleanTag = n == 1 && op is ScalarOperation.CBool or ScalarOperation.IsNull or ScalarOperation.IsEmpty or ScalarOperation.IsError;
             Program.Add(new Instruction(n switch { 1 => Op.Unary, 2 => Op.Binary, _ => Op.Ternary }, 0, d, booleanTag));
-            return new Bound(entry.Type, OperandContract.FunctionResult, depth);
+            return new Bound(entry.Type, booleanTag ? OperandContract.BooleanFunctionResult : OperandContract.FunctionResult, depth);
         }
 
         private Bound BindIIf(SyntaxNode node, int at)
@@ -1580,7 +1579,10 @@ public sealed unsafe partial class BoundExpression : IDisposable
                     break;
             }
             Program.Add(new Instruction(Op.CallFunction, n, first, Function: fn));
-            return new Bound(entry.Type, OperandContract.FunctionResult, depth);
+            OperandContract resultContract = fn is ExprFunction.IsNumeric or ExprFunction.IsDate
+                ? OperandContract.BooleanFunctionResult
+                : OperandContract.FunctionResult;
+            return new Bound(entry.Type, resultContract, depth);
         }
 
         private bool IsIndexedText(ColumnBinding field) => field.Column.TypeCode is NativeTypes.Text or NativeTypes.Memo && schema.LeadsIndex(field);

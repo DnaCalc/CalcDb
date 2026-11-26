@@ -32,12 +32,14 @@ internal static class UnionTypes
         size = null;
         var types = new List<int>();
         bool nullFirst = false;
+        bool hasNull = false;
         for (int a = 0; a < arms.Count; a++)
         {
             ResultColumn c = arms[a].ColumnList[column];
             if (c.Root is { Kind: SyntaxKind.Literal, Literal: LiteralKind.Null })
             {
                 nullFirst |= a == 0;
+                hasNull = true;
                 continue;
             }
             if (c.TypeRule != ColumnTypeRule.Bound || c.FieldType is not int t)
@@ -75,6 +77,12 @@ internal static class UnionTypes
             // r-q-expr-sql/union-null-first, r-sql-1/union-types: the values are the raw bytes of the typed ones, but the rows
             // come out in the typed values' order (1000 before 10000), not the texts' (r-sql-1/union-types #824, #832).
             return Open("a Null first arm of a distinct UNION over a non-text type: Text of raw bytes in an order not identified");
+        }
+        if (hasNull && type == 1 && armAll.Any(all => !all))
+        {
+            // r-q-expr-sql/union-null-first rs17 (SELECT y AS v FROM Ut UNION SELECT Null FROM One): ACE coerces Null
+            // to False (VT_BOOL 0) in a distinct Yes/No UNION; non-literal Null expressions and mixed arms are unprobed.
+            return Open("a Null literal in a later arm of a distinct UNION over Yes/No (r-q-expr-sql/union-null-first rs17 coerces Null to False)");
         }
         conversion = Of(type);
         size = type switch

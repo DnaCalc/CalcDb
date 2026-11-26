@@ -267,12 +267,27 @@ public static unsafe partial class ScalarKernel
     // ---- Comparison -----------------------------------------------------------------------------------------------------
 
     /// <summary>
-    /// = &lt;&gt; &lt; &lt;= &gt; &gt;= (qualified.md "text against number comparison"; cmp-cross-types): VT_I2 -1 or 0, or
-    /// Null when an operand is Null. Two texts compare under the context's mode; a number against text fails 3464; a date
-    /// literal or computed date against text compares as less than any text, with no conversion (<c>#2024-03-05# =
-    /// '2024-03-05'</c> is 0, <c>&lt; 'abc'</c> is -1), while a stored Date field against text fails 3464 (Find
-    /// <c>D = '1/15/2020'</c>, r-cursor-1b/find-date-forms). Numbers compare through VarCmp, except a Single against a
-    /// Decimal: ACE finds 0.1 and CSng(0.1) equal, VarCmp does not.
+    /// = &lt;&gt; &lt; &lt;= &gt; &gt;= (qualified.md "text against number comparison", "Boolean comparisons by operand origin and operator";
+    /// cmp-cross-types, r-q43-schema-lval-index/bool-cmp-*): VT_I2 -1 or 0, or Null when an operand is Null.
+    /// <list type="bullet">
+    /// <item>Stored <c>YESNO</c> column (<c>OperandOrigin.Field</c>): compares numerically as -1/0 against numbers; always fails
+    /// 3464 against text (all 6 operators); vs Date/Time stays refused by name (<see cref="NotModelledCase.BooleanComparison"/>).</item>
+    /// <item><c>True</c>/<c>False</c> literal with <c>=</c>/<c>&lt;&gt;</c>: coerces the other non-Null operand by SQL predicate
+    /// truthiness (<c>0</c>, <c>#12/30/1899#</c>, <c>'0'</c> are False; other numbers, dates, and strings including <c>''</c>,
+    /// <c>'False'</c>, <c>'x'</c>, <c>' '</c> are True; unrecorded zero-like text spellings such as <c>'0.0'</c> stay named),
+    /// symmetric in operand order.</item>
+    /// <item><c>True</c>/<c>False</c> literal with <c>&lt;</c>/<c>&lt;=</c>/<c>&gt;</c>/<c>&gt;=</c>: compares numerically as -1/0
+    /// against Boolean/number/date; against text, <c>True</c> fails 3464 in both orders while <c>False</c> compares as <c>"0"</c>
+    /// in Database (General) collation.</item>
+    /// <item>Computed <c>VT_I2</c> Boolean expression (<c>(1=1)</c>, <c>(S &lt;&gt; 'a')</c>, <c>CBool(…)</c>): compares numerically
+    /// -1/0 against numbers; against text (all 6 operators) stringifies to <c>"-1"</c>/<c>"0"</c> and compares in Database (General)
+    /// collation; vs Date/Time stays named. <c>CInt(-1) = '-1'</c> and <c>CInt(0) = '0'</c> (<c>bool-cmp-text-disc-accdb</c> calls 105, 109)
+    /// stringify the same way while plain integer literals (<c>0 = '0'</c>, <c>-1 &lt; 'a'</c>) fail 3464.</item>
+    /// </list>
+    /// Two texts compare under the context's mode; a number against text fails 3464; a date literal or computed date against
+    /// text compares as less than any text (<c>#2024-03-05# = '2024-03-05'</c> is 0, <c>&lt; 'abc'</c> is -1), while a stored Date
+    /// field against text fails 3464 (Find <c>D = '1/15/2020'</c>, r-cursor-1b/find-date-forms). Numbers compare through VarCmp,
+    /// except a Single against a Decimal: ACE finds 0.1 and CSng(0.1) equal, VarCmp does not.
     /// </summary>
     private static ScalarOutcome Compare(in ScalarDescriptor d, NativeVariant* a, NativeVariant* b, ExpressionContext c)
     {
@@ -289,11 +304,11 @@ public static unsafe partial class ScalarKernel
         {
             return refusedRight;
         }
-        bool boolA = ta == VarType.Bool || d.First.Declared == VarType.Bool, boolB = tb == VarType.Bool || d.Second.Declared == VarType.Bool;
-        if (boolA != boolB)
+        BooleanOrigin originA = ClassifyBoolean(ta, d.First);
+        BooleanOrigin originB = ClassifyBoolean(tb, d.Second);
+        if ((originA != BooleanOrigin.None) != (originB != BooleanOrigin.None))
         {
-            // cmp-cross-types: True = 1 and True = -1 are both -1, True < 1 is -1, True = 'x' is -1, True < 'a' fails.
-            return Open(d, NotModelledCase.BooleanComparison);
+            return CompareMixedBoolean(d, a, b, ta, tb, originA, originB, c);
         }
         int order;
         if (ta == VarType.Bstr && tb == VarType.Bstr)
@@ -305,17 +320,32 @@ public static unsafe partial class ScalarKernel
         }
         else if (ta == VarType.Bstr || tb == VarType.Bstr)
         {
-            VarType number = ta == VarType.Bstr ? tb : ta;
+            bool textLeft = ta == VarType.Bstr;
+            NativeVariant* other = textLeft ? b : a;
+            NativeVariant* textOp = textLeft ? a : b;
+            OperandContract otherContract = textLeft ? d.Second : d.First;
+            VarType number = textLeft ? tb : ta;
+            if (number == VarType.I2 && otherContract.Origin == OperandOrigin.FunctionResult)
+            {
+                // r-q43-schema-lval-index/bool-cmp-text-disc-accdb calls 105, 109: CInt(-1) = '-1' and CInt(0) = '0'
+                // stringify to "-1"/"0" and compare in Database (General) collation. Other FunctionResult VT_I2 values
+                // or operators against text have no retained record and stay refused by name rather than guessing 3464.
+                short val = *(short*)&other->Int64;
+                if (d.Operation == ScalarOperation.Equal && val is -1 or 0)
+                {
+                    return CompareStringifiedBoolean(d, val == -1 ? "-1" : "0", textOp, boolIsLeft: !textLeft, c);
+                }
+                return Open(d, NotModelledCase.BooleanComparison);
+            }
             if (number != VarType.Date)
             {
                 return Fail(d, AceError.TypeMismatch);
             }
-            OperandOrigin dateOrigin = ta == VarType.Date ? d.First.Origin : d.Second.Origin;
-            if (dateOrigin == OperandOrigin.Field)
+            if (otherContract.Origin == OperandOrigin.Field)
             {
                 return Fail(d, AceError.TypeMismatch);
             }
-            if (dateOrigin is OperandOrigin.Parameter or OperandOrigin.FunctionResult)
+            if (otherContract.Origin is OperandOrigin.Parameter or OperandOrigin.FunctionResult)
             {
                 return Open(d, NotModelledCase.DateAgainstText);
             }
@@ -330,17 +360,186 @@ public static unsafe partial class ScalarKernel
             }
             order = cmp - VarCmpEqual;
         }
-        bool holds = d.Operation switch
-        {
-            ScalarOperation.Equal => order == 0,
-            ScalarOperation.NotEqual => order != 0,
-            ScalarOperation.Less => order < 0,
-            ScalarOperation.LessOrEqual => order <= 0,
-            ScalarOperation.Greater => order > 0,
-            _ => order >= 0,
-        };
-        return Boolean(holds);
+        return Boolean(Holds(d.Operation, order));
     }
+
+    private enum BooleanOrigin : byte
+    {
+        None,
+        StoredField,
+        Literal,
+        Computed,
+        Parameter,
+    }
+
+    private static BooleanOrigin ClassifyBoolean(VarType tag, OperandContract contract)
+    {
+        if (contract.Origin == OperandOrigin.Literal && contract.Declared == VarType.Bool)
+        {
+            return BooleanOrigin.Literal;
+        }
+        if (tag != VarType.Bool && contract.Declared != VarType.Bool)
+        {
+            return BooleanOrigin.None;
+        }
+        return contract.Origin switch
+        {
+            OperandOrigin.Field => BooleanOrigin.StoredField,
+            OperandOrigin.Parameter => BooleanOrigin.Parameter,
+            OperandOrigin.Expression or OperandOrigin.FunctionResult => BooleanOrigin.Computed,
+            _ => BooleanOrigin.None,
+        };
+    }
+
+    private static ScalarOutcome CompareMixedBoolean(
+        in ScalarDescriptor d,
+        NativeVariant* a,
+        NativeVariant* b,
+        VarType ta,
+        VarType tb,
+        BooleanOrigin originA,
+        BooleanOrigin originB,
+        ExpressionContext c)
+    {
+        bool boolLeft = originA != BooleanOrigin.None;
+        BooleanOrigin origin = boolLeft ? originA : originB;
+        NativeVariant* boolOp = boolLeft ? a : b;
+        NativeVariant* otherOp = boolLeft ? b : a;
+        VarType otherTag = boolLeft ? tb : ta;
+        bool boolVal = *(short*)&boolOp->Int64 != 0;
+
+        switch (origin)
+        {
+            case BooleanOrigin.StoredField:
+                // r-q43-schema-lval-index/bool-cmp-origin-accdb: stored YESNO fails 3464 against text (all 6 ops),
+                // compares numerically -1/0 against numbers; vs Date/Time is open (qualified.md R-EXPR-1 Branch B).
+                if (otherTag == VarType.Bstr)
+                {
+                    return Fail(d, AceError.TypeMismatch);
+                }
+                if (otherTag == VarType.Date)
+                {
+                    return Open(d, NotModelledCase.BooleanComparison);
+                }
+                return CompareNumeric(d, a, b, c);
+
+            case BooleanOrigin.Literal:
+                if (d.Operation is ScalarOperation.Equal or ScalarOperation.NotEqual)
+                {
+                    // r-q43-schema-lval-index/bool-cmp-eq-ne-accdb, r-q43-schema-lval-index/bool-cmp-eq-ne-mdb,
+                    // r-q43-schema-lval-index/bool-cmp-text-disc-accdb call 125, r-expr-1b/cmp-cross-types:
+                    // True/False literal with = / <> coerces non-Null operand by SQL predicate truthiness
+                    // (0, #12/30/1899#, '0' -> False; all other numbers, dates, and strings including '',
+                    // 'False', 'x', ' ' -> True), symmetric in operand order.
+                    if (PredicateTruth(d, otherOp, otherTag, c, out bool otherTruth) is { } openTruth)
+                    {
+                        return openTruth;
+                    }
+                    return Boolean(d.Operation == ScalarOperation.Equal ? boolVal == otherTruth : boolVal != otherTruth);
+                }
+                // r-q43-schema-lval-index/bool-cmp-order-accdb, r-q43-schema-lval-index/bool-cmp-order-mdb,
+                // r-q43-schema-lval-index/bool-cmp-text-disc-accdb calls 53-82, 129, 133:
+                // True/False literal with <, <=, >, >= compares numerically (-1/0) against number/date; against text,
+                // True fails 3464 in both orders while False compares as "0" in Database (General) collation.
+                if (otherTag == VarType.Bstr)
+                {
+                    return boolVal
+                        ? Fail(d, AceError.TypeMismatch)
+                        : CompareStringifiedBoolean(d, "0", otherOp, boolLeft, c);
+                }
+                return CompareNumeric(d, a, b, c);
+
+            case BooleanOrigin.Computed:
+                // r-q43-schema-lval-index/bool-cmp-origin-accdb, bool-cmp-text-disc-accdb, r-q42-field-rule-and/edge-forms-*:
+                // computed VT_I2 Boolean ((1=1), (S <> 'a'), CBool(...)) compares numerically -1/0 against numbers;
+                // against text (all 6 ops) stringifies to "-1"/"0" in Database (General) collation; vs Date/Time is open.
+                if (otherTag == VarType.Bstr)
+                {
+                    return CompareStringifiedBoolean(d, boolVal ? "-1" : "0", otherOp, boolLeft, c);
+                }
+                if (otherTag == VarType.Date)
+                {
+                    return Open(d, NotModelledCase.BooleanComparison);
+                }
+                return CompareNumeric(d, a, b, c);
+
+            default:
+                // Boolean parameter against non-Boolean has no retained record.
+                return Open(d, NotModelledCase.BooleanComparison);
+        }
+    }
+
+    private static ScalarOutcome CompareNumeric(in ScalarDescriptor d, NativeVariant* a, NativeVariant* b, ExpressionContext c)
+    {
+        int cmp = NumericOrder(d, a, b, c, out ScalarOutcome? failed);
+        if (failed is { } f)
+        {
+            return f;
+        }
+        return Boolean(Holds(d.Operation, cmp - VarCmpEqual));
+    }
+
+    private static ScalarOutcome CompareStringifiedBoolean(
+        in ScalarDescriptor d,
+        ReadOnlySpan<char> boolText,
+        NativeVariant* textOp,
+        bool boolIsLeft,
+        ExpressionContext c)
+    {
+        if (c.Compare != TextCompareMode.Database)
+        {
+            return Open(d, NotModelledCase.BooleanComparison);
+        }
+        if (c.DatabaseOrder is not { } order0)
+        {
+            return Open(d, NotModelledCase.DatabaseCollationMissing);
+        }
+        ReadOnlySpan<char> otherText = Bstrs.Chars(textOp->Pointer);
+        int order = boolIsLeft
+            ? Math.Sign(order0.Compare(boolText, otherText))
+            : Math.Sign(order0.Compare(otherText, boolText));
+        return Boolean(Holds(d.Operation, order));
+    }
+
+    private static ScalarOutcome? PredicateTruth(in ScalarDescriptor d, NativeVariant* v, VarType tag, ExpressionContext c, out bool truth)
+    {
+        if (tag == VarType.Bstr)
+        {
+            ReadOnlySpan<char> s = Bstrs.Chars(v->Pointer);
+            if (s.SequenceEqual("0"))
+            {
+                truth = false;
+                return null;
+            }
+            NativeVariant num = default;
+            int hr = OleAut.VariantChangeTypeEx(&num, v, c.Lcid, 0, (ushort)VarType.R8);
+            if (hr >= 0 && num.Double == 0.0)
+            {
+                // Unrecorded zero-like spellings other than '0' (e.g. '0.0', '00', ' 0 ', '-0').
+                truth = false;
+                return Open(d, NotModelledCase.BooleanComparison);
+            }
+            truth = true;
+            return null;
+        }
+        if (tag == VarType.Date)
+        {
+            truth = v->Double != 0.0;
+            return null;
+        }
+        truth = !IsZero(v);
+        return null;
+    }
+
+    private static bool Holds(ScalarOperation op, int order) => op switch
+    {
+        ScalarOperation.Equal => order == 0,
+        ScalarOperation.NotEqual => order != 0,
+        ScalarOperation.Less => order < 0,
+        ScalarOperation.LessOrEqual => order <= 0,
+        ScalarOperation.Greater => order > 0,
+        _ => order >= 0,
+    };
 
     private static ScalarOutcome? TextOrder(in ScalarDescriptor d, NativeVariant* a, NativeVariant* b, ExpressionContext c, out int order)
     {

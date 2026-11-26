@@ -14,6 +14,14 @@ public enum SqlPhase : byte
 }
 
 /// <summary>
+/// Structured ACE error metadata for a <c>NotModelled.ReadOnlyAction</c> refusal whose read-only-alone outcome is
+/// decided by retained records (<c>r-q18-statements/ro-ins-*</c>, <c>r-q43-schema-lval-index/ro-ddl-disc-accdb</c>):
+/// the ACE error number, message, and target table name that a host layer surfaces when no writable handle is open
+/// beside the read-only handle.
+/// </summary>
+public readonly record struct ReadOnlyActionInfo(int Number, string Message, string TargetTable);
+
+/// <summary>
 /// A statement's failure (II-11 §2; The Plan §3.2: no exception, text built only on the failure path): ACE's error
 /// number and message, or a named case CalcDb does not model. <see cref="ExcerptExact"/> is false when the message quotes
 /// a query expression whose end CalcDb places by its own rule (qualified.md "how a SELECT reports a failing expression":
@@ -34,6 +42,12 @@ public sealed record SqlFailure(SqlPhase Phase, int Number, string Message, stri
 
     /// <summary>The text before the quote that <see cref="ExcerptExact"/> is about.</summary>
     public string Quote { get; init; } = QueryExpression;
+
+    /// <summary>
+    /// When <see cref="NotModelled"/> is <c>"NotModelled.ReadOnlyAction"</c> and the statement form has a recorded
+    /// read-only-alone ACE error, carries that exact error number, message, and target table; otherwise null.
+    /// </summary>
+    public ReadOnlyActionInfo? ReadOnlyInfo { get; init; }
 
     public static SqlFailure Ace(SqlPhase phase, int number, string message) => new(phase, number, message);
 
@@ -96,8 +110,11 @@ public static class SqlMessages
     /// <summary>6 for Integer overflow in an action query (r-q-wire/int-sql-literal-integer).</summary>
     public const string Overflow = "Overflow";
 
-    /// <summary>3073 for a non-updateable action query such as SET col = (SELECT ...) (r-def-expr-sql/sql-update-assignment-order).</summary>
+    /// <summary>3073 for a non-updateable action query such as SET col = (SELECT ...) (r-def-expr-sql/sql-update-assignment-order, r-q43-schema-lval-index/ro-ddl-disc-accdb call 15).</summary>
     public const string NotUpdateable = "Operation must use an updateable query.";
+
+    /// <summary>3086 when DELETE targets a read-only database alone (r-q43-schema-lval-index/ro-ddl-disc-accdb call 16).</summary>
+    public const string CouldNotDeleteFromTables = "Could not delete from specified tables.";
 
     /// <summary>3067 for a subquery inside INSERT VALUES (...) (r-def-expr-sql/sql-insert-values-forms).</summary>
     public const string MustContainTable = "Query input must contain at least one table or query.";
@@ -182,6 +199,9 @@ public static class SqlMessages
 
     /// <summary>3368 when a foreign key column count or data types do not match the referenced columns (r-def-expr-sql/ddl-fk-actions).</summary>
     public const string RelationshipColumnMismatch = "Relationship must be on the same number of fields with the same data types.";
+
+    /// <summary>3370 when DDL modifies or creates a table on a read-only database alone (r-q43-schema-lval-index/ro-ddl-disc-accdb calls 11–14).</summary>
+    public static string CannotModifyTableDesign(string table) => $"Cannot modify the design of table '{table}'. It is in a read-only database.";
 
     /// <summary>3371 when CREATE INDEX, DROP INDEX, ALTER TABLE, or REFERENCES names a missing table (r-def-expr-sql/ddl-index-forms, ddl-alter-column-forms, ddl-fk-actions).</summary>
     public const string CannotFindTableOrConstraint = "Cannot find table or constraint.";
