@@ -1,0 +1,895 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q45-querydef-stream-rollback/stream-save-into-open",
+  "bookRefs": [
+    "R-ADO-1",
+    "ADO-STREAM",
+    "ADO-PERSIST",
+    "W-09"
+  ],
+  "description": "ADODB.Recordset.Save into already-open ADODB.Stream objects: empty open text/binary streams (ADTG and XML), prefilled open binary streams at Position 4 and Position 2 (ADTG), and read-only open Stream (adModeRead). Checks error/State/Type/Size/Position/prefix bytes.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-ado-1b-main.accdb",
+      "sha256": "612dea90cd639ee52fd6abacf9033b19957eb30aa50f187b3774d50a74e33ea7",
+      "length": 262144,
+      "provenance": "r-ado-1b.create-main.345be244f8.a1 qk1-345be244f8ea46a4e916e99600097e9e3a742dfd617cb0b8b79fe296f3ac72f8 output:r-ado-1b-main.accdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Connection",
+      "bind": "cn"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Provider",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Microsoft.ACE.OLEDB.12.0"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Properties",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "cnp"
+    },
+    {
+      "op": "invoke",
+      "target": "cnp",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Data Source"
+        }
+      ],
+      "bind": "cnds"
+    },
+    {
+      "op": "invoke",
+      "target": "cnds",
+      "member": "Value",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        }
+      ]
+    },
+    {
+      "op": "release",
+      "target": "cnds"
+    },
+    {
+      "op": "release",
+      "target": "cnp"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Recordset",
+      "bind": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "CursorLocation",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Open",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "SELECT ID, Code, L, S FROM T ORDER BY ID"
+        },
+        {
+          "type": "object",
+          "name": "cn"
+        },
+        {
+          "type": "i4",
+          "value": 3
+        },
+        {
+          "type": "i4",
+          "value": 1
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Stream",
+      "bind": "s1"
+    },
+    {
+      "op": "invoke",
+      "target": "s1",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Save",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "s1"
+        },
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "s1",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "s1",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "s1",
+      "member": "Size",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "s1",
+      "member": "Position",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "s1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "s1"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Stream",
+      "bind": "s2"
+    },
+    {
+      "op": "invoke",
+      "target": "s2",
+      "member": "Type",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "s2",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Save",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "s2"
+        },
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "s2",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "s2",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "s2",
+      "member": "Size",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "s2",
+      "member": "Position",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "s2",
+      "member": "Position",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "s2",
+      "member": "Read",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "s2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "s2"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Stream",
+      "bind": "s3"
+    },
+    {
+      "op": "invoke",
+      "target": "s3",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Save",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "s3"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "s3",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "s3",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "s3",
+      "member": "Size",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "s3",
+      "member": "Position",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "s3",
+      "member": "Charset",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "s3",
+      "member": "Position",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "s3",
+      "member": "ReadText",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 64
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "s3",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "s3"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Stream",
+      "bind": "s4"
+    },
+    {
+      "op": "invoke",
+      "target": "s4",
+      "member": "Type",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "s4",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Save",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "s4"
+        },
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "s4",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "s4",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "s4",
+      "member": "Size",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "s4",
+      "member": "Position",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "s4",
+      "member": "Position",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "s4",
+      "member": "Read",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 32
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "s4",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "s4"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Stream",
+      "bind": "s5"
+    },
+    {
+      "op": "invoke",
+      "target": "s5",
+      "member": "Type",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "s5",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "s5",
+      "member": "Write",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bytes",
+          "hex": "deadbeef"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "s5",
+      "member": "Position",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Save",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "s5"
+        },
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "s5",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "s5",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "s5",
+      "member": "Size",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "s5",
+      "member": "Position",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "s5",
+      "member": "Position",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "s5",
+      "member": "Read",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "s5",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "s5"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Stream",
+      "bind": "s6"
+    },
+    {
+      "op": "invoke",
+      "target": "s6",
+      "member": "Type",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "s6",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "s6",
+      "member": "Write",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bytes",
+          "hex": "deadbeef"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "s6",
+      "member": "Position",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Save",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "s6"
+        },
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "s6",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "s6",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "s6",
+      "member": "Size",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "s6",
+      "member": "Position",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "s6",
+      "member": "Position",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "s6",
+      "member": "Read",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 16
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "s6",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "s6"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Stream",
+      "bind": "s7"
+    },
+    {
+      "op": "invoke",
+      "target": "s7",
+      "member": "Type",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "s7",
+      "member": "Mode",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "s7",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "s7",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "s7",
+      "member": "Mode",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Save",
+      "kind": "method",
+      "args": [
+        {
+          "type": "object",
+          "name": "s7"
+        },
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "s7",
+      "member": "State",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "s7",
+      "member": "Size",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "s7",
+      "member": "Position",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "s7",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "s7"
+    },
+    {
+      "op": "invoke",
+      "target": "rs",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "rs"
+    },
+    {
+      "op": "invoke",
+      "target": "cn",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "cn"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

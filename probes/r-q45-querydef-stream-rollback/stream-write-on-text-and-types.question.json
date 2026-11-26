@@ -1,0 +1,345 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q45-querydef-stream-rollback/stream-write-on-text-and-types",
+  "bookRefs": [
+    "R-ADO-1",
+    "ADO-STREAM",
+    "ADO-PERSIST",
+    "W-09"
+  ],
+  "description": "ADODB.Stream: Write(bytes) and Read on text stream (Type=2); Write(BSTR/Empty/Null/empty-bytes), WriteText, and SkipLine on binary stream (Type=1); Write/WriteText on closed stream.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before-open",
+      "keep": false
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Stream",
+      "bind": "st"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "st",
+      "member": "Write",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bytes",
+          "hex": "41"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "st",
+      "member": "WriteText",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "x"
+        },
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "st",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "st",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "st",
+      "member": "Write",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bytes",
+          "hex": "4142"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "st",
+      "member": "Size",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "st",
+      "member": "Position",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "st",
+      "member": "WriteText",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "abc"
+        },
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "st",
+      "member": "Size",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "st",
+      "member": "Position",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "st",
+      "member": "Position",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "st",
+      "member": "Read",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "st",
+      "member": "Read",
+      "kind": "method",
+      "args": [
+        {
+          "type": "i4",
+          "value": -1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "st",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "st"
+    },
+    {
+      "op": "create",
+      "progId": "ADODB.Stream",
+      "bind": "sb"
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "Type",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "i4",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "Open",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "Write",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bytes",
+          "hex": ""
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "Size",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "Position",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "Write",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bytes",
+          "hex": "414243"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "Size",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "Position",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "Write",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "abc"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "Write",
+      "kind": "method",
+      "args": [
+        {
+          "type": "empty"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "Write",
+      "kind": "method",
+      "args": [
+        {
+          "type": "null"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "WriteText",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "abc"
+        },
+        {
+          "type": "i4",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "SkipLine",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "Size",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "Position",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "sb",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "sb"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-close",
+      "keep": false
+    }
+  ]
+}

@@ -1,0 +1,838 @@
+{
+  "schema": "calcdb.question/1",
+  "probe": "r-q45-querydef-stream-rollback/qd-put-connect-returns-mdb",
+  "bookRefs": [
+    "R-CAT-1",
+    "CAT-Q",
+    "II-06",
+    "W-07"
+  ],
+  "description": "Jet 4 MDB: session 1 creates Q1 ('SELECT * FROM T'); session 2 puts Q1.Connect = ODBC DSN (promotes to PassThrough); session 3 puts Q1.ReturnsRecords = False; session 4 puts Q1.ReturnsRecords = True; session 5 puts Q1.Connect = '' (clears Connect). Keeps all pages before, after S1, and after each put while open and after Close.",
+  "callerSurface": "native-idispatch/x64",
+  "invokeLcid": 1033,
+  "observationRecipe": [
+    "clearErrorInfoBefore",
+    "excepinfo",
+    "deferredFill",
+    "errorInfo"
+  ],
+  "pathBinding": "attempt-local-copy",
+  "inputs": [
+    {
+      "role": "main",
+      "fileName": "r-q37-plain-mdb.mdb",
+      "sha256": "136bce0e84a9c979a0cb63ef86039e70ecb8114ad27a2ccc22279f2c45ea6645",
+      "length": 90112,
+      "provenance": "r-q37-valrule-put.create-plain-mdb.ab7829cb4c.a1 qk1-ab7829cb4c15c6857bce64f9e3af0b3dd34d9198fca9a7e7eaa8ded23cf0687d output:r-q37-plain-mdb.mdb"
+    }
+  ],
+  "program": [
+    {
+      "op": "observeFiles",
+      "label": "before",
+      "keep": false,
+      "pageSize": 4096
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "pg0",
+      "file": "input:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg0",
+      "offset": 0,
+      "count": 524288,
+      "keep": true
+    },
+    {
+      "op": "nativeClose",
+      "handle": "pg0"
+    },
+    {
+      "op": "create",
+      "progId": "DAO.DBEngine.120",
+      "bind": "eng"
+    },
+    {
+      "op": "observeModules",
+      "label": "after-create"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db1"
+    },
+    {
+      "op": "invoke",
+      "target": "db1",
+      "member": "CreateQueryDef",
+      "kind": "method",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q1"
+        },
+        {
+          "type": "bstr",
+          "text": "SELECT * FROM T"
+        }
+      ],
+      "bind": "qd1"
+    },
+    {
+      "op": "release",
+      "target": "qd1"
+    },
+    {
+      "op": "invoke",
+      "target": "db1",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db1"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-s1",
+      "keep": false,
+      "pageSize": 4096
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "pg1",
+      "file": "input:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg1",
+      "offset": 0,
+      "count": 524288,
+      "keep": true
+    },
+    {
+      "op": "nativeClose",
+      "handle": "pg1"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db2"
+    },
+    {
+      "op": "invoke",
+      "target": "db2",
+      "member": "QueryDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "qdfs2"
+    },
+    {
+      "op": "invoke",
+      "target": "qdfs2",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q1"
+        }
+      ],
+      "bind": "qd2"
+    },
+    {
+      "op": "invoke",
+      "target": "qd2",
+      "member": "Connect",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ODBC;DSN=CalcDbProbeNoSuchDsn;"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "qd2",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "qd2",
+      "member": "Connect",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "qd2",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "qd2",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-conn-set-open",
+      "keep": false,
+      "pageSize": 4096
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "pg2o",
+      "file": "input:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg2o",
+      "offset": 0,
+      "count": 524288,
+      "keep": true
+    },
+    {
+      "op": "nativeClose",
+      "handle": "pg2o"
+    },
+    {
+      "op": "release",
+      "target": "qd2"
+    },
+    {
+      "op": "release",
+      "target": "qdfs2"
+    },
+    {
+      "op": "invoke",
+      "target": "db2",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db2"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-s2-close",
+      "keep": false,
+      "pageSize": 4096
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "pg2c",
+      "file": "input:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg2c",
+      "offset": 0,
+      "count": 524288,
+      "keep": true
+    },
+    {
+      "op": "nativeClose",
+      "handle": "pg2c"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db3"
+    },
+    {
+      "op": "invoke",
+      "target": "db3",
+      "member": "QueryDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "qdfs3"
+    },
+    {
+      "op": "invoke",
+      "target": "qdfs3",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q1"
+        }
+      ],
+      "bind": "qd3"
+    },
+    {
+      "op": "invoke",
+      "target": "qd3",
+      "member": "ReturnsRecords",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": false
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "qd3",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "qd3",
+      "member": "Connect",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "qd3",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-rr-false-open",
+      "keep": false,
+      "pageSize": 4096
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "pg3o",
+      "file": "input:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg3o",
+      "offset": 0,
+      "count": 524288,
+      "keep": true
+    },
+    {
+      "op": "nativeClose",
+      "handle": "pg3o"
+    },
+    {
+      "op": "release",
+      "target": "qd3"
+    },
+    {
+      "op": "release",
+      "target": "qdfs3"
+    },
+    {
+      "op": "invoke",
+      "target": "db3",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db3"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-s3-close",
+      "keep": false,
+      "pageSize": 4096
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "pg3c",
+      "file": "input:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg3c",
+      "offset": 0,
+      "count": 524288,
+      "keep": true
+    },
+    {
+      "op": "nativeClose",
+      "handle": "pg3c"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db4"
+    },
+    {
+      "op": "invoke",
+      "target": "db4",
+      "member": "QueryDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "qdfs4"
+    },
+    {
+      "op": "invoke",
+      "target": "qdfs4",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q1"
+        }
+      ],
+      "bind": "qd4"
+    },
+    {
+      "op": "invoke",
+      "target": "qd4",
+      "member": "ReturnsRecords",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "qd4",
+      "member": "Connect",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "ODBC;DSN=CalcDbProbeOtherDsn;"
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "qd4",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "qd4",
+      "member": "Connect",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "qd4",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-rr-true-open",
+      "keep": false,
+      "pageSize": 4096
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "pg4o",
+      "file": "input:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg4o",
+      "offset": 0,
+      "count": 524288,
+      "keep": true
+    },
+    {
+      "op": "nativeClose",
+      "handle": "pg4o"
+    },
+    {
+      "op": "release",
+      "target": "qd4"
+    },
+    {
+      "op": "release",
+      "target": "qdfs4"
+    },
+    {
+      "op": "invoke",
+      "target": "db4",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db4"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-s4-close",
+      "keep": false,
+      "pageSize": 4096
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "pg4c",
+      "file": "input:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg4c",
+      "offset": 0,
+      "count": 524288,
+      "keep": true
+    },
+    {
+      "op": "nativeClose",
+      "handle": "pg4c"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": false
+        }
+      ],
+      "bind": "db5"
+    },
+    {
+      "op": "invoke",
+      "target": "db5",
+      "member": "QueryDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "qdfs5"
+    },
+    {
+      "op": "invoke",
+      "target": "qdfs5",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q1"
+        }
+      ],
+      "bind": "qd5"
+    },
+    {
+      "op": "invoke",
+      "target": "qd5",
+      "member": "Connect",
+      "kind": "propertyPut",
+      "args": [
+        {
+          "type": "bstr",
+          "text": ""
+        }
+      ]
+    },
+    {
+      "op": "invoke",
+      "target": "qd5",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "qd5",
+      "member": "Connect",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "qd5",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "qd5",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-conn-clear-open",
+      "keep": false,
+      "pageSize": 4096
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "pg5o",
+      "file": "input:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg5o",
+      "offset": 0,
+      "count": 524288,
+      "keep": true
+    },
+    {
+      "op": "nativeClose",
+      "handle": "pg5o"
+    },
+    {
+      "op": "release",
+      "target": "qd5"
+    },
+    {
+      "op": "release",
+      "target": "qdfs5"
+    },
+    {
+      "op": "invoke",
+      "target": "db5",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "db5"
+    },
+    {
+      "op": "observeFiles",
+      "label": "after-s5-close",
+      "keep": false,
+      "pageSize": 4096
+    },
+    {
+      "op": "nativeOpen",
+      "bind": "pg5c",
+      "file": "input:main",
+      "access": 2147483648,
+      "share": 7,
+      "disposition": 3
+    },
+    {
+      "op": "nativeRead",
+      "handle": "pg5c",
+      "offset": 0,
+      "count": 524288,
+      "keep": true
+    },
+    {
+      "op": "nativeClose",
+      "handle": "pg5c"
+    },
+    {
+      "op": "invoke",
+      "target": "eng",
+      "member": "OpenDatabase",
+      "kind": "method",
+      "args": [
+        {
+          "type": "inputPath",
+          "role": "main"
+        },
+        {
+          "type": "bool",
+          "value": false
+        },
+        {
+          "type": "bool",
+          "value": true
+        }
+      ],
+      "bind": "dbro"
+    },
+    {
+      "op": "invoke",
+      "target": "dbro",
+      "member": "QueryDefs",
+      "kind": "propertyGet",
+      "args": [],
+      "bind": "qdfsr"
+    },
+    {
+      "op": "invoke",
+      "target": "qdfsr",
+      "member": "Item",
+      "kind": "methodOrGet",
+      "args": [
+        {
+          "type": "bstr",
+          "text": "Q1"
+        }
+      ],
+      "bind": "qdr"
+    },
+    {
+      "op": "invoke",
+      "target": "qdr",
+      "member": "Type",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "qdr",
+      "member": "Connect",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "qdr",
+      "member": "ReturnsRecords",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "invoke",
+      "target": "qdr",
+      "member": "SQL",
+      "kind": "propertyGet",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "qdr"
+    },
+    {
+      "op": "release",
+      "target": "qdfsr"
+    },
+    {
+      "op": "invoke",
+      "target": "dbro",
+      "member": "Close",
+      "kind": "method",
+      "args": []
+    },
+    {
+      "op": "release",
+      "target": "dbro"
+    },
+    {
+      "op": "release",
+      "target": "eng"
+    }
+  ]
+}
