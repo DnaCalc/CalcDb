@@ -39,6 +39,7 @@ public sealed class PageAllocator
     private readonly PageCache _cache;
     private readonly FormatDescriptor _d;
     private readonly bool _allowPendingRollbackExtent;
+    private readonly bool _hadSessionReservedPages;
     private readonly HashSet<uint> _handedOut = [];
     private readonly List<uint> _sessionReservedPages = [];
     private readonly List<uint> _consumedReservedPages = [];
@@ -53,6 +54,7 @@ public sealed class PageAllocator
     {
         if (sessionReservedPages is { Count: > 0 })
         {
+            _hadSessionReservedPages = true;
             _sessionReservedPages.AddRange(sessionReservedPages);
         }
     }
@@ -140,6 +142,13 @@ public sealed class PageAllocator
         if (!_allowPendingRollbackExtent && _cache.HasPendingRollbackExtent)
         {
             failure = PendingRollbackExtentFailure;
+            return null;
+        }
+        if (_hadSessionReservedPages)
+        {
+            failure = _sessionReservedPages.Count == 0
+                ? "the session's reserved page-1 extent has no pages left (allocating a second 32-page extent in one session is not recorded: r-q37-valrule-put)"
+                : "direct page-1 allocation while a session page-1 extent reservation is active is not recorded (r-q42-field-rule-and)";
             return null;
         }
         ExtentPages = Math.Max(ExtentPages, ExtentOf(_cache, ExtentPages, seen));

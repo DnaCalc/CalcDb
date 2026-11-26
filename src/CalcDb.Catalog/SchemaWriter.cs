@@ -972,13 +972,22 @@ public sealed class SchemaWriter
             }
         }
 
+        IReadOnlyList<uint> sessionReserved = workspace.SessionReservedPages(_cache);
+        if (sessionReserved.Count > 0
+            && (request.Route != SchemaRoute.Sql || preparedFk is not null || request.Fields.Any(f => f.Required)))
+        {
+            return new SchemaOutcome(
+                new SchemaRefusal(null, $"CREATE TABLE {request.Name} (route={request.Route}, fk={preparedFk is not null}, required={request.Fields.Any(f => f.Required)}) while a session page-1 extent reservation is pending is not recorded (only SQL CREATE TABLE without FOREIGN KEY or NOT NULL is recorded: evidence/r-q42-field-rule-and/multirow-accdb, multirow-mdb)"),
+                default,
+                _pageCount);
+        }
         ulong extent = _pageCount;
         uint tdefPage = 0;
         RowId objectRow = default;
         AcceptOutcome accepted = workspace.AcceptSchemaChange(
             _cache,
             ObjectSemantics,
-            p => CompileCreateTable(p, request, preparedFk, dateCreateBits, dateUpdateBits, initialLvProp: null, out tdefPage, out _, out objectRow, out _, out extent, absorbedDeferred),
+            p => CompileCreateTable(p, request, preparedFk, dateCreateBits, dateUpdateBits, initialLvProp: null, out tdefPage, out _, out objectRow, out _, out extent, absorbedDeferred, sessionReserved),
             allowPendingDeferredKind: absorbedDeferred is not null ? DeferredCatalogCommitKind.TableDefAppend : null);
         if (!accepted.Accepted)
         {
@@ -1132,9 +1141,10 @@ public sealed class SchemaWriter
     }
 
     /// <summary>
-    /// CREATE [UNIQUE] INDEX on an existing table, empty or populated, with or without existing indexes
+    /// CREATE [UNIQUE] INDEX on an existing table, empty or populated, with or without existing indexes or LVAL columns
     /// (evidence/r-q11-ddl-closure/create-then-index, evidence/r-q21-ddl-types/ix-*,
-    /// evidence/r-q34-ddl-sweep/ix-cat1b-*, ix-nonuq-rows-*, uqix-*): allocate the index leaf, add the index's map to
+    /// evidence/r-q34-ddl-sweep/ix-cat1b-*, ix-nonuq-rows-*, uqix-*, evidence/r-q43-schema-lval-index/ix-lval-*):
+    /// allocate the index leaf, add the index's map to
     /// the table's map page (its next row, after the table's owned/free maps, any existing index maps, and any LVAL
     /// column maps), populate the single uncompressed leaf over existing rows through the one ISAM index writer
     /// (<see cref="IndexEntryInsert"/>), rewrite the TableDef keeping physical indexes and 12-byte stats blocks in
@@ -1176,9 +1186,9 @@ public sealed class SchemaWriter
         {
             return new SchemaOutcome(existingRefusal, default, _pageCount);
         }
-        if (table.LongValueMaps.Count > 0 && (table.PhysicalIndexes.Count > 0 || table.RowCount > 0))
+        if (table.LongValueMaps.Count > 0 && request.Route == SchemaRoute.Ado)
         {
-            return new SchemaOutcome(new SchemaRefusal(null, "CREATE INDEX on a table with LVAL column(s) and existing indexes or rows is not recorded (only an empty unindexed Memo table is recorded: evidence/r-q21-ddl-types/ix-on-table-with-memo)"), default, _pageCount);
+            return new SchemaOutcome(new SchemaRefusal(null, "CREATE INDEX via ADO on a table with LVAL column(s) is not recorded (only DAO/SQL is recorded: evidence/r-q21-ddl-types/ix-on-table-with-memo, evidence/r-q43-schema-lval-index/ix-lval-*)"), default, _pageCount);
         }
         if (isJet4Mdb && table.RowCount > 0
             && (request.Index.IgnoreNull || request.Index.DisallowNull
@@ -1201,9 +1211,11 @@ public sealed class SchemaWriter
     /// <summary>
     /// ADO <c>ALTER TABLE ... ADD CONSTRAINT ... CHECK (...)</c> on an empty or populated ACCDB or Jet 4 MDB table
     /// (evidence/r-q34-ddl-sweep/alt-check-empty-accdb-ado, alt-check-empty-mdb-ado, alt-check-rows-accdb-ado,
-    /// alt-check-rows-mdb-ado, alt-check-two-accdb-ado; r-q30-sql-check; r-q31-sql-check-2): in a single commit, update
+    /// alt-check-rows-mdb-ado, alt-check-two-accdb-ado; r-q30-sql-check; r-q31-sql-check-2;
+    /// evidence/r-q43-schema-lval-index/chk-lvprop-*): in a single commit, update
     /// the table's <c>MSysObjects</c> row (<c>DateUpdate</c> and <c>LvProp</c> holding the object-level
-    /// <c>CheckConstraints</c> property, type <c>0x0C</c>, double-NUL-terminated UTF-16LE pairs through the one shared
+    /// <c>CheckConstraints</c> property merged with any existing <c>ColumnValues</c> / <c>ObjectValues</c> sections,
+    /// type <c>0x0C</c>, double-NUL-terminated UTF-16LE pairs through the one shared
     /// <see cref="ApplyObjectProperties"/> writer), then insert a <c>Type = 9</c> <c>MSysObjects</c> row
     /// (<c>Id = 0x80000000</c> then <c>max(negative Id) + 1</c>, <c>ParentId = 0x0F000003</c>,
     /// <c>Flags = 0x10000000</c>, <c>Owner = NULL</c>, inline compressed UTF-16LE <c>Database</c> and <c>Connect</c>,
@@ -1273,7 +1285,16 @@ public sealed class SchemaWriter
             return new SchemaOutcome(new SchemaRefusal(null, $"CHECK constraint '{request.ConstraintName}' Connect field ({connectPayload.Length} bytes) exceeds inline LVAL limit ({LongValuePlan.InlinePayloadMax}): external MSysObjects.Connect is not recorded"), default, _pageCount);
         }
 
-        if (PrepareCheckConstraintState(entry, request.ConstraintName, parsedExpr, out int nextId, out PropertyMap[] newPropMaps, out bool updatesExistingLvProp) is { } checkRefusal)
+        if (PrepareCheckConstraintState(
+            entry,
+            request.ConstraintName,
+            parsedExpr,
+            isJet4Mdb,
+            out int nextId,
+            out IReadOnlyList<string> explicitNames,
+            out PropertyMap[] newPropMaps,
+            out bool updatesExistingLvProp,
+            out bool hadExistingCheckConstraints) is { } checkRefusal)
         {
             return new SchemaOutcome(checkRefusal, default, _pageCount);
         }
@@ -1281,7 +1302,7 @@ public sealed class SchemaWriter
         int publicationsBefore = workspace.Publications.Count;
         if (updatesExistingLvProp && !workspace.NeedsCloseCommit(_cache))
         {
-            if (isJet4Mdb)
+            if (isJet4Mdb && hadExistingCheckConstraints)
             {
                 return new SchemaOutcome(
                     new SchemaRefusal(null, $"ALTER TABLE ADD CONSTRAINT CHECK on Jet 4 MDB table '{entry.Name}' adding a subsequent CHECK in a fresh session (updating an existing LVAL page without allocating a new page) is not recorded (only ACCDB is recorded, r-q34-ddl-sweep/alt-check-two-accdb-ado; same-session Jet 4 MDB two-CHECK after CREATE/first CHECK is recorded, r-q31-sql-check-2/mdb-two-checks-za)"),
@@ -1308,22 +1329,25 @@ public sealed class SchemaWriter
                 nextId,
                 databasePayload,
                 connectPayload,
+                explicitNames,
                 newPropMaps,
                 dateCreateBits,
                 dateUpdateBits,
                 out extent));
         if (updatesExistingLvProp
-            && !isJet4Mdb
+            && (!isJet4Mdb || !hadExistingCheckConstraints)
             && workspace.Publisher is not null
             && Published(accepted)
             && !workspace.NeedsCloseCommit(_cache)
             && publicationsBefore == 0)
         {
-            // evidence/r-q34-ddl-sweep/alt-check-two-accdb-ado: a fresh ACCDB session that adds a second CHECK
-            // constraint on an existing LVAL page (without touching page 1 or queueing ReleasedAtClose) still
-            // advances page 0 +3586 by +2 across Execute + Close (03 -> 05), whereas a same-session second CHECK
-            // after CREATE TABLE / first CHECK (r-q30-sql-check/ord-two-checks-*) advances by +1 because the
-            // session already holds a Close commit (NeedsCloseCommit == true -> 00 -> 04 across CREATE + CK_A + CK_B + Close).
+            // evidence/r-q34-ddl-sweep/alt-check-two-accdb-ado, evidence/r-q43-schema-lval-index/chk-lvprop-azl-*,
+            // chk-lvprop-valrule-*, chk-lvprop-table-valrule-accdb, chk-lvprop-notnull-two-accdb: a fresh ACCDB or
+            // Jet 4 MDB session that updates an existing MSysObjects.LvProp SingleRow LVAL page (without touching
+            // page 1 or queueing ReleasedAtClose) still advances page 0 +3586 by +2 across Execute + Close
+            // (03 -> 05, 04 -> 06), whereas a same-session second CHECK after CREATE TABLE / first CHECK
+            // (r-q30-sql-check/ord-two-checks-*) advances by +1 because the session already holds a Close commit
+            // (NeedsCloseCommit == true -> 00 -> 04 across CREATE + CK_A + CK_B + Close).
             // Like CreateTableSqlAdoDuplicateRollback, PublishCounterCommit emits that second counter commit here;
             // mid-session commit timing between Execute and Close on a non-allocating ADD CONSTRAINT CHECK stays Open.
             (MutationOpen counterOpen, string? counterDetail) = workspace.PublishCounterCommit(_cache);
@@ -2594,7 +2618,8 @@ public sealed class SchemaWriter
         out RowId objectRow,
         out List<RowId> aceRows,
         out ulong extent,
-        DeferredCatalogCommit? absorbedDeferred = null)
+        DeferredCatalogCommit? absorbedDeferred = null,
+        IReadOnlyList<uint>? sessionReserved = null)
     {
         tdefPage = 0;
         mapPage = 0;
@@ -2612,7 +2637,7 @@ public sealed class SchemaWriter
                 }
             }
         }
-        var allocator = new PageAllocator(_cache, _d, _pageCount);
+        var allocator = new PageAllocator(_cache, _d, _pageCount, sessionReserved);
         if (work.Allocate(allocator) is not { } allocatedTdef || work.Allocate(allocator) is not { } allocatedMap)
         {
             return work.NotWritten();
@@ -2674,7 +2699,7 @@ public sealed class SchemaWriter
         {
             Set(objects, row, "LvProp", new NativeValue(NativeKind.LongBinary) { Bytes = initialLvProp });
         }
-        if (!work.Insert(this, objects, row, out objectRow, extent: allocator.ExtentPages))
+        if (!work.Insert(this, objects, row, out objectRow, extent: allocator.ExtentPages, externalAllocator: allocator))
         {
             return work.NotWritten();
         }
@@ -2691,7 +2716,7 @@ public sealed class SchemaWriter
             Set(aces, ace, "SID", new NativeValue(NativeKind.Binary) { Bytes = DefaultAdminSecurity.Mask(sid, keystream) });
             Set(aces, ace, "ACM", Long(acm));
             Set(aces, ace, "FInheritable", new NativeValue(NativeKind.Boolean) { Boolean = false });
-            if (!work.Insert(this, aces, ace, out RowId aceRow, extent: allocator.ExtentPages))
+            if (!work.Insert(this, aces, ace, out RowId aceRow, extent: allocator.ExtentPages, externalAllocator: allocator))
             {
                 return work.NotWritten();
             }
@@ -2740,7 +2765,7 @@ public sealed class SchemaWriter
             }
         }
         extent = PageAllocator.ExtentOf(_cache, Math.Max(extent, allocator.ExtentPages), p.Overlay);
-        return work.Change(_cache, releasedAtClose);
+        return work.Change(_cache, releasedAtClose, consumedReservedPages: allocator.ConsumedReservedPages);
     }
 
     /// <summary>
@@ -3462,13 +3487,18 @@ public sealed class SchemaWriter
         CatalogEntry entry,
         string constraintName,
         CheckConstraintExpression parsedExpr,
+        bool isJet4Mdb,
         out int nextId,
+        out IReadOnlyList<string> explicitNames,
         out PropertyMap[] newPropMaps,
-        out bool updatesExistingLvProp)
+        out bool updatesExistingLvProp,
+        out bool hadExistingCheckConstraints)
     {
         nextId = int.MinValue;
+        explicitNames = [];
         newPropMaps = [];
         updatesExistingLvProp = false;
+        hadExistingCheckConstraints = false;
 
         if (CheckConstraintCatalog.Read(_cache, _d, _catalog, _pageCount, out string? ccFailure) is not { } existingChecks)
         {
@@ -3542,7 +3572,7 @@ public sealed class SchemaWriter
         }
         nextId = maxNegativeId is int maxNeg ? maxNeg + 1 : int.MinValue;
 
-        // Inspect table's existing MSysObjects.LvProp (refuse any column properties or other properties by name).
+        // Inspect table's existing MSysObjects.LvProp (merge recorded ColumnValues/ObjectValues; refuse unrecorded shapes by name).
         using RowView? tableObjResolved = RowResolver.Resolve(_cache, _d, entry.Root, out TraversalFailure? objFailure);
         if (tableObjResolved is not { } tableObjRow)
         {
@@ -3569,6 +3599,10 @@ public sealed class SchemaWriter
 
         List<(string Name, string Expression)> pairs = [];
         LongValuePlan? oldPlan = null;
+        List<string> names = [];
+        List<PropertyMap> mergedMaps = [];
+        int objectMapIndex = -1;
+        int existingCheckPropIndex = -1;
         if (lvRead.Outcome == FieldOutcome.Bytes)
         {
             if (LongValuePlan.Inspect(tableObjRow.Body[lvRead.Start..lvRead.End], out string? planFail) is not { } inspected)
@@ -3576,6 +3610,10 @@ public sealed class SchemaWriter
                 return new SchemaRefusal(null, $"table '{entry.Name}' MSysObjects.LvProp: {planFail}");
             }
             oldPlan = inspected;
+            if (oldPlan.Form is not (LongValueForm.Inline or LongValueForm.SingleRow))
+            {
+                return new SchemaRefusal(null, $"ALTER TABLE ADD CONSTRAINT CHECK on table '{entry.Name}' whose MSysObjects.LvProp has form {oldPlan.Form} is not recorded (only Inline and SingleRow are recorded: evidence/r-q43-schema-lval-index/chk-lvprop-*)");
+            }
             NativeValue lvValue = FieldDecoder.Read(tableObjRow, objects, lvPropCol, _cache, _d);
             if (lvValue.Kind != NativeKind.LongBinary || lvValue.Bytes is not { } rawBlob)
             {
@@ -3585,46 +3623,117 @@ public sealed class SchemaWriter
             {
                 return new SchemaRefusal(null, $"table '{entry.Name}' MSysObjects.LvProp: {blobFail}");
             }
-            if (decodedBlob.OpaqueSections != 0
-                || decodedBlob.Maps.Count != 1
-                || decodedBlob.Maps[0].Kind != PropertySectionKind.ObjectValues
-                || decodedBlob.Maps[0].MapName.Length != 0
-                || decodedBlob.Maps[0].Properties.Count != 1
-                || decodedBlob.Maps[0].Properties[0] is not { Name: "CheckConstraints", Flags: 0x01, NativeType: NativeTypes.Memo } existingProp)
+            if (decodedBlob.OpaqueSections != 0)
             {
-                return new SchemaRefusal(null, $"ALTER TABLE ADD CONSTRAINT CHECK on table '{entry.Name}' whose MSysObjects.LvProp already holds column or other properties is not recorded");
+                return new SchemaRefusal(null, $"ALTER TABLE ADD CONSTRAINT CHECK on table '{entry.Name}' whose MSysObjects.LvProp holds {decodedBlob.OpaqueSections} opaque section(s) is not recorded");
             }
-            if (oldPlan.Form != LongValueForm.SingleRow)
+            if (decodedBlob.NamesSections != 1)
             {
-                return new SchemaRefusal(null, $"ALTER TABLE ADD CONSTRAINT CHECK on table '{entry.Name}' whose MSysObjects.LvProp has form {oldPlan.Form} is not recorded");
+                return new SchemaRefusal(null, $"ALTER TABLE ADD CONSTRAINT CHECK on table '{entry.Name}' whose MSysObjects.LvProp holds {decodedBlob.NamesSections} Names section(s) is not recorded");
             }
-            if (!CheckConstraintsPayload.TryDecode(existingProp.Payload, out List<(string Name, string Expression)> existingPairs, out string? pairsFail))
+            HashSet<string> referencedNames = new(StringComparer.Ordinal);
+            // Merge existing ColumnValues (Required, AllowZeroLength, ValidationRule/ValidationText) and ObjectValues
+            // (ValidationRule, CheckConstraints) sections in stored order (evidence/r-q43-schema-lval-index/chk-lvprop-*).
+            for (int i = 0; i < decodedBlob.Maps.Count; i++)
             {
-                return new SchemaRefusal(null, $"table '{entry.Name}' existing CheckConstraints property: {pairsFail}");
-            }
-            foreach ((string existingPairName, _) in existingPairs)
-            {
-                switch (FieldNameLookupClashOf(existingPairName, constraintName, _sortOrder, out string? pairUndecided))
+                PropertyMap map = decodedBlob.Maps[i];
+                if (map.Kind == PropertySectionKind.ColumnValues)
                 {
-                    case FieldNameClash.Duplicate:
-                        return new SchemaRefusal(null, $"CHECK constraint '{constraintName}' clashes with existing CheckConstraints entry '{existingPairName}'");
-                    case FieldNameClash.Undecided:
-                        return new SchemaRefusal(null, pairUndecided);
+                    if (objectMapIndex >= 0)
+                    {
+                        return new SchemaRefusal(null, $"ALTER TABLE ADD CONSTRAINT CHECK on table '{entry.Name}' whose MSysObjects.LvProp places ColumnValues after ObjectValues is not recorded (evidence/r-q43-schema-lval-index/chk-lvprop-*)");
+                    }
+                    foreach (StoredProperty prop in map.Properties)
+                    {
+                        referencedNames.Add(prop.Name);
+                    }
+                    mergedMaps.Add(map);
+                }
+                else if (map.Kind == PropertySectionKind.ObjectValues)
+                {
+                    if (map.MapName.Length != 0 || objectMapIndex >= 0)
+                    {
+                        return new SchemaRefusal(null, $"ALTER TABLE ADD CONSTRAINT CHECK on table '{entry.Name}' whose MSysObjects.LvProp holds multiple or named ObjectValues sections is not recorded");
+                    }
+                    objectMapIndex = mergedMaps.Count;
+                    mergedMaps.Add(map);
+                    for (int pi = 0; pi < map.Properties.Count; pi++)
+                    {
+                        StoredProperty prop = map.Properties[pi];
+                        referencedNames.Add(prop.Name);
+                        if (!string.Equals(prop.Name, "CheckConstraints", StringComparison.Ordinal))
+                        {
+                            if (isJet4Mdb)
+                            {
+                                return new SchemaRefusal(null, $"ALTER TABLE ADD CONSTRAINT CHECK on Jet 4 MDB table '{entry.Name}' whose MSysObjects.LvProp already holds ObjectValues property '{prop.Name}' is not recorded (only ACCDB is recorded: evidence/r-q43-schema-lval-index/chk-lvprop-table-valrule-accdb)");
+                            }
+                            continue;
+                        }
+                        if (existingCheckPropIndex >= 0 || prop.Flags != 0x01 || prop.NativeType != NativeTypes.Memo)
+                        {
+                            return new SchemaRefusal(null, $"ALTER TABLE ADD CONSTRAINT CHECK on table '{entry.Name}': existing CheckConstraints property shape (flags 0x{prop.Flags:X2}, type 0x{prop.NativeType:X2}) is not recorded");
+                        }
+                        if (!CheckConstraintsPayload.TryDecode(prop.Payload, out List<(string Name, string Expression)> existingPairs, out string? pairsFail))
+                        {
+                            return new SchemaRefusal(null, $"table '{entry.Name}' existing CheckConstraints property: {pairsFail}");
+                        }
+                        foreach ((string existingPairName, _) in existingPairs)
+                        {
+                            switch (FieldNameLookupClashOf(existingPairName, constraintName, _sortOrder, out string? pairUndecided))
+                            {
+                                case FieldNameClash.Duplicate:
+                                    return new SchemaRefusal(null, $"CHECK constraint '{constraintName}' clashes with existing CheckConstraints entry '{existingPairName}'");
+                                case FieldNameClash.Undecided:
+                                    return new SchemaRefusal(null, pairUndecided);
+                            }
+                        }
+                        pairs.AddRange(existingPairs);
+                        existingCheckPropIndex = pi;
+                        hadExistingCheckConstraints = true;
+                    }
+                }
+                else
+                {
+                    return new SchemaRefusal(null, $"ALTER TABLE ADD CONSTRAINT CHECK on table '{entry.Name}' whose MSysObjects.LvProp holds section kind {map.Kind} is not recorded");
                 }
             }
-            pairs.AddRange(existingPairs);
+            foreach (string dictName in decodedBlob.Names)
+            {
+                if (!referencedNames.Contains(dictName))
+                {
+                    return new SchemaRefusal(null, $"ALTER TABLE ADD CONSTRAINT CHECK on table '{entry.Name}' whose MSysObjects.LvProp dictionary holds unreferenced name '{dictName}' is not recorded (evidence/r-q43-schema-lval-index/chk-lvprop-*)");
+                }
+            }
+            names.AddRange(decodedBlob.Names);
         }
 
+        if (!names.Contains("CheckConstraints", StringComparer.Ordinal))
+        {
+            names.Add("CheckConstraints");
+        }
         pairs.Add((constraintName, parsedExpr.Expression));
         byte[] payloadBytes = CheckConstraintsPayload.Encode(pairs);
-        newPropMaps =
-        [
-            new PropertyMap(
-                PropertySectionKind.ObjectValues,
-                "",
-                [new StoredProperty("CheckConstraints", 0x01, NativeTypes.Memo, payloadBytes)]),
-        ];
-        byte[] newBlob = PropertyBlob.Encode(newPropMaps);
+        var checkProp = new StoredProperty("CheckConstraints", 0x01, NativeTypes.Memo, payloadBytes);
+        if (objectMapIndex >= 0)
+        {
+            List<StoredProperty> objProps = [.. mergedMaps[objectMapIndex].Properties];
+            if (existingCheckPropIndex >= 0)
+            {
+                objProps[existingCheckPropIndex] = checkProp;
+            }
+            else
+            {
+                objProps.Add(checkProp);
+            }
+            mergedMaps[objectMapIndex] = new PropertyMap(PropertySectionKind.ObjectValues, "", objProps);
+        }
+        else
+        {
+            mergedMaps.Add(new PropertyMap(PropertySectionKind.ObjectValues, "", [checkProp]));
+        }
+        explicitNames = names;
+        newPropMaps = [.. mergedMaps];
+        byte[] newBlob = PropertyBlob.Encode(explicitNames, newPropMaps);
         if (newBlob.Length <= LongValuePlan.InlinePayloadMax)
         {
             return new SchemaRefusal(null, $"CheckConstraints property blob ({newBlob.Length} bytes) fits inline (<= {LongValuePlan.InlinePayloadMax}): inline CheckConstraints LvProp is not recorded");
@@ -3638,7 +3747,7 @@ public sealed class SchemaWriter
         {
             return new SchemaRefusal(null, "MSysObjects TableDef names no long-value maps for LvProp");
         }
-        if (oldPlan is null)
+        if (oldPlan is null or { Form: LongValueForm.Inline })
         {
             IReadOnlyList<uint>? freePages = UsageMaps.Pages(_cache, _d, lvMaps.FreeMap, _pageCount, out TraversalFailure? freeMapFailure);
             if (freePages is null)
@@ -3756,6 +3865,7 @@ public sealed class SchemaWriter
         int nextId,
         byte[] databasePayload,
         byte[] connectPayload,
+        IReadOnlyList<string> explicitNames,
         PropertyMap[] newPropMaps,
         ulong dateCreateBits,
         ulong dateUpdateBits,
@@ -3766,8 +3876,8 @@ public sealed class SchemaWriter
         var allocator = new PageAllocator(_cache, _d, _pageCount);
         List<uint> releasedAtClose = [];
         // Update the table's MSysObjects row first (resizes/rewrites LvProp and DateUpdate) so the new Type 9 row
-        // lands right below it on page 17, matching alt-check-empty-* and alt-check-two-accdb-ado byte-for-byte.
-        if (!ApplyObjectProperties(work, p.Overlay, allocator, entry.Root, newPropMaps, dateUpdateBits, releasedAtClose))
+        // lands right below it on page 17, matching alt-check-empty-*, alt-check-two-accdb-ado, and chk-lvprop-* byte-for-byte.
+        if (!ApplyObjectProperties(work, p.Overlay, allocator, entry.Root, newPropMaps, dateUpdateBits, releasedAtClose, explicitNames: explicitNames))
         {
             return work.NotWritten();
         }
@@ -4829,6 +4939,7 @@ public sealed class SchemaWriter
         HashSet<byte[]> seenKeys = new(ByteArrayEqualityComparer.Instance);
         var keyValues = new NativeValue[keyCols.Length];
         uint scannedRows = 0;
+        int nullKeyRows = 0;
         foreach (RowView row in RowResolver.Scan(_cache, _d, table, _pageCount, scanFailures))
         {
             using (row)
@@ -4863,10 +4974,20 @@ public sealed class SchemaWriter
                 }
                 else if (anyNull)
                 {
-                    failure = index.PrimaryKey || index.DisallowNull
-                        ? $"{index.Name}: existing Null row in {(index.PrimaryKey ? "PRIMARY" : "DISALLOW NULL")} index (3058): post-failure file bytes are not recorded"
-                        : $"{index.Name}: existing Null row in non-IGNORE NULL index: bulk-built UniqueEntryCount for Null keys is not recorded in r-q34-ddl-sweep";
-                    return false;
+                    if (index.PrimaryKey || index.DisallowNull)
+                    {
+                        failure = $"{index.Name}: existing Null row in {(index.PrimaryKey ? "PRIMARY" : "DISALLOW NULL")} index (3058): post-failure file bytes are not recorded";
+                        return false;
+                    }
+                    // evidence/r-q43-schema-lval-index/ix-lval-pk-rows-accdb, ix-lval-pk-rows-mdb, ix-lval-second-uq-rows-accdb:
+                    // a single ascending Null Long key in a non-unique non-IGNORE NULL bulk-built index is indexed as [0x00] and
+                    // counted once in both EntryCount and UniqueEntryCount (4 rows: {Null, 10, 20, 20} -> (4, 3, 0)).
+                    if (index.Unique || keyCols.Length != 1 || keyCols[0].TypeCode != NativeTypes.Long || !keySpecs[0].Ascending || nullKeyRows > 0)
+                    {
+                        failure = $"{index.Name}: existing Null row in non-IGNORE NULL index: bulk-built UniqueEntryCount for {(index.Unique ? "UNIQUE" : keyCols.Length != 1 ? "multi-column" : keyCols[0].TypeCode != NativeTypes.Long ? $"0x{keyCols[0].TypeCode:X2}" : !keySpecs[0].Ascending ? "DESC" : "multiple")} Null keys is not recorded (only one ascending Long Null key in a non-unique index is recorded: evidence/r-q43-schema-lval-index/ix-lval-pk-rows-accdb, ix-lval-pk-rows-mdb)";
+                        return false;
+                    }
+                    nullKeyRows++;
                 }
                 byte[]? key = IndexEntryInsert.EncodeKey(keyCols, keySpecs, keyValues, out string? keyFailure);
                 if (key is null)
@@ -5825,6 +5946,14 @@ public sealed class SchemaWriter
 
         public uint? Allocate(PageAllocator allocator)
         {
+            if (allocator.HasSessionReservedPages)
+            {
+                if (!allocator.TryAllocateFromReserved(participant.Overlay, out uint reserved, out _failure))
+                {
+                    return null;
+                }
+                return reserved;
+            }
             if (allocator.Allocate(participant.Overlay, out PageEdit mapEdit, out _failure) is not { } page || !Apply(mapEdit))
             {
                 return null;

@@ -771,10 +771,65 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
 
     /// <summary>
     /// Unused pages of this session's active 32-page page-1 reservation on <paramref name="cache"/> available for
-    /// contiguous catalog LVAL spills without re-editing page 1 (evidence/r-q37-valrule-put/long-rule-spill-lval-*).
+    /// contiguous catalog LVAL spills, CREATE TABLE, or INSERT page allocations without re-editing page 1
+    /// (evidence/r-q37-valrule-put/long-rule-spill-lval-*, evidence/r-q42-field-rule-and/rule-*, multirow-*).
+    /// Excludes pages already consumed by unpublished changes of the current statement.
     /// </summary>
-    public IReadOnlyList<uint> SessionReservedPages(PageCache cache) =>
-        _sessionReservedExtent.TryGetValue(cache, out List<uint>? pages) ? [.. pages] : [];
+    public IReadOnlyList<uint> SessionReservedPages(PageCache cache)
+    {
+        if (!_sessionReservedExtent.TryGetValue(cache, out List<uint>? pages) || pages.Count == 0)
+        {
+            return [];
+        }
+        int alreadyConsumed = PendingConsumedReservedCount(cache);
+        if (alreadyConsumed >= pages.Count)
+        {
+            return [];
+        }
+        return alreadyConsumed == 0 ? [.. pages] : [.. pages.Skip(alreadyConsumed)];
+    }
+
+    private int PendingConsumedReservedCount(PageCache cache)
+    {
+        int count = 0;
+        for (int i = 0; i < _pending.Count; i++)
+        {
+            if (_pending[i].Physical is { } phys && ReferenceEquals(phys.File, cache))
+            {
+                count += phys.ConsumedReservedPages.Count;
+            }
+        }
+        for (int fi = 0; fi < _frames.Count; fi++)
+        {
+            List<AcceptedRowChange> frameChanges = _frames[fi].Changes;
+            for (int ci = 0; ci < frameChanges.Count; ci++)
+            {
+                if (frameChanges[ci].Physical is { } phys && ReferenceEquals(phys.File, cache))
+                {
+                    count += phys.ConsumedReservedPages.Count;
+                }
+            }
+        }
+        return count;
+    }
+
+    private string? ValidateConsumedReservedPages(PageCache file, IReadOnlyList<uint> consumed, int priorInBatch = 0)
+    {
+        int offset = PendingConsumedReservedCount(file) + priorInBatch;
+        if (!_sessionReservedExtent.TryGetValue(file, out List<uint>? available)
+            || offset + consumed.Count > available.Count)
+        {
+            return "consuming pages from a session page-1 extent reservation that is not active or has fewer pages remaining is not recorded (r-q37-valrule-put, r-q42-field-rule-and)";
+        }
+        for (int ci = 0; ci < consumed.Count; ci++)
+        {
+            if (available[offset + ci] != consumed[ci])
+            {
+                return $"consumed reserved page {consumed[ci]} does not match the session's next reserved page {available[offset + ci]} (r-q37-valrule-put, r-q42-field-rule-and)";
+            }
+        }
+        return null;
+    }
 
     /// <summary>
     /// Whether this Workspace has already published or accepted (unpublished) any global-map allocation, free, deferred
@@ -2515,6 +2570,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         SortedSet<uint> allocatedPages = [];
         ulong baseExtentPages = 0;
         bool tookPage = false;
+        bool consumedReserved = false;
         bool hasAutoNumberTarget = top.HasAutoNumberTarget;
         bool hasExplicitAutoNumber = top.ConsumedAutoNumbers?.Values.Any(m => m.Explicit || m.Reseed) == true;
         bool hasGeneratedAutoNumber = top.HasGeneratedAutoNumber;
@@ -2538,6 +2594,10 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             }
             files.Add(physical.File);
             tookPage |= AllocatesGlobalMapPage(physical);
+            if (physical.ConsumedReservedPages.Count > 0)
+            {
+                consumedReserved = true;
+            }
             if (physical.AllocatedGlobalMapPages.Count > 0)
             {
                 tookPage = true;
@@ -2569,6 +2629,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         PageCache? file = files.Count == 1 ? files.First() : null;
         string? unrecorded = file is null ? $"{files.Count} files" : null;
         unrecorded ??= nonUnitIncrement ? "a non-1 AutoNumber increment" : null;
+        unrecorded ??= consumedReserved ? "consuming a session reserved extent page in a rolled-back statement" : null;
         bool inExplicitTxn = _frames.Count > 0;
         bool isAccdbOrHeaderless = file is not null && AccdbHeader(file) is not false;
         bool isJet4Mdb = file is not null && Jet4MdbHeader(file);
@@ -3131,6 +3192,40 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                 {
                     return new AcceptOutcome(false, null, MutationOpen.Publication, "allocating a page while a session page-1 extent reservation is pending is not recorded (R-CRASH-1 extent reservation Open)");
                 }
+                if (physical.ConsumedReservedPages.Count > 0)
+                {
+                    if (InExplicitTransaction)
+                    {
+                        return new AcceptOutcome(false, null, MutationOpen.Publication, "consuming pages from a session page-1 extent reservation inside BeginTrans is not recorded (r-q42-field-rule-and)");
+                    }
+                    if (!InStatement)
+                    {
+                        return new AcceptOutcome(false, null, MutationOpen.Publication, "consuming pages from a session page-1 extent reservation outside a SQL statement (recordset AddNew/Update) is not recorded (r-q42-field-rule-and)");
+                    }
+                    int priorInBatch = 0;
+                    if (op.DeferredSingle?.Physical is { } dp && ReferenceEquals(dp.File, physical.File))
+                    {
+                        priorInBatch += dp.ConsumedReservedPages.Count;
+                    }
+                    if (op.PromotedSingle?.Physical is { } pp && ReferenceEquals(pp.File, physical.File))
+                    {
+                        priorInBatch += pp.ConsumedReservedPages.Count;
+                    }
+                    if (accepted is not null)
+                    {
+                        for (int ai = 0; ai < accepted.Count; ai++)
+                        {
+                            if (accepted[ai].Physical is { } ap && ReferenceEquals(ap.File, physical.File))
+                            {
+                                priorInBatch += ap.ConsumedReservedPages.Count;
+                            }
+                        }
+                    }
+                    if (ValidateConsumedReservedPages(physical.File, physical.ConsumedReservedPages, priorInBatch) is { } reserveError)
+                    {
+                        return new AcceptOutcome(false, null, MutationOpen.Publication, reserveError);
+                    }
+                }
                 if (_deferredCatalogCommit.TryGetValue(physical.File, out DeferredCatalogCommit? pendingDeferred))
                 {
                     return new AcceptOutcome(false, null, MutationOpen.Publication, PendingDeferredCommitDetail(pendingDeferred, "a data write"));
@@ -3353,19 +3448,10 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             }
             if (physical.ConsumedReservedPages.Count > 0)
             {
-                if (!_sessionReservedExtent.TryGetValue(file, out List<uint>? available)
-                    || physical.ConsumedReservedPages.Count > available.Count)
+                if (ValidateConsumedReservedPages(file, physical.ConsumedReservedPages) is { } reserveError)
                 {
                     op.Abandon();
-                    return new AcceptOutcome(false, null, MutationOpen.Publication, "consuming pages from a session page-1 extent reservation that is not active or has fewer pages remaining is not recorded (r-q37-valrule-put)");
-                }
-                for (int ci = 0; ci < physical.ConsumedReservedPages.Count; ci++)
-                {
-                    if (available[ci] != physical.ConsumedReservedPages[ci])
-                    {
-                        op.Abandon();
-                        return new AcceptOutcome(false, null, MutationOpen.Publication, $"consumed reserved page {physical.ConsumedReservedPages[ci]} does not match the session's next reserved page {available[ci]} (r-q37-valrule-put)");
-                    }
+                    return new AcceptOutcome(false, null, MutationOpen.Publication, reserveError);
                 }
             }
         }

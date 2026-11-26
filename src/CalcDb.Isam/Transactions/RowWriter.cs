@@ -836,7 +836,8 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         bool reseedAutoNumber = false,
         PageAllocator? externalAllocator = null,
         bool deferTableDefCountUpdate = false,
-        bool allowInlineOleOnMdb = false)
+        bool allowInlineOleOnMdb = false,
+        IReadOnlyList<uint>? sessionReservedPages = null)
     {
         if (_pageCount == 0)
         {
@@ -922,8 +923,10 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         }
         // A long value's LVAL pages are taken before the row's page (evidence/r-q17-growth/lval-memo: LVAL page 45, then
         // data page 46; evidence/r-q22-lv-open/lv-inline-tight-3960: spilled LVAL page 45, then data page 46), from the
-        // one allocator of the insert (or the caller's shared allocator for multi-row catalog writes).
-        PageAllocator allocator = externalAllocator ?? new PageAllocator(_cache, _d, ExtentOf(seen));
+        // one allocator of the insert (or the caller's shared allocator for multi-row catalog writes). When the session
+        // holds an active page-1 extent reservation (evidence/r-q42-field-rule-and/rule-*, multirow-*), PlaceRow /
+        // NewLvalPage consume contiguous pages from sessionReservedPages without re-editing page 1.
+        PageAllocator allocator = externalAllocator ?? new PageAllocator(_cache, _d, ExtentOf(seen), sessionReservedPages);
         List<PageEdit> edits = [];
         for (int lvIndex = 0; lvIndex < longValues.Count; lvIndex++)
         {
@@ -1047,6 +1050,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         {
             AllocatedGlobalMapPages = externalAllocator is null && allocator.AllocatedCount > 0 ? [.. allocator.AllocatedPages] : [],
             BaseExtentPages = externalAllocator is null && allocator.AllocatedCount > 0 ? Math.Max(_pageCount, _cache.KnownExtentPages) : 0,
+            ConsumedReservedPages = externalAllocator is null && allocator.ConsumedReservedPages.Count > 0 ? [.. allocator.ConsumedReservedPages] : [],
         }, null);
     }
 
