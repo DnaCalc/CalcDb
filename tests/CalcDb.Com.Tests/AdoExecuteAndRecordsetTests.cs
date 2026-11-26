@@ -1719,4 +1719,57 @@ public sealed unsafe class AdoExecuteAndRecordsetTests
             throw new Xunit.Sdk.XunitException(failure.ToString());
         }
     }
+
+    [Fact]
+    public void AdoSqlErrors_TryMap_maps_3001_CreateTable_and_3464_ad_hoc_select_and_refuses_neighbours()
+    {
+        // r-q44-ddl-alter-types/ext-bigint-mdb-ado #14, ext-datetime2-mdb-ado #14:
+        // ad-hoc Connection.Execute CREATE TABLE failing 3001 (MDB BIGINT/DATETIME2) maps to 0x80004005, 5003001, IID_ICommand;
+        // SQLState/NativeError stay null (NotModelled.AdoErrorDetail on read).
+        var f3001 = new CalcDb.Sql.SqlFailure(CalcDb.Sql.SqlPhase.Execute, 3001, "Invalid argument.");
+        CalcDb.Com.Ado.MappedProviderError? mapped3001 = CalcDb.Com.Ado.AdoSqlErrors.TryMap(
+            f3001,
+            isSavedQuery: false,
+            out Failure? unmodelled3001,
+            sql: "CREATE TABLE T (ID INTEGER, B BIGINT)",
+            isConnectionExecuteAction: true);
+        Assert.NotNull(mapped3001);
+        Assert.Null(unmodelled3001);
+        Assert.Equal(unchecked((int)0x80004005), mapped3001!.Value.ComFailure.Scode);
+        Assert.Equal(5003001, mapped3001.Value.ComFailure.HelpContext);
+        Assert.Equal(IidCommand, mapped3001.Value.ComFailure.ErrorInfoIid);
+        Assert.Null(mapped3001.Value.ErrorEntry.SqlState);
+        Assert.Null(mapped3001.Value.ErrorEntry.NativeError);
+
+        // Non-CREATE TABLE 3001 and non-Connection.Execute 3001 stay refused by name.
+        Assert.Null(CalcDb.Com.Ado.AdoSqlErrors.TryMap(f3001, isSavedQuery: false, out Failure? unmAlter, sql: "ALTER TABLE T ADD COLUMN B BIGINT", isConnectionExecuteAction: true));
+        Assert.Equal(FailureKind.NotModelled, unmAlter?.Kind);
+        Assert.Contains("NotModelled.AdoProviderError", unmAlter!.Description);
+        Assert.Null(CalcDb.Com.Ado.AdoSqlErrors.TryMap(f3001, isSavedQuery: false, out Failure? unmCmd, sql: "CREATE TABLE T (ID INTEGER, B BIGINT)", isConnectionExecuteAction: false));
+        Assert.Equal(FailureKind.NotModelled, unmCmd?.Kind);
+        Assert.Contains("NotModelled.AdoProviderError", unmCmd!.Description);
+        Assert.Null(CalcDb.Com.Ado.AdoSqlErrors.TryMap(f3001, isSavedQuery: true, out Failure? unmSaved, sql: "CREATE TABLE T (ID INTEGER, B BIGINT)", isConnectionExecuteAction: true));
+        Assert.Equal(FailureKind.NotModelled, unmSaved?.Kind);
+        Assert.Contains("NotModelled.AdoProviderError", unmSaved!.Description);
+
+        // r-q47-bigint-expr-edges/meta-dollar-str-dao-ado-accdb, meta-fmt-date-strconv-dao-ado-accdb:
+        // ad-hoc SELECT failing 3464 maps to 0x80040E07, 5003071, IID_ICommand (SQLState/NativeError unobserved -> null).
+        var f3464 = new CalcDb.Sql.SqlFailure(CalcDb.Sql.SqlPhase.Open, 3464, "Data type mismatch in criteria expression.");
+        CalcDb.Com.Ado.MappedProviderError? mapped3464 = CalcDb.Com.Ado.AdoSqlErrors.TryMap(f3464, isSavedQuery: false, out Failure? unmodelled3464, isSelect: true);
+        Assert.NotNull(mapped3464);
+        Assert.Null(unmodelled3464);
+        Assert.Equal(unchecked((int)0x80040E07), mapped3464!.Value.ComFailure.Scode);
+        Assert.Equal(5003071, mapped3464.Value.ComFailure.HelpContext);
+        Assert.Equal(IidCommand, mapped3464.Value.ComFailure.ErrorInfoIid);
+        Assert.Null(mapped3464.Value.ErrorEntry.SqlState);
+        Assert.Null(mapped3464.Value.ErrorEntry.NativeError);
+
+        // Saved-query 3464 and non-SELECT Command.Execute 3464 remain refused by name.
+        Assert.Null(CalcDb.Com.Ado.AdoSqlErrors.TryMap(f3464, isSavedQuery: true, out Failure? unmSaved3464, isSelect: true));
+        Assert.Equal(FailureKind.NotModelled, unmSaved3464?.Kind);
+        Assert.Contains("NotModelled.AdoProviderError", unmSaved3464!.Description);
+        Assert.Null(CalcDb.Com.Ado.AdoSqlErrors.TryMap(f3464, isSavedQuery: false, out Failure? unmCmd3464, isConnectionExecuteAction: false, isSelect: false));
+        Assert.Equal(FailureKind.NotModelled, unmCmd3464?.Kind);
+        Assert.Contains("NotModelled.AdoProviderError", unmCmd3464!.Description);
+    }
 }

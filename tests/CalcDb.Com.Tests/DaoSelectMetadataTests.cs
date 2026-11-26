@@ -326,8 +326,9 @@ public sealed unsafe class DaoSelectMetadataTests : IDisposable
         // Base column on a writable snapshot: DataUpdatable and Attributes are not recorded
         // (NotModelled.FieldDataUpdatable.ReadOnlyCursor), Properties refuses snapshot (NotModelled.FieldProperties.CursorType);
         // typed expressions on the same snapshot report DataUpdatable False and Attributes 1 (r-fix-cursor-dao/field-metadata-rw),
-        // while a bare literal whose static type Sql leaves open refuses Size and Attributes with NotModelled.ExpressionFieldType.
-        SelectRecordsetObject snap = Recover<SelectRecordsetObject>(Ok(Method(db, "OpenRecordset", "SELECT ID, N + 1 AS A1, CInt(1) AS A5, 7 AS Lit FROM T WHERE ID = 1", 4)));
+        // while an unrecorded expression whose static type Sql leaves open (all-Null IIf; bare literal 7 is now statically
+        // typed per r-wire/expr-literal-tags) refuses Size and Attributes with NotModelled.ExpressionFieldType.
+        SelectRecordsetObject snap = Recover<SelectRecordsetObject>(Ok(Method(db, "OpenRecordset", "SELECT ID, N + 1 AS A1, CInt(1) AS A5, IIf(True, Null, Null) AS Unrec FROM T WHERE ID = 1", 4)));
         Assert.False(BoolValue(Ok(Get(snap, "Updatable"))));
         SelectFieldsObject snapFields = Object<SelectFieldsObject>(snap, "Fields");
         SelectFieldObject snapId = Object<SelectFieldObject>(snapFields, "Item", 0);

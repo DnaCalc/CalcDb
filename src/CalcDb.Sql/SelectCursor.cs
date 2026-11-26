@@ -472,8 +472,31 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                 return false;
             }
         }
+        else if (col.Origin == ColumnOrigin.Parameter && TryProjectParameterValue(program.Value, _types[column], out NativeVariant paramProjected))
+        {
+            SelectValues.Clear(ref _projected[column]);
+            _projected[column] = paramProjected;
+            value = _projected[column];
+            return true;
+        }
         value = program.Value;
         return true;
+    }
+
+    /// <summary>
+    /// Converts a non-Null bare parameter value to its DAO Field.Value representation where it differs from
+    /// Parameter.Value (r-sql-13b/params-values-other #22..#118: a Bit parameter holds VT_I2 on Parameter.Value and
+    /// projects VT_BOOL -1/0 on Field.Value, preserving VT_NULL).
+    /// </summary>
+    private static bool TryProjectParameterValue(in NativeVariant source, int? fieldType, out NativeVariant converted)
+    {
+        if (fieldType == 1 && source.Vt == (ushort)VarType.I2)
+        {
+            converted = new NativeVariant { Vt = (ushort)VarType.Bool, Int64 = (short)source.Int64 != 0 ? -1 : 0 };
+            return true;
+        }
+        converted = default;
+        return false;
     }
 
     /// <summary>
@@ -866,6 +889,11 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                     return false;
                 }
             }
+            else if (col.Origin == ColumnOrigin.Parameter && TryProjectParameterValue(col.Program.Value, _types[column], out NativeVariant paramProjected))
+            {
+                owned = paramProjected;
+                return true;
+            }
             owned = Copy(col.Program.Value);
             return true;
         }
@@ -930,6 +958,10 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                     {
                         _constants[i] = Copy(c.Program.Value);
                     }
+                }
+                else if (c.Origin == ColumnOrigin.Parameter && TryProjectParameterValue(c.Program.Value, _types[i], out NativeVariant paramProjected))
+                {
+                    _constants[i] = paramProjected;
                 }
                 else
                 {
@@ -1596,11 +1628,21 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
             {
                 return At(first);
             }
+            SyntaxNode root = c.Root!;
+            if (root is { Kind: SyntaxKind.Call, Text: { } callName }
+                && callName.Equals("DateDiff", StringComparison.OrdinalIgnoreCase)
+                && first.Site == root.Offset)
+            {
+                // r-expr-1b/date-datediff-boundaries (#335/#342, #349/#356): DateDiff's own result overflow
+                // (DateDiff('s', #1900-01-01#, #2024-03-05#)) opens with Field.Type = 4 (Long) and fails 6 at Field.Value read;
+                // argument overflows keep the normal open-time failure.
+                read = SqlFailure.Ace(SqlPhase.Read, AceError.Overflow, AceError.Describe(AceError.Overflow));
+                return null;
+            }
             if (!c.Program.Evaluate(this, plan.Context.Folding))
             {
                 return At(c.Program.LastFailure!);
             }
-            SyntaxNode root = c.Root!;
             if (root.Kind == SyntaxKind.Call)
             {
                 return null;

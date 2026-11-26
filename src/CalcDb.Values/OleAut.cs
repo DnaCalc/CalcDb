@@ -27,6 +27,28 @@ public struct SafeArrayBound
     public int Lower;
 }
 
+/// <summary>Win32 SYSTEMTIME layout for oleaut32 VarUdateFromDate/VarDateFromUdate.</summary>
+[StructLayout(LayoutKind.Sequential)]
+public struct OleSystemTime
+{
+    public ushort Year;
+    public ushort Month;
+    public ushort DayOfWeek;
+    public ushort Day;
+    public ushort Hour;
+    public ushort Minute;
+    public ushort Second;
+    public ushort Milliseconds;
+}
+
+/// <summary>Win32 UDATE layout for oleaut32 VarUdateFromDate/VarDateFromUdate.</summary>
+[StructLayout(LayoutKind.Sequential)]
+public struct OleUDate
+{
+    public OleSystemTime St;
+    public ushort DayOfYear;
+}
+
 /// <summary>Which implementation of the oleaut32 interface this process is bound to.</summary>
 internal enum OleAutBinding
 {
@@ -87,7 +109,22 @@ internal unsafe struct OleAutTable
     public delegate* unmanaged<uint, nint, int> SetErrorInfo;
     public delegate* unmanaged<int, char*, nint*, int> CreateTypeLib2;
     public delegate* unmanaged<char*, int, nint*, int> LoadTypeLibEx;
+    public delegate* unmanaged<NativeVariant*, char*, int, int, uint, nint*, int> VarFormat;
+    public delegate* unmanaged<NativeVariant*, int, int, int, int, uint, nint*, int> VarFormatNumber;
+    public delegate* unmanaged<NativeVariant*, int, int, int, int, uint, nint*, int> VarFormatCurrency;
+    public delegate* unmanaged<NativeVariant*, int, int, int, int, uint, nint*, int> VarFormatPercent;
+    public delegate* unmanaged<NativeVariant*, int, uint, nint*, int> VarFormatDateTime;
+    public delegate* unmanaged<int, int, int, uint, nint*, int> VarWeekdayName;
+    public delegate* unmanaged<int, int, uint, nint*, int> VarMonthName;
+    public delegate* unmanaged<double, uint, OleUDate*, int> VarUdateFromDate;
+    public delegate* unmanaged<OleUDate*, uint, double*, int> VarDateFromUdate;
+    public delegate* unmanaged<char*, uint, uint, double*, int> VarDateFromStr;
     public delegate* unmanaged<uint> GetUserDefaultLCID;
+    public delegate* unmanaged<uint, uint, char*, int, int> GetLocaleInfoW;
+    public delegate* unmanaged<uint, uint, int> IsValidLocale;
+    public delegate* unmanaged<uint, uint, byte*, int, byte*, int, int> LCMapStringA;
+    public delegate* unmanaged<uint, uint, char*, int, byte*, int, byte*, int*, int> WideCharToMultiByte;
+    public delegate* unmanaged<uint, uint, byte*, int, char*, int, int> MultiByteToWideChar;
 
     /// <summary>The platform oleaut32 (and kernel32 GetUserDefaultLCID) exports, or false when this process cannot load them.</summary>
     public static bool TryPlatform(out OleAutTable table)
@@ -140,7 +177,23 @@ internal unsafe struct OleAutTable
         table.SetErrorInfo = (delegate* unmanaged<uint, nint, int>)E("SetErrorInfo");
         table.CreateTypeLib2 = (delegate* unmanaged<int, char*, nint*, int>)E("CreateTypeLib2");
         table.LoadTypeLibEx = (delegate* unmanaged<char*, int, nint*, int>)E("LoadTypeLibEx");
-        table.GetUserDefaultLCID = (delegate* unmanaged<uint>)NativeLibrary.GetExport(kernel32, "GetUserDefaultLCID");
+        table.VarFormat = (delegate* unmanaged<NativeVariant*, char*, int, int, uint, nint*, int>)E("VarFormat");
+        table.VarFormatNumber = (delegate* unmanaged<NativeVariant*, int, int, int, int, uint, nint*, int>)E("VarFormatNumber");
+        table.VarFormatCurrency = (delegate* unmanaged<NativeVariant*, int, int, int, int, uint, nint*, int>)E("VarFormatCurrency");
+        table.VarFormatPercent = (delegate* unmanaged<NativeVariant*, int, int, int, int, uint, nint*, int>)E("VarFormatPercent");
+        table.VarFormatDateTime = (delegate* unmanaged<NativeVariant*, int, uint, nint*, int>)E("VarFormatDateTime");
+        table.VarWeekdayName = (delegate* unmanaged<int, int, int, uint, nint*, int>)E("VarWeekdayName");
+        table.VarMonthName = (delegate* unmanaged<int, int, uint, nint*, int>)E("VarMonthName");
+        table.VarUdateFromDate = (delegate* unmanaged<double, uint, OleUDate*, int>)E("VarUdateFromDate");
+        table.VarDateFromUdate = (delegate* unmanaged<OleUDate*, uint, double*, int>)E("VarDateFromUdate");
+        table.VarDateFromStr = (delegate* unmanaged<char*, uint, uint, double*, int>)E("VarDateFromStr");
+        nint K(string name) => NativeLibrary.GetExport(kernel32, name);
+        table.GetUserDefaultLCID = (delegate* unmanaged<uint>)K("GetUserDefaultLCID");
+        table.GetLocaleInfoW = (delegate* unmanaged<uint, uint, char*, int, int>)K("GetLocaleInfoW");
+        table.IsValidLocale = (delegate* unmanaged<uint, uint, int>)K("IsValidLocale");
+        table.LCMapStringA = (delegate* unmanaged<uint, uint, byte*, int, byte*, int, int>)K("LCMapStringA");
+        table.WideCharToMultiByte = (delegate* unmanaged<uint, uint, char*, int, byte*, int, byte*, int*, int>)K("WideCharToMultiByte");
+        table.MultiByteToWideChar = (delegate* unmanaged<uint, uint, byte*, int, char*, int, int>)K("MultiByteToWideChar");
         return true;
     }
 }
@@ -334,6 +387,101 @@ internal static unsafe class OleAut
 
     /// <summary>kernel32!GetUserDefaultLCID: the session LCID under which ACE converts text (II-10 §14, R-EXPR-1 EXPR-LOCALE); 0 off Windows.</summary>
     public static uint GetUserDefaultLCID() => T.GetUserDefaultLCID();
+
+    public static int VarFormat(NativeVariant* input, char* format, int firstDay, int firstWeek, uint flags, out nint bstr)
+    {
+        nint value = 0;
+        int hr = T.VarFormat(input, format, firstDay, firstWeek, flags, &value);
+        bstr = value;
+        return hr;
+    }
+
+    public static int VarFormatNumber(NativeVariant* input, int numDig, int incLead, int useParens, int group, uint flags, out nint bstr)
+    {
+        nint value = 0;
+        int hr = T.VarFormatNumber(input, numDig, incLead, useParens, group, flags, &value);
+        bstr = value;
+        return hr;
+    }
+
+    public static int VarFormatCurrency(NativeVariant* input, int numDig, int incLead, int useParens, int group, uint flags, out nint bstr)
+    {
+        nint value = 0;
+        int hr = T.VarFormatCurrency(input, numDig, incLead, useParens, group, flags, &value);
+        bstr = value;
+        return hr;
+    }
+
+    public static int VarFormatPercent(NativeVariant* input, int numDig, int incLead, int useParens, int group, uint flags, out nint bstr)
+    {
+        nint value = 0;
+        int hr = T.VarFormatPercent(input, numDig, incLead, useParens, group, flags, &value);
+        bstr = value;
+        return hr;
+    }
+
+    public static int VarFormatDateTime(NativeVariant* input, int namedFormat, uint flags, out nint bstr)
+    {
+        nint value = 0;
+        int hr = T.VarFormatDateTime(input, namedFormat, flags, &value);
+        bstr = value;
+        return hr;
+    }
+
+    public static int VarWeekdayName(int weekday, int abbrev, int firstDay, uint flags, out nint bstr)
+    {
+        nint value = 0;
+        int hr = T.VarWeekdayName(weekday, abbrev, firstDay, flags, &value);
+        bstr = value;
+        return hr;
+    }
+
+    public static int VarMonthName(int month, int abbrev, uint flags, out nint bstr)
+    {
+        nint value = 0;
+        int hr = T.VarMonthName(month, abbrev, flags, &value);
+        bstr = value;
+        return hr;
+    }
+
+    public static int VarUdateFromDate(double dateIn, uint flags, out OleUDate udate)
+    {
+        OleUDate value;
+        int hr = T.VarUdateFromDate(dateIn, flags, &value);
+        udate = value;
+        return hr;
+    }
+
+    public static int VarDateFromUdate(in OleUDate udate, uint flags, out double dateOut)
+    {
+        OleUDate copy = udate;
+        double value;
+        int hr = T.VarDateFromUdate(&copy, flags, &value);
+        dateOut = value;
+        return hr;
+    }
+
+    public static int VarDateFromStr(char* strIn, uint lcid, uint flags, out double dateOut)
+    {
+        double value;
+        int hr = T.VarDateFromStr(strIn, lcid, flags, &value);
+        dateOut = value;
+        return hr;
+    }
+
+    public static int GetLocaleInfoW(uint locale, uint lcType, char* data, int cchData) =>
+        T.GetLocaleInfoW(locale, lcType, data, cchData);
+
+    public static bool IsValidLocale(uint locale, uint flags) => T.IsValidLocale(locale, flags) != 0;
+
+    public static int LCMapStringA(uint locale, uint mapFlags, byte* src, int cchSrc, byte* dest, int cchDest) =>
+        T.LCMapStringA(locale, mapFlags, src, cchSrc, dest, cchDest);
+
+    public static int WideCharToMultiByte(uint codePage, uint flags, char* wide, int cchWide, byte* multiByte, int cbMultiByte) =>
+        T.WideCharToMultiByte(codePage, flags, wide, cchWide, multiByte, cbMultiByte, null, null);
+
+    public static int MultiByteToWideChar(uint codePage, uint flags, byte* multiByte, int cbMultiByte, char* wide, int cchWide) =>
+        T.MultiByteToWideChar(codePage, flags, multiByte, cbMultiByte, wide, cchWide);
 
     /// <summary>IUnknown::AddRef through the reference's own vtable (a foreign call).</summary>
     public static uint AddRef(nint unknown) => ((delegate* unmanaged<nint, uint>)(*(nint**)unknown)[1])(unknown);

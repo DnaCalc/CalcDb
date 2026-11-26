@@ -69,7 +69,22 @@ internal static unsafe class StandIns
         SetErrorInfo = &SetErrorInfo,
         CreateTypeLib2 = &CreateTypeLib2,
         LoadTypeLibEx = &LoadTypeLibEx,
+        VarFormat = &VarFormat,
+        VarFormatNumber = &VarFormatNum,
+        VarFormatCurrency = &VarFormatNum,
+        VarFormatPercent = &VarFormatNum,
+        VarFormatDateTime = &VarFormatDateTime,
+        VarWeekdayName = &VarWeekdayName,
+        VarMonthName = &VarMonthName,
+        VarUdateFromDate = &VarUdateFromDate,
+        VarDateFromUdate = &VarDateFromUdate,
+        VarDateFromStr = &VarDateFromStr,
         GetUserDefaultLCID = &GetUserDefaultLCID,
+        GetLocaleInfoW = &GetLocaleInfoW,
+        IsValidLocale = &IsValidLocale,
+        LCMapStringA = &LCMapStringA,
+        WideCharToMultiByte = &WideCharToMultiByte,
+        MultiByteToWideChar = &MultiByteToWideChar,
     };
 
     // ---- BSTR -----------------------------------------------------------------------------------------------------------
@@ -879,6 +894,77 @@ internal static unsafe class StandIns
     /// <summary>No Windows user-default LCID off Windows; portable hosts pass their session LCID as a value.</summary>
     [UnmanagedCallersOnly]
     private static uint GetUserDefaultLCID() => 0;
+
+    [UnmanagedCallersOnly]
+    private static int VarFormat(NativeVariant* input, char* format, int firstDay, int firstWeek, uint flags, nint* bstr)
+    {
+        *bstr = 0;
+        return OleAut.NotAvailableOnPlatform;
+    }
+
+    [UnmanagedCallersOnly]
+    private static int VarFormatNum(NativeVariant* input, int numDig, int incLead, int useParens, int group, uint flags, nint* bstr)
+    {
+        *bstr = 0;
+        return OleAut.NotAvailableOnPlatform;
+    }
+
+    [UnmanagedCallersOnly]
+    private static int VarFormatDateTime(NativeVariant* input, int namedFormat, uint flags, nint* bstr)
+    {
+        *bstr = 0;
+        return OleAut.NotAvailableOnPlatform;
+    }
+
+    [UnmanagedCallersOnly]
+    private static int VarWeekdayName(int weekday, int abbrev, int firstDay, uint flags, nint* bstr)
+    {
+        *bstr = 0;
+        return OleAut.NotAvailableOnPlatform;
+    }
+
+    [UnmanagedCallersOnly]
+    private static int VarMonthName(int month, int abbrev, uint flags, nint* bstr)
+    {
+        *bstr = 0;
+        return OleAut.NotAvailableOnPlatform;
+    }
+
+    [UnmanagedCallersOnly]
+    private static int VarUdateFromDate(double dateIn, uint flags, OleUDate* udateOut)
+    {
+        *udateOut = default;
+        return OleAut.NotAvailableOnPlatform;
+    }
+
+    [UnmanagedCallersOnly]
+    private static int VarDateFromUdate(OleUDate* udateIn, uint flags, double* dateOut)
+    {
+        *dateOut = 0;
+        return OleAut.NotAvailableOnPlatform;
+    }
+
+    [UnmanagedCallersOnly]
+    private static int VarDateFromStr(char* strIn, uint lcid, uint flags, double* dateOut)
+    {
+        *dateOut = 0;
+        return OleAut.NotAvailableOnPlatform;
+    }
+
+    [UnmanagedCallersOnly]
+    private static int GetLocaleInfoW(uint locale, uint lcType, char* data, int cchData) => 0;
+
+    [UnmanagedCallersOnly]
+    private static int IsValidLocale(uint locale, uint flags) => 0;
+
+    [UnmanagedCallersOnly]
+    private static int LCMapStringA(uint locale, uint mapFlags, byte* src, int cchSrc, byte* dest, int cchDest) => 0;
+
+    [UnmanagedCallersOnly]
+    private static int WideCharToMultiByte(uint codePage, uint flags, char* wide, int cchWide, byte* multiByte, int cbMultiByte, byte* defaultChar, int* usedDefaultChar) => 0;
+
+    [UnmanagedCallersOnly]
+    private static int MultiByteToWideChar(uint codePage, uint flags, byte* multiByte, int cbMultiByte, char* wide, int cchWide) => 0;
 
     /// <summary>The element size of a SAFEARRAY or VARIANT arm of this type, 0 for a type that has none here.</summary>
     private static int ElementSize(VarType vt) => vt switch

@@ -100,6 +100,7 @@ internal sealed unsafe class SelectRowSource : IAdoRowSource
     private readonly string[] _heldTables;
     private readonly AdoSelectContext _context;
     private readonly AdoSelectShape _shape;
+    private readonly bool _isSavedQuery;
     private int _cursorIndex;
     private int _knownCount;
 
@@ -110,7 +111,8 @@ internal sealed unsafe class SelectRowSource : IAdoRowSource
         string[] heldTables,
         int knownCount,
         AdoSelectContext context,
-        AdoSelectShape shape)
+        AdoSelectShape shape,
+        bool isSavedQuery)
     {
         _plan = plan;
         _cursor = cursor;
@@ -118,6 +120,7 @@ internal sealed unsafe class SelectRowSource : IAdoRowSource
         _heldTables = heldTables;
         _context = context;
         _shape = shape;
+        _isSavedQuery = isSavedQuery;
         _knownCount = knownCount;
         _cursorIndex = cursor.Eof ? -1 : 0;
     }
@@ -139,7 +142,7 @@ internal sealed unsafe class SelectRowSource : IAdoRowSource
         BoundSelect? plan = BoundSelect.Prepare(sql, session.Sql, out SqlFailure? failure);
         if (plan is null)
         {
-            providerError = AdoSqlErrors.TryMap(failure!, isSavedQuery, out refusal);
+            providerError = AdoSqlErrors.TryMap(failure!, isSavedQuery, out refusal, isSelect: true);
             return null;
         }
         // Snapshot ResultKind allows MoveFirst even on ForwardOnly ADO cursors (r-oledb-odbc/fetch-moves #37).
@@ -147,7 +150,7 @@ internal sealed unsafe class SelectRowSource : IAdoRowSource
         if (cursor is null)
         {
             plan.Dispose();
-            providerError = AdoSqlErrors.TryMap(failure!, isSavedQuery, out refusal);
+            providerError = AdoSqlErrors.TryMap(failure!, isSavedQuery, out refusal, isSelect: true);
             return null;
         }
 
@@ -180,7 +183,7 @@ internal sealed unsafe class SelectRowSource : IAdoRowSource
 
         string[] heldTables = [.. plan.Sources.Where(s => s.TableName.Length > 0).Select(s => s.TableName).Distinct(StringComparer.OrdinalIgnoreCase)];
         int knownCount = cursor.Eof ? 0 : -1;
-        return new SelectRowSource(plan, cursor, columns, heldTables, knownCount, context, shape);
+        return new SelectRowSource(plan, cursor, columns, heldTables, knownCount, context, shape, isSavedQuery);
     }
 
     internal static AdoSelectShape ClassifySelectShape(BoundSelect plan, SelectSyntax? syntax)
@@ -387,7 +390,7 @@ internal sealed unsafe class SelectRowSource : IAdoRowSource
         }
         if (_cursor.FetchFailure is { } fetch)
         {
-            MappedProviderError? mapped = AdoSqlErrors.TryMap(fetch, false, out Failure? unmodelled);
+            MappedProviderError? mapped = AdoSqlErrors.TryMap(fetch, _isSavedQuery, out Failure? unmodelled, isSelect: true);
             LastSeekProviderError = mapped;
             failure = mapped?.ComFailure ?? unmodelled;
             return false;
@@ -473,7 +476,13 @@ internal sealed unsafe class SelectRowSource : IAdoRowSource
                 failure = Failure.NotModelled(sqlFail.NotModelled!, sqlFail.Message);
                 return null;
             }
-            MappedProviderError? mapped = AdoSqlErrors.TryMap(sqlFail, false, out Failure? unmodelled);
+            // r-q47-bigint-expr-edges/meta-dollar-str-dao-ado-accdb (#340: SELECT Left$(Mm, 5) AS v FROM Lg WHERE ID = 2
+            // where Mm is Null): row-level expression 3464 on ad-hoc SELECT returns VT_EMPTY on ADO Field.Value (DAO Field.Value fails 3464).
+            if (!_isSavedQuery && !desc.IsBaseTableColumn && sqlFail.Number == 3464)
+            {
+                return OwnedVariant.Empty();
+            }
+            MappedProviderError? mapped = AdoSqlErrors.TryMap(sqlFail, _isSavedQuery, out Failure? unmodelled, isSelect: true);
             failure = mapped?.ComFailure ?? unmodelled;
             return null;
         }

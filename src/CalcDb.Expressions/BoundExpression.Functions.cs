@@ -127,6 +127,90 @@ public sealed unsafe partial class BoundExpression
             case ExprFunction.StrReverse:
                 result = StrReverse(ref sp, ins);
                 return true;
+            case ExprFunction.Format:
+                result = EvalFormat(ref sp, ins, dollar: false);
+                return true;
+            case ExprFunction.FormatDollar:
+                result = EvalFormat(ref sp, ins, dollar: true);
+                return true;
+            case ExprFunction.FormatNumber:
+            case ExprFunction.FormatCurrency:
+            case ExprFunction.FormatPercent:
+                result = EvalFormatNumeric(ref sp, ins);
+                return true;
+            case ExprFunction.FormatDateTime:
+                result = EvalFormatDateTime(ref sp, ins);
+                return true;
+            case ExprFunction.DateAdd:
+                result = EvalDateAdd(ref sp, ins);
+                return true;
+            case ExprFunction.DateDiff:
+                result = EvalDateDiff(ref sp, ins);
+                return true;
+            case ExprFunction.DatePart:
+                result = EvalDatePart(ref sp, ins);
+                return true;
+            case ExprFunction.Weekday:
+                result = EvalWeekday(ref sp, ins);
+                return true;
+            case ExprFunction.WeekdayName:
+                result = EvalWeekdayName(ref sp, ins);
+                return true;
+            case ExprFunction.MonthName:
+                result = EvalMonthName(ref sp, ins);
+                return true;
+            case ExprFunction.Year:
+            case ExprFunction.Month:
+            case ExprFunction.Day:
+            case ExprFunction.Hour:
+            case ExprFunction.Minute:
+            case ExprFunction.Second:
+                result = EvalDateComponent(ref sp, ins);
+                return true;
+            case ExprFunction.DateValue:
+                result = EvalDateOrTimeValue(ref sp, ins, timeOnly: false);
+                return true;
+            case ExprFunction.TimeValue:
+                result = EvalDateOrTimeValue(ref sp, ins, timeOnly: true);
+                return true;
+            case ExprFunction.TimeSerial:
+                result = EvalTimeSerial(ref sp, ins);
+                return true;
+            case ExprFunction.Rnd:
+                result = EvalRnd(ref sp, ins);
+                return true;
+            case ExprFunction.StrConv:
+                result = EvalStrConv(ref sp, ins);
+                return true;
+            case ExprFunction.AscB:
+                result = EvalAscB(ref sp, ins);
+                return true;
+            case ExprFunction.Str:
+                result = EvalStr(ref sp, ins);
+                return true;
+            case ExprFunction.PPmt:
+            case ExprFunction.IPmt:
+            case ExprFunction.Pmt:
+                result = EvalFinancial(ref sp, ins);
+                return true;
+            case ExprFunction.Partition:
+                result = EvalPartition(ref sp, ins);
+                return true;
+            case ExprFunction.RGB:
+                result = EvalRgb(ref sp, ins);
+                return true;
+            case ExprFunction.QBColor:
+                result = EvalQBColor(ref sp, ins);
+                return true;
+            case ExprFunction.IMEStatus:
+                result = ScalarOutcome.Of(new NativeVariant { Vt = (ushort)VarType.I4, Int64 = 0 });
+                return true;
+            case ExprFunction.IsMissing:
+            case ExprFunction.IsObject:
+                booleanTag = true;
+                ReleaseArgs(ref sp, sp - 1);
+                result = ScalarOutcome.Of(new NativeVariant { Vt = (ushort)VarType.I2, Int64 = 0 });
+                return true;
             default:
                 LastFailure = ExpressionFailure.Open(ExpressionPhase.Evaluate, "NotModelled.Function", $"unhandled expression function {ins.Function}");
                 return false;
@@ -350,9 +434,9 @@ public sealed unsafe partial class BoundExpression
             NativeVariant countVal = _stack[first].Value;
             if (countVal.Vt == (ushort)VarType.Null)
             {
-                result = dollar
-                    ? ScalarOutcome.Fail(ScalarFailure.Open(NotModelledCase.NullArgument, site, ScalarOperation.Mid))
-                    : ScalarOutcome.Fail(ScalarFailure.Ace(AceError.TypeMismatch, site, ScalarOperation.Mid));
+                // r-expr-1b/null-propagation-functions (String), r-q47-bigint-expr-edges/meta-dollar-str-dao-ado-accdb (String$):
+                // Null count fails 3464 for both String and String$.
+                result = ScalarOutcome.Fail(ScalarFailure.Ace(AceError.TypeMismatch, site, ScalarOperation.Mid));
                 return true;
             }
             ScalarOutcome countConv = ScalarKernel.Apply(_descriptors[d], countVal, _active);
@@ -535,9 +619,9 @@ public sealed unsafe partial class BoundExpression
             NativeVariant v = _stack[first].Value;
             if (v.Vt == (ushort)VarType.Null)
             {
-                result = dollar
-                    ? ScalarOutcome.Fail(ScalarFailure.Open(NotModelledCase.NullArgument, site, ScalarOperation.Mid))
-                    : ScalarOutcome.Fail(ScalarFailure.Ace(AceError.TypeMismatch, site, ScalarOperation.Mid));
+                // r-expr-1b/null-propagation-functions (Space), r-q47-bigint-expr-edges/meta-dollar-str-dao-ado-accdb (Space$):
+                // Null fails 3464 for both Space and Space$.
+                result = ScalarOutcome.Fail(ScalarFailure.Ace(AceError.TypeMismatch, site, ScalarOperation.Mid));
                 return true;
             }
             ScalarOutcome conv = ScalarKernel.Apply(_descriptors[d], v, _active);
@@ -586,9 +670,15 @@ public sealed unsafe partial class BoundExpression
             NativeVariant v = _stack[first].Value;
             if (v.Vt == (ushort)VarType.Null)
             {
-                return dollar
+                if (!dollar)
+                {
+                    return ScalarOutcome.Of(new NativeVariant { Vt = (ushort)VarType.Null });
+                }
+                // r-q47-bigint-expr-edges/meta-dollar-str-dao-ado-accdb: LTrim$(Null) and RTrim$(Null) fail 3464;
+                // Trim$(Null) has no retained record and stays NotModelledCase.NullArgument.
+                return left && right
                     ? ScalarOutcome.Fail(ScalarFailure.Open(NotModelledCase.NullArgument, site, ScalarOperation.Mid))
-                    : ScalarOutcome.Of(new NativeVariant { Vt = (ushort)VarType.Null });
+                    : ScalarOutcome.Fail(ScalarFailure.Ace(AceError.TypeMismatch, site, ScalarOperation.Mid));
             }
             if (v.Vt != (ushort)VarType.Bstr)
             {
@@ -680,7 +770,8 @@ public sealed unsafe partial class BoundExpression
             NativeVariant v = _stack[first].Value;
             if (v.Vt == (ushort)VarType.Null)
             {
-                return ScalarOutcome.Fail(ScalarFailure.Open(NotModelledCase.NullArgument, site, ScalarOperation.Chr));
+                // r-q47-bigint-expr-edges/meta-dollar-str-dao-ado-accdb: Chr$(Null) fails 3464.
+                return ScalarOutcome.Fail(ScalarFailure.Ace(AceError.TypeMismatch, site, ScalarOperation.Chr));
             }
             ScalarOutcome conv = ScalarKernel.Apply(_descriptors[d], v, _active);
             if (!conv.Succeeded)
@@ -871,7 +962,9 @@ public sealed unsafe partial class BoundExpression
             NativeVariant a = _stack[first].Value;
             if (a.Vt == (ushort)VarType.Null)
             {
-                return ins.Function == ExprFunction.LeftDollar
+                // r-expr-1/inv-string-functions (Left$), r-q47-bigint-expr-edges/meta-dollar-str-dao-ado-accdb (Left$, Right$, Mid$):
+                // Null first argument fails 3464; UCase$(Null) has no retained record and stays NotModelledCase.NullArgument.
+                return ins.Function is ExprFunction.LeftDollar or ExprFunction.RightDollar or ExprFunction.MidDollar
                     ? ScalarOutcome.Fail(ScalarFailure.Ace(AceError.TypeMismatch, _descriptors[d].Site, _descriptors[d].Operation))
                     : ScalarOutcome.Fail(ScalarFailure.Open(NotModelledCase.NullArgument, _descriptors[d].Site, _descriptors[d].Operation));
             }
@@ -963,7 +1056,7 @@ public sealed unsafe partial class BoundExpression
                 }
                 v = conv.Value;
             }
-            int byteLength = checked(Bstrs.Chars(v.Pointer).Length * 2);
+            int byteLength = Bstrs.Bytes(v.Pointer).Length;
             return ScalarOutcome.Of(new NativeVariant { Vt = (ushort)VarType.I4, Int64 = (uint)byteLength });
         }
         finally

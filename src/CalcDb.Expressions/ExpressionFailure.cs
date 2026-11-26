@@ -33,8 +33,8 @@ public sealed record ExpressionFailure(ExpressionPhase Phase, int Number, string
 
     /// <summary>A scalar kernel failure as the expression reports it.</summary>
     public static ExpressionFailure Of(in ScalarFailure failure) => failure.Kind == ScalarFailureKind.NotModelled
-        ? Open(ExpressionPhase.Evaluate, "NotModelled.Scalar." + failure.Case, failure.Describe())
-        : Ace(failure.Phase == ScalarPhase.Bind ? ExpressionPhase.Bind : ExpressionPhase.Evaluate, failure.Number, ExpressionMessages.Kernel(failure.Number));
+        ? Open(ExpressionPhase.Evaluate, "NotModelled.Scalar." + failure.Case, failure.Describe()) with { Site = failure.Site }
+        : Ace(failure.Phase == ScalarPhase.Bind ? ExpressionPhase.Bind : ExpressionPhase.Evaluate, failure.Number, ExpressionMessages.Kernel(failure.Number)) with { Site = failure.Site };
 
     public override string ToString() => IsNotModelled ? $"{NotModelled}: {Message}" : $"{Number}: {Message}";
 }

@@ -1339,6 +1339,10 @@ public sealed unsafe partial class BoundExpression : IDisposable
                     throw Open("NotModelled.DomainFunction", $"{node.Text}: a domain aggregate is a child query (II-10 §27), not built yet");
                 case FunctionAvailability.Domain:
                     throw Fail(3072, ExpressionMessages.FunctionNotAvailable);
+                case FunctionAvailability.NotAvailableInQuery when Query:
+                    throw Fail(3072, ExpressionMessages.FunctionNotAvailable);
+                case FunctionAvailability.NotAvailableInQuery:
+                    throw Open("NotModelled.Function", $"{node.Text}: availability in Find criteria is not recorded");
             }
             ExprFunction fn = FunctionInventory.ResolveExpressionFunction(node.Text!);
             if (fn == ExprFunction.IIf)
@@ -1502,6 +1506,85 @@ public sealed unsafe partial class BoundExpression : IDisposable
                         throw WrongArity(node.Text!, n, node.Offset);
                     }
                     break;
+                case ExprFunction.Format or ExprFunction.FormatDollar:
+                    if (n is < 1 or > 4)
+                    {
+                        throw WrongArity(node.Text!, n, node.Offset);
+                    }
+                    break;
+                case ExprFunction.FormatNumber or ExprFunction.FormatCurrency or ExprFunction.FormatPercent:
+                    if (n is < 1 or > 5)
+                    {
+                        throw WrongArity(node.Text!, n, node.Offset);
+                    }
+                    break;
+                case ExprFunction.FormatDateTime or ExprFunction.Weekday or ExprFunction.MonthName:
+                    if (n is < 1 or > 2)
+                    {
+                        throw WrongArity(node.Text!, n, node.Offset);
+                    }
+                    break;
+                case ExprFunction.WeekdayName:
+                    if (n is < 1 or > 3)
+                    {
+                        throw WrongArity(node.Text!, n, node.Offset);
+                    }
+                    break;
+                case ExprFunction.DateAdd or ExprFunction.TimeSerial or ExprFunction.RGB:
+                    if (n != 3)
+                    {
+                        throw WrongArity(node.Text!, n, node.Offset);
+                    }
+                    break;
+                case ExprFunction.DateDiff:
+                    if (n is < 3 or > 5)
+                    {
+                        throw WrongArity(node.Text!, n, node.Offset);
+                    }
+                    break;
+                case ExprFunction.DatePart:
+                    if (n is < 2 or > 4)
+                    {
+                        throw WrongArity(node.Text!, n, node.Offset);
+                    }
+                    break;
+                case ExprFunction.StrConv:
+                    if (n is < 2 or > 3)
+                    {
+                        throw WrongArity(node.Text!, n, node.Offset);
+                    }
+                    break;
+                case ExprFunction.IMEStatus:
+                    if (n != 0)
+                    {
+                        throw WrongArity(node.Text!, n, node.Offset);
+                    }
+                    break;
+                case ExprFunction.Rnd:
+                    if (n > 1)
+                    {
+                        throw WrongArity(node.Text!, n, node.Offset);
+                    }
+                    break;
+                case ExprFunction.PPmt or ExprFunction.IPmt:
+                    // r-def-expr-sql/expr-financial-ppmt-ipmt-pmt: >6 fails 3075 at bind; <4 fails 101 at evaluate.
+                    if (n > 6)
+                    {
+                        throw WrongArity(node.Text!, n, node.Offset);
+                    }
+                    break;
+                case ExprFunction.Pmt:
+                    if (n > 5)
+                    {
+                        throw WrongArity(node.Text!, n, node.Offset);
+                    }
+                    break;
+                case ExprFunction.Partition:
+                    if (n != 4)
+                    {
+                        throw WrongArity(node.Text!, n, node.Offset);
+                    }
+                    break;
                 default:
                     if (n != 1)
                     {
@@ -1593,9 +1676,99 @@ public sealed unsafe partial class BoundExpression : IDisposable
                     Descriptor(ScalarOperation.CLng, node.Offset, 1, n >= 5 ? contracts[4] : default, default);
                     Descriptor(ScalarOperation.CLng, node.Offset, 1, n == 6 ? contracts[5] : default, default);
                     break;
+                case ExprFunction.Format or ExprFunction.FormatDollar:
+                    Descriptor(ScalarOperation.CStr, node.Offset, 1, n >= 2 ? contracts[1] : default, default);
+                    Descriptor(ScalarOperation.CLng, node.Offset, 1, n >= 3 ? contracts[2] : default, default);
+                    Descriptor(ScalarOperation.CLng, node.Offset, 1, n == 4 ? contracts[3] : default, default);
+                    break;
+                case ExprFunction.FormatNumber or ExprFunction.FormatCurrency or ExprFunction.FormatPercent:
+                    Descriptor(ScalarOperation.CLng, node.Offset, 1, n >= 2 ? contracts[1] : default, default);
+                    Descriptor(ScalarOperation.CLng, node.Offset, 1, n >= 3 ? contracts[2] : default, default);
+                    Descriptor(ScalarOperation.CLng, node.Offset, 1, n >= 4 ? contracts[3] : default, default);
+                    Descriptor(ScalarOperation.CLng, node.Offset, 1, n == 5 ? contracts[4] : default, default);
+                    break;
+                case ExprFunction.FormatDateTime:
+                    Descriptor(ScalarOperation.CLng, node.Offset, 1, n == 2 ? contracts[1] : default, default);
+                    break;
+                case ExprFunction.DateAdd:
+                    Descriptor(ScalarOperation.CStr, node.Offset, 1, contracts[0], default);
+                    Descriptor(ScalarOperation.CDbl, node.Offset, 1, contracts[1], default);
+                    Descriptor(ScalarOperation.CDate, node.Offset, 1, contracts[2], default);
+                    break;
+                case ExprFunction.DateDiff:
+                    Descriptor(ScalarOperation.CStr, node.Offset, 1, contracts[0], default);
+                    Descriptor(ScalarOperation.CDate, node.Items[1].Offset, 1, contracts[1], default);
+                    Descriptor(ScalarOperation.CDate, node.Items[2].Offset, 1, contracts[2], default);
+                    Descriptor(ScalarOperation.CLng, n >= 4 ? node.Items[3].Offset : node.Offset, 1, n >= 4 ? contracts[3] : default, default);
+                    Descriptor(ScalarOperation.CLng, n == 5 ? node.Items[4].Offset : node.Offset, 1, n == 5 ? contracts[4] : default, default);
+                    break;
+                case ExprFunction.DatePart:
+                    Descriptor(ScalarOperation.CStr, node.Offset, 1, contracts[0], default);
+                    Descriptor(ScalarOperation.CDate, node.Offset, 1, contracts[1], default);
+                    Descriptor(ScalarOperation.CLng, node.Offset, 1, n >= 3 ? contracts[2] : default, default);
+                    Descriptor(ScalarOperation.CLng, node.Offset, 1, n == 4 ? contracts[3] : default, default);
+                    break;
+                case ExprFunction.Weekday:
+                    Descriptor(ScalarOperation.CDate, node.Offset, 1, contracts[0], default);
+                    Descriptor(ScalarOperation.CLng, node.Offset, 1, n == 2 ? contracts[1] : default, default);
+                    break;
+                case ExprFunction.WeekdayName:
+                    Descriptor(ScalarOperation.CLng, node.Offset, 1, contracts[0], default);
+                    Descriptor(ScalarOperation.CBool, node.Offset, 1, n >= 2 ? contracts[1] : default, default);
+                    Descriptor(ScalarOperation.CLng, node.Offset, 1, n == 3 ? contracts[2] : default, default);
+                    break;
+                case ExprFunction.MonthName:
+                    Descriptor(ScalarOperation.CLng, node.Offset, 1, contracts[0], default);
+                    Descriptor(ScalarOperation.CBool, node.Offset, 1, n == 2 ? contracts[1] : default, default);
+                    break;
+                case ExprFunction.Year or ExprFunction.Month or ExprFunction.Day or ExprFunction.Hour or ExprFunction.Minute or ExprFunction.Second:
+                    Descriptor(ScalarOperation.CDate, node.Offset, 1, contracts[0], default);
+                    break;
+                case ExprFunction.DateValue or ExprFunction.TimeValue or ExprFunction.AscB:
+                    Descriptor(ScalarOperation.CStr, node.Offset, 1, contracts[0], default);
+                    break;
+                case ExprFunction.TimeSerial:
+                    Descriptor(ScalarOperation.CInt, node.Offset, 1, contracts[0], default);
+                    Descriptor(ScalarOperation.CInt, node.Offset, 1, contracts[1], default);
+                    Descriptor(ScalarOperation.CInt, node.Offset, 1, contracts[2], default);
+                    break;
+                case ExprFunction.Rnd:
+                    Descriptor(ScalarOperation.CSng, node.Offset, 1, n == 1 ? contracts[0] : default, default);
+                    break;
+                case ExprFunction.StrConv:
+                    Descriptor(ScalarOperation.CStr, node.Offset, 1, contracts[0], default);
+                    Descriptor(ScalarOperation.CLng, node.Offset, 1, contracts[1], default);
+                    Descriptor(ScalarOperation.CLng, node.Offset, 1, n == 3 ? contracts[2] : default, default);
+                    break;
+                case ExprFunction.Str:
+                    Descriptor(ScalarOperation.CDbl, node.Offset, 1, contracts[0], default);
+                    break;
+                case ExprFunction.PPmt or ExprFunction.IPmt or ExprFunction.Pmt:
+                    for (int i = 0; i < n; i++)
+                    {
+                        Descriptor(ScalarOperation.CDbl, node.Offset, 1, contracts[i], default);
+                    }
+                    break;
+                case ExprFunction.Partition:
+                    Descriptor(ScalarOperation.CDbl, node.Offset, 1, contracts[0], default);
+                    Descriptor(ScalarOperation.CLng, node.Offset, 1, contracts[1], default);
+                    Descriptor(ScalarOperation.CLng, node.Offset, 1, contracts[2], default);
+                    Descriptor(ScalarOperation.CLng, node.Offset, 1, contracts[3], default);
+                    break;
+                case ExprFunction.RGB:
+                    Descriptor(ScalarOperation.CLng, node.Offset, 1, contracts[0], default);
+                    Descriptor(ScalarOperation.CLng, node.Offset, 1, contracts[1], default);
+                    Descriptor(ScalarOperation.CLng, node.Offset, 1, contracts[2], default);
+                    break;
+                case ExprFunction.QBColor:
+                    Descriptor(ScalarOperation.CLng, node.Offset, 1, contracts[0], default);
+                    break;
+                case ExprFunction.IMEStatus
+                    or ExprFunction.IsMissing or ExprFunction.IsObject:
+                    break;
             }
             Program.Add(new Instruction(Op.CallFunction, n, first, Function: fn));
-            OperandContract resultContract = fn is ExprFunction.IsNumeric or ExprFunction.IsDate
+            OperandContract resultContract = fn is ExprFunction.IsNumeric or ExprFunction.IsDate or ExprFunction.IsMissing or ExprFunction.IsObject
                 ? OperandContract.BooleanFunctionResult
                 : OperandContract.FunctionResult;
             return new Bound(entry.Type, resultContract, depth);

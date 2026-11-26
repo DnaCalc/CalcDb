@@ -115,7 +115,8 @@ public sealed class ExpressionFunctionsTests
         AssertEvalAce("String(-1, 'a')", 5);
         AssertEvalAce("String(3, '')", 5);
         AssertEvalAce("String(3, 65536)", 6);
-        AssertEvalOpen("String$(Null, 'a')", "NotModelled.Scalar.NullArgument");
+        // r-q47-bigint-expr-edges/meta-dollar-str-dao-ado-accdb: String$(Null, 'a') fails 3464; String$(3, Null) remains unrecorded.
+        AssertEvalAce("String$(Null, 'a')", 3464);
         AssertEvalOpen("String$(3, Null)", "NotModelled.Scalar.NullArgument");
         AssertEvalOpen("String(65536, 'a')", "NotModelled.StringLengthBound");
         AssertEvalOpen("String(3, 128)", "NotModelled.StringCharCode");
@@ -219,13 +220,14 @@ public sealed class ExpressionFunctionsTests
         AssertEvalAce("Space(-1)", 5);
         AssertEvalAce("Space('x')", 3464);
         AssertEvalAce("Space(2147483648)", 6);
-        AssertEvalOpen("Space$(Null)", "NotModelled.Scalar.NullArgument");
+        // r-q47-bigint-expr-edges/meta-dollar-str-dao-ado-accdb: Space$/LTrim$/RTrim$ of Null fail 3464; Trim$(Null) remains unrecorded.
+        AssertEvalAce("Space$(Null)", 3464);
         AssertNull("Trim(Null)");
         AssertNull("LTrim(Null)");
         AssertNull("RTrim(Null)");
         AssertEvalOpen("Trim$(Null)", "NotModelled.Scalar.NullArgument");
-        AssertEvalOpen("LTrim$(Null)", "NotModelled.Scalar.NullArgument");
-        AssertEvalOpen("RTrim$(Null)", "NotModelled.Scalar.NullArgument");
+        AssertEvalAce("LTrim$(Null)", 3464);
+        AssertEvalAce("RTrim$(Null)", 3464);
     }
 
     [Theory]
@@ -265,7 +267,8 @@ public sealed class ExpressionFunctionsTests
         AssertEvalOpen("ChrW$(Null)", "NotModelled.Scalar.NullArgument");
         AssertEvalAce("Chr$(-1)", 5);
         AssertEvalAce("Chr$(256)", 5);
-        AssertEvalOpen("Chr$(Null)", "NotModelled.Scalar.NullArgument");
+        // r-q47-bigint-expr-edges/meta-dollar-str-dao-ado-accdb: Chr$(Null) fails 3464.
+        AssertEvalAce("Chr$(Null)", 3464);
         AssertEvalOpen("Chr$(128)", "NotModelled.Scalar.ChrCodePage");
         AssertEvalAce("Asc('')", 5);
         AssertEvalAce("Asc(Null)", 3464);
@@ -389,9 +392,10 @@ public sealed class ExpressionFunctionsTests
         AssertText("Left$('abc', 2)", "ab");
         AssertEvalAce("Left$(Null, 1)", 3464);
         AssertText("Right$('abc', 2)", "bc");
-        AssertEvalOpen("Right$(Null, 1)", "NotModelled.Scalar.NullArgument");
+        // r-q47-bigint-expr-edges/meta-dollar-str-dao-ado-accdb: Right$(Null, 1) and Mid$(Null, 1) fail 3464.
+        AssertEvalAce("Right$(Null, 1)", 3464);
         AssertText("Mid$('abcd', 2, 2)", "bc");
-        AssertEvalOpen("Mid$(Null, 1)", "NotModelled.Scalar.NullArgument");
+        AssertEvalAce("Mid$(Null, 1)", 3464);
         AssertText("UCase$('ab')", "AB");
         AssertEvalOpen("UCase$(Null)", "NotModelled.Scalar.NullArgument");
         AssertText("LCase('AB')", "ab");

@@ -202,8 +202,6 @@ public sealed class StaticFieldTypeTests
     }
 
     [Theory]
-    [InlineData("SELECT 1 AS v FROM T")]
-    [InlineData("SELECT 2147483648 AS v FROM T")]
     [InlineData("SELECT M + 0 AS v FROM T")]
     [InlineData("SELECT M + L AS v FROM T")]
     [InlineData("SELECT M * L AS v FROM T")]
@@ -212,12 +210,6 @@ public sealed class StaticFieldTypeTests
     [InlineData("SELECT DT * DT AS v FROM T")]
     [InlineData("SELECT Y + Y AS v FROM T")]
     [InlineData("SELECT pImplicit + 1 AS v FROM T")]
-    [InlineData("SELECT String$(3, 'a') AS v FROM T")]
-    [InlineData("SELECT Space$(3) AS v FROM T")]
-    [InlineData("SELECT LTrim$(' a') AS v FROM T")]
-    [InlineData("SELECT RTrim$('a ') AS v FROM T")]
-    [InlineData("SELECT Right$('abc', 2) AS v FROM T")]
-    [InlineData("SELECT Mid$('abc', 1, 2) AS v FROM T")]
     [InlineData("SELECT IIf(True, Null, Null) AS v FROM T")]
     [InlineData("SELECT IIf(True, CInt(1), CInt(2)) AS v FROM T")]
     [InlineData("SELECT IIf(True, CCur(1), 'a') AS v FROM T")]
@@ -237,6 +229,42 @@ public sealed class StaticFieldTypeTests
         Assert.Null(col.FieldType);
         Assert.Equal(ColumnTypeRule.NotModelled, col.TypeRule);
         Assert.Equal("NotModelled.ExpressionFieldType", col.TypeOpen);
+    }
+
+    [Theory]
+    [InlineData("SELECT 1 AS v FROM T", 4, ColumnTypeRule.Bound)]
+    [InlineData("SELECT 2147483648 AS v FROM T", 20, ColumnTypeRule.Bound)]
+    [InlineData("SELECT 1.5 AS v FROM T", 20, ColumnTypeRule.Bound)]
+    [InlineData("SELECT 1.5E308 AS v FROM T", 7, ColumnTypeRule.Bound)]
+    [InlineData("SELECT 'abc' AS v FROM T", 10, ColumnTypeRule.Bound)]
+    [InlineData("SELECT #2024-03-05# AS v FROM T", 8, ColumnTypeRule.Bound)]
+    [InlineData("SELECT True AS v FROM T", 3, ColumnTypeRule.Bound)]
+    [InlineData("SELECT String$(3, 'a') AS v FROM T", 10, ColumnTypeRule.Bound)]
+    [InlineData("SELECT Space$(3) AS v FROM T", 10, ColumnTypeRule.Bound)]
+    [InlineData("SELECT LTrim$(' a') AS v FROM T", 10, ColumnTypeRule.Bound)]
+    [InlineData("SELECT RTrim$('a ') AS v FROM T", 10, ColumnTypeRule.Bound)]
+    [InlineData("SELECT Right$('abc', 2) AS v FROM T", 10, ColumnTypeRule.Bound)]
+    [InlineData("SELECT Mid$('abc', 1, 2) AS v FROM T", 10, ColumnTypeRule.Bound)]
+    [InlineData("SELECT Format(1234.5, '0.00') AS v FROM T", 10, ColumnTypeRule.Bound)]
+    [InlineData("SELECT Format$(1234.5, '0.00') AS v FROM T", 10, ColumnTypeRule.Bound)]
+    [InlineData("SELECT FormatNumber(1234.5, 2) AS v FROM T", 10, ColumnTypeRule.Bound)]
+    [InlineData("SELECT DateAdd('d', 1, #2024-03-05#) AS v FROM T", 8, ColumnTypeRule.Bound)]
+    [InlineData("SELECT DateDiff('d', #2024-03-01#, #2024-03-05#) AS v FROM T", 4, ColumnTypeRule.Bound)]
+    [InlineData("SELECT DatePart('yyyy', #2024-03-05#) AS v FROM T", 4, ColumnTypeRule.NotModelled)]
+    [InlineData("SELECT Weekday(#2024-03-05#) AS v FROM T", 3, ColumnTypeRule.Bound)]
+    [InlineData("SELECT WeekdayName(1) AS v FROM T", 10, ColumnTypeRule.Bound)]
+    [InlineData("SELECT Year(#2024-03-05#) AS v FROM T", 3, ColumnTypeRule.Bound)]
+    [InlineData("SELECT StrConv('abc', 1) AS v FROM T", 10, ColumnTypeRule.Bound)]
+    [InlineData("SELECT Rnd(-1) AS v FROM T", 7, ColumnTypeRule.NotModelled)]
+    [InlineData("SELECT PPmt(0.05/12, 1, 12, 10000) AS v FROM T", 7, ColumnTypeRule.Bound)]
+    [InlineData("SELECT L * 1.5 AS v FROM T", 20, ColumnTypeRule.Bound)]
+    [InlineData("PARAMETERS pX Bit; SELECT pX AS v FROM T", 1, ColumnTypeRule.Bound)]
+    public void PartC_literals_functions_and_bit_param_resolve_static_field_types(string sql, int expectedType, ColumnTypeRule expectedRule)
+    {
+        using BoundSelect plan = Prepare(sql);
+        ResultColumn col = Assert.Single(plan.Columns);
+        Assert.Equal(expectedType, col.FieldType);
+        Assert.Equal(expectedRule, col.TypeRule);
     }
 
     [Fact]

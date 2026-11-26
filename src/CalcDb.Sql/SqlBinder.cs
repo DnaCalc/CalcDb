@@ -2404,8 +2404,9 @@ public sealed class BoundSelect : IDisposable
                 : type is not null && result.InnerMatchesDao ? ColumnTypeRule.Bound
                 : ColumnTypeRule.NotModelled;
             column.FieldType = nullOperator ? null : type;
-            // qualified.md: 1 <> Null and False And Null are 3, 7 & Null is 10 (the other operators' non-Null case is not recorded).
-            column.NonNullType = nullOperator && root is { Kind: SyntaxKind.Binary, Operation: ScalarOperation.NotEqual or ScalarOperation.And or ScalarOperation.Concatenate } ? type : null;
+            // qualified.md: 1 <> Null, False And Null, True Or Null, False Imp Null and Null Imp True are 3 (r-expr-1/d-logical-bitwise),
+            // 7 & Null is 10 (the other operators' non-Null case is not recorded).
+            column.NonNullType = nullOperator && root is { Kind: SyntaxKind.Binary, Operation: ScalarOperation.NotEqual or ScalarOperation.And or ScalarOperation.Or or ScalarOperation.Imp or ScalarOperation.Concatenate } ? type : null;
             column.TypeOpen = column.TypeRule == ColumnTypeRule.Bound ? null : "NotModelled.ExpressionFieldType";
             bool isAggregate = root.Kind == SyntaxKind.Call && AggregateOf(root) is not null;
             column.Origin = isAggregate ? ColumnOrigin.Aggregate : ColumnOrigin.Expression;
@@ -2454,17 +2455,41 @@ public sealed class BoundSelect : IDisposable
         }
 
         /// <summary>
-        /// A bare parameter column (r-sql-13b/params-declared-type-names: <c>SELECT pX AS v</c> has the declared type): its
-        /// Field.Type is the parameter's. A Bit parameter's value is VT_I2 (r-sql-13b/params-values-other) and the Field's
-        /// value type is not recorded, so its values are compared as a computed column's; Size and the source are not recorded.
+        /// A bare parameter column (r-sql-13b/params-declared-type-names, params-values-other: <c>SELECT pX AS v</c> has the
+        /// declared Field.Type and Field.Size). A Bit parameter stores VT_I2 on Parameter.Value and projects VT_BOOL (or VT_NULL)
+        /// on Field.Value with Field.Type = 1 and Field.Size = 1; SourceTable/SourceField stay null (unrecorded).
         /// </summary>
         private static void Parameter(ResultColumn column, QueryParameter p)
         {
             column.Origin = ColumnOrigin.Parameter;
             column.FieldType = p.FieldType;
-            column.TypeRule = p.DaoType == 1 || p.FieldType is null ? ColumnTypeRule.NotModelled : ColumnTypeRule.Bound;
-            column.TypeOpen = p.FieldType is null ? "NotModelled.ParameterFieldType" : p.DaoType == 1 ? "NotModelled.ExpressionFieldType" : null;
+            column.Size = ParameterSize(p.FieldType);
+            column.TypeRule = p.FieldType is null ? ColumnTypeRule.NotModelled : ColumnTypeRule.Bound;
+            column.TypeOpen = p.FieldType is null ? "NotModelled.ParameterFieldType" : null;
         }
+
+        /// <summary>
+        /// Field.Size of a bare declared parameter column by DAO Field.Type
+        /// (r-sql-13b/params-declared-type-names #13..#241, r-sql-13b/params-values-other #20..#260).
+        /// </summary>
+        private static int? ParameterSize(int? fieldType) => fieldType switch
+        {
+            0 => 0,   // Value
+            1 => 1,   // Bit
+            2 => 1,   // Byte
+            3 => 2,   // Short
+            4 => 4,   // Long
+            5 => 8,   // Currency
+            6 => 4,   // IEEESingle
+            7 => 8,   // IEEEDouble
+            8 => 8,   // DateTime
+            9 => 0,   // Binary
+            10 => 0,  // Text
+            11 => 4,  // LongBinary
+            12 => 4,  // LongText
+            15 => 16, // Guid
+            _ => null,
+        };
 
         private enum OperandKind : byte
         {
@@ -2499,20 +2524,41 @@ public sealed class BoundSelect : IDisposable
 
         /// <summary>
         /// The static Field.Type of the computed forms the records decide (qualified.md "the DAO Field.Type of a projected
-        /// column"; r-expr-1/a-null-empty-error-literals, d-logical-bitwise, b-plus-versus-concat; r-sql-1/b-output-names;
-        /// plus arithmetic operators and C* conversion functions). Bare literals, other functions, and operand-type combinations
-        /// not decided by retained evidence return a null FieldType so they stay named (<c>NotModelled.ExpressionFieldType</c>).
+        /// column"; r-expr-1/a-null-empty-error-literals, d-logical-bitwise, b-plus-versus-concat; r-wire/expr-literal-tags;
+        /// r-expr-1b/meta-conversion-field-types, meta-text-function-field-types, meta-memo-functions; r-ado-1b/fields-meta-expressions;
+        /// r-q47-bigint-expr-edges/meta-*; r-sql-1/b-output-names; plus arithmetic operators and decided functions).
+        /// Forms and operand-type combinations not decided by retained evidence return a null FieldType so they stay named
+        /// (<c>NotModelled.ExpressionFieldType</c>).
         /// </summary>
         private StaticTypeResult StaticTypeOf(SyntaxNode root, GroupScope? group) => root switch
         {
+            { Kind: SyntaxKind.Literal } => StaticLiteral(root),
             { Kind: SyntaxKind.Binary, Operation: ScalarOperation.Equal or ScalarOperation.NotEqual or ScalarOperation.Less or ScalarOperation.LessOrEqual
-                or ScalarOperation.Greater or ScalarOperation.GreaterOrEqual or ScalarOperation.And } => new(OperandKind.Integer, 3, true),
+                or ScalarOperation.Greater or ScalarOperation.GreaterOrEqual or ScalarOperation.And
+                or ScalarOperation.Or or ScalarOperation.Xor or ScalarOperation.Eqv or ScalarOperation.Imp } => new(OperandKind.Integer, 3, true),
+            { Kind: SyntaxKind.Unary, Operation: ScalarOperation.Not } => new(OperandKind.Integer, 3, true),
             { Kind: SyntaxKind.Like or SyntaxKind.IsNull or SyntaxKind.In or SyntaxKind.Between } => new(OperandKind.Integer, 3, true),
             { Kind: SyntaxKind.Binary, Operation: ScalarOperation.Concatenate } => new(OperandKind.Text, 10, true),
             { Kind: SyntaxKind.Call } => StaticCall(root, group),
             { Kind: SyntaxKind.Unary, Operation: ScalarOperation.Negate } => StaticNegate(root, group),
             { Kind: SyntaxKind.Binary, Operation: ScalarOperation.Add or ScalarOperation.Subtract or ScalarOperation.Multiply
                 or ScalarOperation.Divide or ScalarOperation.IntegerDivide or ScalarOperation.Modulo or ScalarOperation.Power } => StaticArithmetic(root, group),
+            _ => StaticTypeResult.Unknown,
+        };
+
+        /// <summary>
+        /// Static Field.Type of bare non-Null literals (r-wire/expr-literal-tags #6..#260, r-expr-1b/meta-conversion-field-types,
+        /// r-ado-1b/fields-meta-expressions e13..e17). Null literals stay on the NullAtOpen lane (Field.Type 9).
+        /// </summary>
+        private static StaticTypeResult StaticLiteral(SyntaxNode node) => node.Literal switch
+        {
+            // r-wire/expr-literal-tags (#248/#254/#259/#265 True/False): DAO Field.Type 3, VarType = 2 (VT_I2), Field.Value VT_I2 -1/0.
+            LiteralKind.Boolean => new(OperandKind.BooleanLiteral, 3, true),
+            LiteralKind.Date => new(OperandKind.Date, 8, true),
+            LiteralKind.Text => new(OperandKind.Text, 10, true),
+            LiteralKind.Number when node.Value.Vt == (ushort)VarType.I4 => new(OperandKind.LongLiteral, 4, true, node.Value.Int64),
+            LiteralKind.Number when node.Value.Vt == (ushort)VarType.R8 => new(OperandKind.Double, 7, true),
+            LiteralKind.Number when node.Value.Vt == (ushort)VarType.Decimal => new(OperandKind.DecimalLiteral, 20, true),
             _ => StaticTypeResult.Unknown,
         };
 
@@ -2524,10 +2570,10 @@ public sealed class BoundSelect : IDisposable
         }
 
         /// <summary>
-        /// Static Field.Type of decided functions: IsNull, the nine C* conversion functions, InStr, StrComp, the 35
-        /// fixed-return functions lifted by nxk2 whose Field.Type is recorded in evidence/, and IIf/Switch/Choose for
-        /// recorded value-arm combinations. The six $ string functions with no recorded Field.Type (String$, Space$,
-        /// LTrim$, RTrim$, Right$, Mid$) stay refused as NotModelled.ExpressionFieldType.
+        /// Static Field.Type of decided functions: IsNull, the C* conversion functions, InStr/InStrB/InStrRev, StrComp,
+        /// all fixed-return string/date/format/math/financial/info functions whose Field.Type is recorded in evidence/
+        /// (including r-q47-bigint-expr-edges/meta-* for $ string, Format/Format$, FormatNumber, Date*, and StrConv),
+        /// Int/Fix for recorded operand kinds, and IIf/Switch/Choose for recorded value-arm combinations.
         /// </summary>
         private StaticTypeResult StaticCall(SyntaxNode root, GroupScope? group)
         {
@@ -2548,6 +2594,62 @@ public sealed class BoundSelect : IDisposable
             {
                 return StaticConditional(root, group, ConditionalKind.Choose);
             }
+            if (arity == 0)
+            {
+                if (name.Equals("Rnd", StringComparison.OrdinalIgnoreCase))
+                {
+                    // r-expr-1b/meta-conversion-field-types (Rnd), r-expr-1/runtime-rnd-now (Rnd): 7 (Double); inner is VT_R4.
+                    return new(OperandKind.Single, 7, false);
+                }
+                if (name.Equals("IMEStatus", StringComparison.OrdinalIgnoreCase))
+                {
+                    // r-expr-1b/sandbox-vba-library (#520/#526/#527): IMEStatus() is DAO Field.Type 4 (Long), VT_I4 0;
+                    // inner VarType(IMEStatus()) is not recorded, so InnerMatchesDao stays false.
+                    return new(OperandKind.Long, 4, false);
+                }
+                return StaticTypeResult.Unknown;
+            }
+            if (arity is >= 1 and <= 4 && (name.Equals("Format", StringComparison.OrdinalIgnoreCase) || name.Equals("Format$", StringComparison.OrdinalIgnoreCase)))
+            {
+                // r-expr-1b/fmt-*, r-expr-1b/sandbox-vba-library (Format$), r-expr-1b/meta-memo-functions,
+                // r-q47-bigint-expr-edges/meta-fmt-date-strconv-dao-ado-accdb, meta-dollar-fmt-date-mdb: 10 (Text, VT_BSTR).
+                return new(OperandKind.Text, 10, true);
+            }
+            if (arity is >= 1 and <= 5 && (name.Equals("FormatNumber", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("FormatCurrency", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("FormatPercent", StringComparison.OrdinalIgnoreCase)))
+            {
+                // r-expr-1b/sandbox-vba-library, r-expr-1b/meta-conversion-field-types (FormatNumber),
+                // r-q47-bigint-expr-edges/fmt-formatnumber-tristate-edges-accdb, meta-fmt-date-strconv-dao-ado-accdb: 10 (Text, VT_BSTR).
+                return new(OperandKind.Text, 10, true);
+            }
+            if (arity is >= 1 and <= 2 && name.Equals("FormatDateTime", StringComparison.OrdinalIgnoreCase))
+            {
+                // r-expr-1b/sandbox-vba-library: FormatDateTime(...) is 10 (Text, VT_BSTR).
+                return new(OperandKind.Text, 10, true);
+            }
+            if (arity is >= 1 and <= 2 && name.Equals("Round", StringComparison.OrdinalIgnoreCase))
+            {
+                // r-expr-1b/conv-round-function-digits, r-expr-1b/meta-conversion-field-types, r-expr-1b/null-propagation-functions:
+                // Round(...) is 7 (Double); inner can be VT_DECIMAL/VT_CY/VT_R8.
+                return new(OperandKind.Double, 7, false);
+            }
+            if (arity is >= 1 and <= 2 && name.Equals("Weekday", StringComparison.OrdinalIgnoreCase))
+            {
+                // r-expr-1b/date-weekday-forms, r-expr-1b/meta-conversion-field-types, r-expr-1b/null-propagation-functions,
+                // r-q47-bigint-expr-edges/meta-fmt-date-strconv-dao-ado-accdb: Weekday(...) is 3 (Integer, VT_I2).
+                return new(OperandKind.Integer, 3, true);
+            }
+            if (arity is >= 1 and <= 3 && name.Equals("WeekdayName", StringComparison.OrdinalIgnoreCase))
+            {
+                // r-expr-1b/date-names, r-expr-1b/meta-text-function-field-types, r-q47-bigint-expr-edges/meta-fmt-date-strconv-dao-ado-accdb: 10 (Text, VT_BSTR).
+                return new(OperandKind.Text, 10, true);
+            }
+            if (arity is >= 1 and <= 2 && name.Equals("MonthName", StringComparison.OrdinalIgnoreCase))
+            {
+                // r-expr-1b/date-names, r-expr-1b/meta-text-function-field-types: MonthName(...) is 10 (Text, VT_BSTR).
+                return new(OperandKind.Text, 10, true);
+            }
             if (arity is >= 2 and <= 4)
             {
                 if (name.Equals("InStr", StringComparison.OrdinalIgnoreCase))
@@ -2560,6 +2662,23 @@ public sealed class BoundSelect : IDisposable
                     // r-def-expr-sql/expr-bytes-instrb-rightb (#8/#14, #25/#31, #606/#617): InStrB(...) is 4 (Long, VT_I4).
                     return new(OperandKind.Long, 4, true);
                 }
+                if (name.Equals("InStrRev", StringComparison.OrdinalIgnoreCase))
+                {
+                    // r-expr-1/inv-string-functions: InStrRev(...) is 4 (Long, VT_I4).
+                    return new(OperandKind.Long, 4, true);
+                }
+                if (name.Equals("DatePart", StringComparison.OrdinalIgnoreCase))
+                {
+                    // r-expr-1b/date-datepart-parts, r-expr-1b/null-propagation-functions, r-expr-1b/info-result-vartype-numeric (#990/#995),
+                    // r-q47-bigint-expr-edges/meta-fmt-date-strconv-dao-ado-accdb: DatePart(...) is 4 (Long, VT_I4), while inner VarType is 2 (VT_I2).
+                    return new(OperandKind.Long, 4, false);
+                }
+            }
+            if (arity is >= 3 and <= 5 && name.Equals("DateDiff", StringComparison.OrdinalIgnoreCase))
+            {
+                // r-expr-1b/date-datediff-boundaries, r-expr-1b/meta-conversion-field-types, r-expr-1b/null-propagation-functions,
+                // r-q47-bigint-expr-edges/meta-fmt-date-strconv-dao-ado-accdb: DateDiff(...) is 4 (Long, VT_I4).
+                return new(OperandKind.Long, 4, true);
             }
             if (arity is >= 2 and <= 3)
             {
@@ -2568,25 +2687,60 @@ public sealed class BoundSelect : IDisposable
                     // r-expr-1b/str-strcomp-and-text-operators, r-sort-3b/lg-compare-ops: StrComp(...) is 3 (Integer, VT_I2).
                     return new(OperandKind.Integer, 3, true);
                 }
-                if (name.Equals("MidB", StringComparison.OrdinalIgnoreCase))
+                if (name.Equals("Mid", StringComparison.OrdinalIgnoreCase)
+                    || name.Equals("Mid$", StringComparison.OrdinalIgnoreCase)
+                    || name.Equals("MidB", StringComparison.OrdinalIgnoreCase)
+                    || name.Equals("StrConv", StringComparison.OrdinalIgnoreCase))
                 {
-                    // r-expr-1/inv-string-functions (#123/#129), r-def-expr-sql/expr-bytes-instrb-rightb (#584/#590): MidB(...) is 10 (Text, VT_BSTR).
+                    // r-expr-1/inv-string-functions (Mid/MidB/StrConv), r-expr-1b/meta-text-function-field-types (Mid/StrConv),
+                    // r-expr-1b/meta-memo-functions (Mid/StrConv), r-def-expr-sql/expr-bytes-instrb-rightb (MidB),
+                    // r-q47-bigint-expr-edges/meta-dollar-str-dao-ado-accdb (Mid$), meta-fmt-date-strconv-dao-ado-accdb (StrConv): 10 (Text, VT_BSTR).
                     return new(OperandKind.Text, 10, true);
                 }
             }
             if (arity == 2)
             {
                 if (name.Equals("String", StringComparison.OrdinalIgnoreCase)
+                    || name.Equals("String$", StringComparison.OrdinalIgnoreCase)
+                    || name.Equals("Left", StringComparison.OrdinalIgnoreCase)
                     || name.Equals("Left$", StringComparison.OrdinalIgnoreCase)
+                    || name.Equals("Right", StringComparison.OrdinalIgnoreCase)
+                    || name.Equals("Right$", StringComparison.OrdinalIgnoreCase)
                     || name.Equals("LeftB", StringComparison.OrdinalIgnoreCase)
                     || name.Equals("RightB", StringComparison.OrdinalIgnoreCase))
                 {
-                    // r-expr-1b/meta-text-function-field-types (#21/#26 Left$, #60/#65 String),
-                    // r-expr-1/inv-string-functions (#76/#82 Left$, #109/#115 LeftB),
-                    // r-def-expr-sql/expr-bytes-instrb-rightb (#294/#300 RightB, #540/#546 LeftB),
-                    // r-def-expr-sql/str-stored-case-trim-reverse (#5695/#5706 String): 10 (Text, VT_BSTR).
+                    // r-expr-1b/meta-text-function-field-types (Left/Left$/String), r-expr-1b/meta-memo-functions (Left/Right),
+                    // r-expr-1/inv-string-functions (Left/Right/Left$/LeftB), r-def-expr-sql/expr-bytes-instrb-rightb (RightB/LeftB),
+                    // r-q47-bigint-expr-edges/meta-dollar-str-dao-ado-accdb (String$/Right$): 10 (Text, VT_BSTR).
                     return new(OperandKind.Text, 10, true);
                 }
+            }
+            if (arity == 3)
+            {
+                if (name.Equals("DateAdd", StringComparison.OrdinalIgnoreCase)
+                    || name.Equals("DateSerial", StringComparison.OrdinalIgnoreCase)
+                    || name.Equals("TimeSerial", StringComparison.OrdinalIgnoreCase))
+                {
+                    // r-expr-1b/date-dateadd-intervals, date-serial-edges, meta-conversion-field-types,
+                    // r-q47-bigint-expr-edges/meta-fmt-date-strconv-dao-ado-accdb: 8 (Date, VT_DATE).
+                    return new(OperandKind.Date, 8, true);
+                }
+                if (name.Equals("RGB", StringComparison.OrdinalIgnoreCase))
+                {
+                    // r-expr-1b/sandbox-vba-library: RGB(...) is 4 (Long, VT_I4).
+                    return new(OperandKind.Long, 4, true);
+                }
+            }
+            if (arity == 4 && name.Equals("Partition", StringComparison.OrdinalIgnoreCase))
+            {
+                // r-expr-1b/meta-conversion-field-types, r-expr-1b/sandbox-vba-library: Partition(...) is 10 (Text, VT_BSTR).
+                return new(OperandKind.Text, 10, true);
+            }
+            if ((arity is >= 4 and <= 6 && (name.Equals("PPmt", StringComparison.OrdinalIgnoreCase) || name.Equals("IPmt", StringComparison.OrdinalIgnoreCase)))
+                || (arity is >= 3 and <= 5 && name.Equals("Pmt", StringComparison.OrdinalIgnoreCase)))
+            {
+                // r-def-expr-sql/expr-financial-ppmt-ipmt-pmt: PPmt/IPmt/Pmt are 7 (Double, VT_R8).
+                return new(OperandKind.Double, 7, true);
             }
             if (arity is >= 3 and <= 6 && name.Equals("Replace", StringComparison.OrdinalIgnoreCase))
             {
@@ -2598,9 +2752,13 @@ public sealed class BoundSelect : IDisposable
             {
                 return StaticTypeResult.Unknown;
             }
-            if (name.Equals("IsNull", StringComparison.OrdinalIgnoreCase))
+            if (name.Equals("IsNull", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("IsEmpty", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("IsMissing", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("IsObject", StringComparison.OrdinalIgnoreCase))
             {
-                // r-expr-1/a-null-empty-error-literals: IsNull(...) is 3 (VT_I2 -1/0).
+                // r-expr-1/a-null-empty-error-literals (IsNull), r-expr-1b/sandbox-vba-library (IsEmpty/IsMissing/IsObject),
+                // r-expr-1/inv-date-and-info (IsObject): 3 (VT_I2 -1/0).
                 return new(OperandKind.Integer, 3, true);
             }
             if (name.Equals("CBool", StringComparison.OrdinalIgnoreCase))
@@ -2620,12 +2778,21 @@ public sealed class BoundSelect : IDisposable
             }
             if (name.Equals("Asc", StringComparison.OrdinalIgnoreCase)
                 || name.Equals("AscW", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("AscB", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("Sgn", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("Year", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("Month", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("Day", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("Hour", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("Minute", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("Second", StringComparison.OrdinalIgnoreCase)
                 || name.Equals("IsNumeric", StringComparison.OrdinalIgnoreCase)
                 || name.Equals("IsDate", StringComparison.OrdinalIgnoreCase))
             {
-                // r-expr-1b/meta-conversion-field-types (#236/#241 Asc), r-expr-1b/str-chr-asc-range (#290/#296 Asc, #416/#422 AscW),
-                // r-def-expr-sql/str-stored-length-and-codes (#1155/#1166 Asc, #1672/#1683 AscW),
-                // r-expr-1b/info-isnumeric-isdate-forms (#8/#14 IsNumeric, #405/#411 IsDate): 3 (Integer, VT_I2).
+                // r-expr-1b/meta-conversion-field-types (Asc/Sgn/Year/Hour), r-expr-1b/str-chr-asc-range (Asc/AscW/AscB),
+                // r-expr-1b/num-abs-sgn-int-fix (Sgn), r-expr-1b/date-component-functions (Year/Month/Day/Hour/Minute/Second),
+                // r-q47-bigint-expr-edges/meta-fmt-date-strconv-dao-ado-accdb (Year),
+                // r-expr-1b/info-isnumeric-isdate-forms (IsNumeric/IsDate): 3 (Integer, VT_I2).
                 return new(OperandKind.Integer, 3, true);
             }
             if (name.Equals("CLng", StringComparison.OrdinalIgnoreCase))
@@ -2635,14 +2802,11 @@ public sealed class BoundSelect : IDisposable
             }
             if (name.Equals("VarType", StringComparison.OrdinalIgnoreCase)
                 || name.Equals("LenB", StringComparison.OrdinalIgnoreCase)
-                || name.Equals("Len", StringComparison.OrdinalIgnoreCase))
+                || name.Equals("Len", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("QBColor", StringComparison.OrdinalIgnoreCase))
             {
-                // r-expr-1b/conv-cdate-forms (#8/#19 VarType), r-expr-1b/arith-overflow-promotion (#8/#19 VarType),
-                // r-expr-1b/meta-memo-functions (#21/#26 LenB, #360/#365 VarType), r-expr-1b/str-chr-asc-range (#538/#544 LenB),
-                // r-def-expr-sql/expr-bytes-instrb-rightb (#606/#622 LenB): 4 (Long, VT_I4).
-                // r-expr-1b/str-len-lenb-forms (calls 7 to 95: Len of text, numbers, dates, True, CCur and CByte, Type 4,
-                // VT_I4), r-expr-1b/meta-memo-functions (calls 7, 169, 229: Len(Mm) and Len(Mm & Mm) Type 4, VT_I4 300,
-                // 600 and Null): Len is 4 (Long, VT_I4).
+                // r-expr-1b/conv-cdate-forms (VarType), r-expr-1b/meta-memo-functions (Len/LenB/VarType),
+                // r-expr-1b/str-len-lenb-forms (Len), r-expr-1b/sandbox-vba-library (QBColor): 4 (Long, VT_I4).
                 return new(OperandKind.Long, 4, true);
             }
             if (name.Equals("CCur", StringComparison.OrdinalIgnoreCase))
@@ -2650,9 +2814,10 @@ public sealed class BoundSelect : IDisposable
                 // r-expr-1b/meta-conversion-field-types, r-expr-1/b-fixed-point-fidelity, r-expr-1b/conv-half-rounding-large: CCur(...) is 5.
                 return new(OperandKind.Currency, 5, true);
             }
-            if (name.Equals("CSng", StringComparison.OrdinalIgnoreCase))
+            if (name.Equals("CSng", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("Rnd", StringComparison.OrdinalIgnoreCase))
             {
-                // r-expr-1b/meta-conversion-field-types, r-expr-1b/conv-range-edges, r-sql-13b/union-dedup-cross-type: CSng(...) is 7 (Double), inner is VT_R4.
+                // r-expr-1b/meta-conversion-field-types, r-expr-1/runtime-rnd-now: CSng/Rnd are 7 (Double), inner is VT_R4.
                 return new(OperandKind.Single, 7, false);
             }
             if (name.Equals("CDbl", StringComparison.OrdinalIgnoreCase))
@@ -2663,28 +2828,58 @@ public sealed class BoundSelect : IDisposable
             if (name.Equals("Sqr", StringComparison.OrdinalIgnoreCase)
                 || name.Equals("Exp", StringComparison.OrdinalIgnoreCase)
                 || name.Equals("Log", StringComparison.OrdinalIgnoreCase)
-                || name.Equals("Atn", StringComparison.OrdinalIgnoreCase))
+                || name.Equals("Sin", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("Cos", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("Tan", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("Atn", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("Val", StringComparison.OrdinalIgnoreCase))
             {
-                // r-expr-1b/num-sqr-exp-log-trig (#8/#14 Sqr, #92/#98 Exp, #186/#192 Log, #308/#314 Atn): 7 (Double, VT_R8).
+                // r-expr-1b/num-sqr-exp-log-trig (Sqr/Exp/Log/Sin/Cos/Tan/Atn), r-expr-1b/conv-val-forms,
+                // r-expr-1b/meta-conversion-field-types (Sqr/Val): 7 (Double, VT_R8).
                 return new(OperandKind.Double, 7, true);
             }
-            if (name.Equals("CDate", StringComparison.OrdinalIgnoreCase)
-                || name.Equals("CVDate", StringComparison.OrdinalIgnoreCase))
+            if (name.Equals("Abs", StringComparison.OrdinalIgnoreCase))
             {
-                // r-expr-1b/meta-conversion-field-types (#724/#729 CVDate), r-expr-1/c-date-text-and-literals,
-                // r-expr-1b/conv-cdate-forms, r-expr-1b/sandbox-vba-library (#308/#314 CVDate): 8 (Date, VT_DATE).
+                // r-expr-1b/num-abs-sgn-int-fix, r-expr-1b/meta-conversion-field-types, r-expr-1b/null-propagation-functions:
+                // Abs(...) is always 7 (Double), while inner preserves operand VarType.
+                return new(OperandKind.Double, 7, false);
+            }
+            if (name.Equals("Int", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("Fix", StringComparison.OrdinalIgnoreCase))
+            {
+                return StaticIntOrFix(root.Items[0], group);
+            }
+            if (name.Equals("CDate", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("CVDate", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("DateValue", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("TimeValue", StringComparison.OrdinalIgnoreCase))
+            {
+                // r-expr-1b/meta-conversion-field-types (CDate/CVDate), r-expr-1b/date-component-functions (DateValue/TimeValue),
+                // r-expr-1b/sandbox-vba-library (CVDate): 8 (Date, VT_DATE).
                 return new(OperandKind.Date, 8, true);
             }
+            if (name.Equals("CVar", StringComparison.OrdinalIgnoreCase))
+            {
+                // r-expr-1b/conv-cbool-cvar, r-expr-1b/meta-conversion-field-types: CVar(...) is 10 (Text, Field.Value VT_BSTR),
+                // while inner VarType preserves the argument's VarType.
+                return new(OperandKind.Text, 10, false);
+            }
             if (name.Equals("CStr", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("Str", StringComparison.OrdinalIgnoreCase)
                 || name.Equals("TypeName", StringComparison.OrdinalIgnoreCase)
                 || name.Equals("Space", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("Space$", StringComparison.OrdinalIgnoreCase)
                 || name.Equals("Trim", StringComparison.OrdinalIgnoreCase)
                 || name.Equals("Trim$", StringComparison.OrdinalIgnoreCase)
                 || name.Equals("LTrim", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("LTrim$", StringComparison.OrdinalIgnoreCase)
                 || name.Equals("RTrim", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("RTrim$", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("Chr", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("Chr$", StringComparison.OrdinalIgnoreCase)
                 || name.Equals("ChrW", StringComparison.OrdinalIgnoreCase)
                 || name.Equals("ChrW$", StringComparison.OrdinalIgnoreCase)
-                || name.Equals("Chr$", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("UCase", StringComparison.OrdinalIgnoreCase)
                 || name.Equals("UCase$", StringComparison.OrdinalIgnoreCase)
                 || name.Equals("LCase", StringComparison.OrdinalIgnoreCase)
                 || name.Equals("LCase$", StringComparison.OrdinalIgnoreCase)
@@ -2694,17 +2889,42 @@ public sealed class BoundSelect : IDisposable
                 || name.Equals("Oct$", StringComparison.OrdinalIgnoreCase)
                 || name.Equals("StrReverse", StringComparison.OrdinalIgnoreCase))
             {
-                // r-expr-1b/meta-conversion-field-types (CStr), r-expr-1b/conv-cdate-forms (#8/#24 TypeName),
-                // r-expr-1b/meta-text-function-field-types (#34/#39 Space, #151/#156 Hex, #177/#182 Trim, #340/#345 StrReverse),
-                // r-expr-1b/meta-memo-functions (#99/#104 Trim, #373/#378 TypeName, #386/#391 Space, #399/#404 StrReverse),
-                // r-expr-1b/str-trim-space-string (#78/#84 RTrim, #92/#98 LTrim),
-                // r-expr-1b/str-chr-asc-range (#149/#155 ChrW, #262/#268 Chr$, #276/#282 ChrW$),
-                // r-expr-1b/str-case-folding (#36/#42 LCase, #386/#392 UCase$, #400/#406 LCase$),
-                // r-expr-1b/str-hex-oct-forms (#8/#14 Hex, #354/#360 Hex$, #368/#374 Oct, #550/#556 Oct$),
-                // r-def-expr-sql/str-conversion-and-format-of-stored (#9911/#9922 Trim$, #10433/#10444 UCase$): 10 (Text, VT_BSTR).
+                // r-expr-1b/meta-conversion-field-types (CStr), r-def-expr-sql/expr-clnglng-clngptr (Str),
+                // r-expr-1b/meta-text-function-field-types, r-expr-1b/meta-memo-functions (UCase/Trim/TypeName/Space/StrReverse),
+                // r-expr-1b/str-trim-space-string, r-expr-1b/str-chr-asc-range (Chr/ChrW/Chr$/ChrW$),
+                // r-expr-1b/str-case-folding (UCase/LCase/UCase$/LCase$), r-expr-1b/str-hex-oct-forms (Hex/Hex$/Oct/Oct$),
+                // r-q47-bigint-expr-edges/meta-dollar-str-dao-ado-accdb (Space$/LTrim$/RTrim$): 10 (Text, VT_BSTR).
                 return new(OperandKind.Text, 10, true);
             }
             return StaticTypeResult.Unknown;
+        }
+
+        /// <summary>
+        /// Static Field.Type of <c>Int(x)</c> and <c>Fix(x)</c> from the operand's kind
+        /// (r-expr-1b/num-abs-sgn-int-fix, r-expr-1b/meta-conversion-field-types, r-expr-1b/null-propagation-functions).
+        /// </summary>
+        private StaticTypeResult StaticIntOrFix(SyntaxNode arg, GroupScope? group)
+        {
+            if (IsNullLiteral(arg))
+            {
+                // r-expr-1b/null-propagation-functions: Int(Null) and Fix(Null) are 0.
+                return new(OperandKind.Unknown, 0, true);
+            }
+            StaticTypeResult op = OperandOf(arg, group);
+            return op.Kind switch
+            {
+                // r-expr-1b/num-abs-sgn-int-fix: Int/Fix of True or CByte is 3 (Integer).
+                OperandKind.BooleanLiteral or OperandKind.CByte => new(OperandKind.Integer, 3, true),
+                // r-expr-1b/num-abs-sgn-int-fix: Int(-0.0) (LongLiteral) is 4 (Long).
+                OperandKind.LongLiteral => new(OperandKind.Long, 4, true),
+                // r-expr-1b/num-abs-sgn-int-fix: Int/Fix of Currency is 5 (Currency).
+                OperandKind.Currency => new(OperandKind.Currency, 5, true),
+                // r-expr-1b/num-abs-sgn-int-fix: Int/Fix of Date is 8 (Date).
+                OperandKind.Date => new(OperandKind.Date, 8, true),
+                // r-expr-1b/num-abs-sgn-int-fix: Int/Fix of DecimalLiteral/Double/Single/Text is 7 (Double); inner can be VT_DECIMAL/VT_R4.
+                OperandKind.DecimalLiteral or OperandKind.Double or OperandKind.Single or OperandKind.Text => new(OperandKind.Double, 7, false),
+                _ => StaticTypeResult.Unknown,
+            };
         }
 
         /// <summary>
@@ -3085,11 +3305,13 @@ public sealed class BoundSelect : IDisposable
                 // r-expr-1b/arith-overflow-promotion: CSng(1) + CSng(2) is 7 (Double); oleaut32 VarAdd(VT_R4, VT_R4) returns VT_R4.
                 (OperandKind.Single, OperandKind.Single) => new(OperandKind.Double, 7, false),
                 // r-expr-1/b-mixed-precedence, r-fix-expr-sql/dec-mixed-precedence, r-expr-1b/arith-overflow-promotion,
-                // r-sql-13b/agg-expression-composition, r-expr-1/e-eager-failures, r-q-expr-sql/e-row-arms: floating additions are 7 (Double).
+                // r-sql-13b/agg-expression-composition, r-expr-1/e-eager-failures, r-q-expr-sql/e-row-arms,
+                // r-def-expr-sql/expr-financial-ppmt-ipmt-pmt (PPmt + IPmt): floating additions are 7 (Double).
                 (OperandKind.Single, OperandKind.Long)
                     or (OperandKind.Long, OperandKind.Single)
                     or (OperandKind.Single, OperandKind.Double)
                     or (OperandKind.Double, OperandKind.Single)
+                    or (OperandKind.Double, OperandKind.Double)
                     or (OperandKind.Double, OperandKind.LongLiteral)
                     or (OperandKind.Double, OperandKind.Integer)
                     or (OperandKind.Integer, OperandKind.Double) => new(OperandKind.Double, 7, bothInner),
@@ -3210,15 +3432,19 @@ public sealed class BoundSelect : IDisposable
                 (OperandKind.Currency, OperandKind.DecimalLiteral)
                     or (OperandKind.StoredDecimal, OperandKind.Currency) => new(OperandKind.Double, 7, false),
                 // r-expr-1/b-mixed-precedence, r-fix-expr-sql/dec-mixed-precedence, r-expr-1/b-floating-fidelity,
-                // r-expr-1b/arith-overflow-promotion, r-expr-1b/op-precedence: floating products are 7 (Double).
+                // r-expr-1b/arith-overflow-promotion, r-expr-1b/op-precedence, r-expr-1b/rnd-seeded-sequences:
+                // floating products are 7 (Double).
                 (OperandKind.Single, OperandKind.Long)
                     or (OperandKind.Long, OperandKind.Single)
+                    or (OperandKind.Single, OperandKind.LongLiteral)
+                    or (OperandKind.LongLiteral, OperandKind.Single)
                     or (OperandKind.Double, OperandKind.LongLiteral)
                     or (OperandKind.LongLiteral, OperandKind.Double) => new(OperandKind.Double, 7, bothInner),
                 // r-sql-13b/agg-expression-composition: Sum(v) * 1.5 is 7 (Double); oleaut32 VarMul(VT_R8, VT_DECIMAL) returns VT_DECIMAL.
                 (OperandKind.Double, OperandKind.DecimalLiteral) => new(OperandKind.Double, 7, false),
-                // r-expr-1b/arith-overflow-promotion: 0.1 * 3 is 20 (Decimal).
-                (OperandKind.DecimalLiteral, OperandKind.LongLiteral) => new(OperandKind.DecimalLiteral, 20, true),
+                // r-expr-1b/arith-overflow-promotion (0.1 * 3), r-ado-1b/fields-meta-expressions (e2: L * 1.5): 20 (Decimal).
+                (OperandKind.DecimalLiteral, OperandKind.LongLiteral)
+                    or (OperandKind.Long, OperandKind.DecimalLiteral) => new(OperandKind.DecimalLiteral, 20, bothInner),
                 // r-expr-1b/arith-overflow-promotion: #1/1/2000# * 2 is 7 (Double).
                 (OperandKind.Date, OperandKind.LongLiteral) => new(OperandKind.Double, 7, bothInner),
                 // r-expr-1/b-plus-versus-concat, r-expr-1b/op-plus-amp-precedence-and-types, r-def-expr-sql/expr-operator-spellings:
@@ -3789,8 +4015,8 @@ public sealed class BoundSelect : IDisposable
             StaticTypeResult s = StaticTypeOf(root, null);
             return (kind, s.FieldType) switch
             {
-                (AggregateKind.Sum or AggregateKind.Avg, 4) => (VarType.R8, 7, false),
-                (AggregateKind.Sum or AggregateKind.Avg, 7) => (VarType.R8, 7, true),
+                (AggregateKind.Sum or AggregateKind.Avg, 4) when s.InnerMatchesDao => (VarType.R8, 7, false),
+                (AggregateKind.Sum or AggregateKind.Avg, 7) when s.InnerMatchesDao => (VarType.R8, 7, true),
                 (AggregateKind.Sum, 5) when s.InnerMatchesDao => (VarType.Currency, 5, false),
                 (AggregateKind.Min or AggregateKind.Max, 4) when s.InnerMatchesDao => (VarType.I4, 4, false),
                 (AggregateKind.Min or AggregateKind.Max, 7) when s.InnerMatchesDao => (VarType.R8, 7, false),
