@@ -81,10 +81,11 @@ public sealed class ActionSyntax : IDisposable
 
 /// <summary>
 /// Access SQL action statement parser (W-07/actions; II-11 §§22–28): parses single-table <c>INSERT INTO … VALUES</c>,
-/// <c>INSERT INTO … SELECT</c>, <c>UPDATE … SET … [WHERE …]</c>, and <c>DELETE […] FROM … [WHERE …]</c> over the one
-/// expression grammar (<see cref="ExpressionSyntax.ParseFragment"/>) and the one <see cref="SqlParser"/> SELECT and
-/// PARAMETERS grammar. Multi-table/joined actions, <c>SELECT INTO</c>, external <c>IN 'file'</c> and DDL statements are
-/// refused with explicit named <c>NotModelled.*</c> outcomes; recorded ACE syntax errors cite their retained records.
+/// <c>INSERT INTO … SELECT</c>, <c>UPDATE … SET … [WHERE …]</c>, <c>DELETE […] FROM … [WHERE …]</c>, and
+/// <c>SELECT … INTO target FROM …</c> over the one expression grammar (<see cref="ExpressionSyntax.ParseFragment"/>)
+/// and the one <see cref="SqlParser"/> SELECT and PARAMETERS grammar. Multi-table/joined DML actions, external
+/// <c>IN 'file'</c>, and DDL statements are refused with explicit named <c>NotModelled.*</c> outcomes; recorded ACE
+/// syntax errors cite their retained records.
 /// </summary>
 public static class ActionParser
 {
@@ -124,6 +125,23 @@ public static class ActionParser
             || StartsWithWord(text, "UPDATE")
             || StartsWithWord(text, "DELETE")
             || (StartsWithWord(text, "SELECT") && HasTopLevelIntoBeforeFrom(text));
+    }
+
+    /// <summary>Whether <paramref name="source"/> is a <c>SELECT ... INTO</c> make-table statement (optionally after <c>PARAMETERS …;</c>).</summary>
+    internal static bool IsMakeTable(string source)
+    {
+        int nul = source.IndexOf('\0', StringComparison.Ordinal);
+        ReadOnlySpan<char> text = (nul >= 0 ? source.AsSpan(0, nul) : source.AsSpan()).TrimStart();
+        if (StartsWithWord(text, "PARAMETERS"))
+        {
+            int semi = text.IndexOf(';');
+            if (semi < 0)
+            {
+                return false;
+            }
+            text = text[(semi + 1)..].TrimStart();
+        }
+        return StartsWithWord(text, "SELECT") && HasTopLevelIntoBeforeFrom(text);
     }
 
     internal static bool HasTopLevelIntoBeforeFrom(ReadOnlySpan<char> text)

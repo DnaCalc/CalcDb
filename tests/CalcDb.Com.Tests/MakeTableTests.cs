@@ -114,6 +114,16 @@ public sealed unsafe class MakeTableTests : IDisposable
         return val;
     }
 
+    private static long LongOf(CallResult result)
+    {
+        Assert.True(result.Failure is null, result.Failure?.Description);
+        NativeVariant v = result.HasScalar ? result.Scalar : *result.Value!.Pointer;
+        Assert.Equal((ushort)VarType.I8, v.Vt);
+        long val = v.Int64;
+        result.ReleaseUntaken();
+        return val;
+    }
+
     private static string BstrOf(CallResult result)
     {
         Assert.True(result.Failure is null, result.Failure?.Description);
@@ -204,7 +214,7 @@ public sealed unsafe class MakeTableTests : IDisposable
         Assert.Equal(FailureKind.NotModelled, popExpr.Failure!.Kind);
 
         // Empty (WHERE 1 = 0) MakeTable creates the exact ACE schema including Attributes=2 for computed 4+B scalars
-        // and Attributes=1 for Integer comparisons (maketable-expr-agg-dao-{accdb,mdb}).
+        // and Attributes=1 for Integer comparisons (maketable-expr-agg-dao-accdb, maketable-expr-agg-dao-mdb).
         Assert.Null(Call(db, "Execute",
             "SELECT ID, Qty * 2 AS DblQty, Qty * 1.5 AS FltVal, Price + 1 AS NewPrice, Cat & '-' & Name AS Tag, Null AS NullCol, CCur(Qty) AS CyQty, Qty > 15 AS BigFlag, IIf(Active, 'Y', 'N') AS ActStr INTO MT_Expr FROM Items WHERE 1 = 0",
             DbFailOnError).Failure);
@@ -227,7 +237,7 @@ public sealed unsafe class MakeTableTests : IDisposable
         DispatchObject exprFields = Unwrap<DispatchObject>(Get(exprTd, "Fields"));
         Assert.Equal(9, Int32Of(Get(exprFields, "Count")));
 
-        // (Name, Type, Size, Attributes) from maketable-expr-agg-dao-{accdb,mdb}
+        // (Name, Type, Size, Attributes) from maketable-expr-agg-dao-accdb and maketable-expr-agg-dao-mdb
         (string Name, int Type, int Size, int Attr)[] expectedExpr =
         [
             ("ID", 4, 4, 17),
@@ -366,15 +376,24 @@ public sealed unsafe class MakeTableTests : IDisposable
         DatabaseObject db = Unwrap<DatabaseObject>(Call(eng, "CreateDatabase", path, DbLangGeneral, DbVersion120));
 
         Assert.Null(Call(db, "Execute", "CREATE TABLE TBi (ID LONG CONSTRAINT PK_TBi PRIMARY KEY, B BIGINT)", DbFailOnError).Failure);
-        Assert.Null(Call(db, "Execute", "INSERT INTO TBi VALUES (1, 10)", DbFailOnError).Failure);
-        Assert.Null(Call(db, "Execute", "INSERT INTO TBi VALUES (2, Null)", DbFailOnError).Failure);
+        Assert.Null(Call(db, "Execute", "INSERT INTO TBi VALUES (1, 1)", DbFailOnError).Failure);
+        Assert.Null(Call(db, "Execute", "INSERT INTO TBi VALUES (2, 2147483647)", DbFailOnError).Failure);
+        Assert.Null(Call(db, "Execute", "INSERT INTO TBi VALUES (3, Null)", DbFailOnError).Failure);
 
-        Assert.Null(Call(db, "Execute", "SELECT ID, B, B + 1 AS BAdd, B / 2 AS BDiv, B \\ 2 AS BIdiv, CStr(B) AS BStr INTO TOutBi FROM TBi WHERE ID = 1 ORDER BY ID", DbFailOnError).Failure);
-        Assert.Equal(1, Int32Of(Get(db, "RecordsAffected")));
+        Assert.Null(Call(db, "Execute", "SELECT ID, B, B + 1 AS BAdd, B / 2 AS BDiv, B \\ 2 AS BIdiv, CStr(B) AS BStr INTO TOutBi FROM TBi WHERE ID IN (1, 2) ORDER BY ID", DbFailOnError).Failure);
+        Assert.Equal(2, Int32Of(Get(db, "RecordsAffected")));
 
-        CallResult err94 = Call(db, "Execute", "SELECT ID, CStr(B) AS BStr INTO TOutErr FROM TBi WHERE ID = 2", DbFailOnError);
+        CallResult err94 = Call(db, "Execute", "SELECT ID, CStr(B) AS BStr INTO TOutErr FROM TBi WHERE ID = 3", DbFailOnError);
         Assert.NotNull(err94.Failure);
         Assert.Equal(94, err94.Failure!.Number);
+
+        // Verify odd-integer banker's rounding on BDiv (1 / 2 -> 0, 2147483647 / 2 -> 1073741824; bi-select-into-accdb calls 769, 798).
+        DispatchObject rsBi = Unwrap<DispatchObject>(Call(db, "OpenRecordset", "SELECT ID, BDiv FROM TOutBi ORDER BY ID", DbOpenSnapshot));
+        DispatchObject rsBiFields = Unwrap<DispatchObject>(Get(rsBi, "Fields"));
+        Assert.Equal(0L, LongOf(Get(Unwrap<DispatchObject>(Get(rsBiFields, "Item", "BDiv")), "Value")));
+        Assert.Null(Call(rsBi, "MoveNext").Failure);
+        Assert.Equal(1073741824L, LongOf(Get(Unwrap<DispatchObject>(Get(rsBiFields, "Item", "BDiv")), "Value")));
+        Assert.Null(Call(rsBi, "Close").Failure);
 
         Assert.Null(Call(db, "Execute", "CREATE TABLE TDt2 (ID LONG CONSTRAINT PK_TDt2 PRIMARY KEY, D DATETIME2)", DbFailOnError).Failure);
         Assert.Null(Call(db, "Execute", "INSERT INTO TDt2 VALUES (1, '2026-03-05 13:45:01.1234567')", DbFailOnError).Failure);
@@ -404,5 +423,36 @@ public sealed unsafe class MakeTableTests : IDisposable
         Assert.Equal(1, Int32Of(Get(dField, "Attributes")));
 
         Assert.Null(Call(db, "Close").Failure);
+    }
+
+    [Fact]
+    public void Dao_maketable_refuses_unrecorded_boundaries_honestly()
+    {
+        DBEngineObject eng = CreateDaoEngine();
+        DatabaseObject db = CreateSeededDatabase(eng, "refuse-accdb.accdb", DbVersion120);
+        string path = Path.Combine(_dir, "refuse-accdb.accdb");
+
+        // Finding #2: alias shadowing a column referenced by another expression stays refused.
+        CallResult rShadow = Call(db, "Execute", "SELECT Qty AS ID, ID + 1 AS NextId INTO MT_Shadow FROM Items", DbFailOnError);
+        Assert.Equal(FailureKind.NotModelled, rShadow.Failure?.Kind);
+        Assert.Contains("NotModelled.AliasShadowsColumn", rShadow.Failure!.Description);
+
+        // Finding #7: transactional MakeTable refuses before bind-time 3010 even for an existing target table.
+        DispatchObject workspaces = Unwrap<DispatchObject>(Get(eng, "Workspaces"));
+        DispatchObject ws = Unwrap<DispatchObject>(Get(workspaces, "Item", 0));
+        Assert.Null(Call(ws, "BeginTrans").Failure);
+        CallResult rTxn = Call(db, "Execute", "SELECT ID INTO Groups FROM Items", DbFailOnError);
+        Assert.Equal(FailureKind.NotModelled, rTxn.Failure?.Kind);
+        Assert.Contains("NotModelled.TransactionalDdlOverlay", rTxn.Failure!.Description);
+        Assert.Null(Call(ws, "Rollback").Failure);
+
+        Assert.Null(Call(db, "Close").Failure);
+
+        // Finding #3: read-only MakeTable without dbFailOnError (options = 0) is unrecorded and refuses honestly.
+        DatabaseObject dbRo = Unwrap<DatabaseObject>(Call(eng, "OpenDatabase", path, false, true));
+        CallResult rRo = Call(dbRo, "Execute", "SELECT ID INTO MT_Ro FROM Items", 0);
+        Assert.Equal(FailureKind.NotModelled, rRo.Failure?.Kind);
+        Assert.Contains("NotModelled.ReadOnlyAction", rRo.Failure!.Description);
+        Assert.Null(Call(dbRo, "Close").Failure);
     }
 }

@@ -146,6 +146,17 @@ public static unsafe class ActionExecutor
                 return ActionOutcome.Fail(SqlFailure.Ace(SqlPhase.Bind, 3078, $"The Microsoft Access database engine cannot find the input table or query '{normalized}'. Make sure it exists and that its name is spelled correctly."));
             }
         }
+        if (ActionParser.IsMakeTable(normalized))
+        {
+            if (source is not (ActionErrorSource.Database or ActionErrorSource.Ado))
+            {
+                return ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.MakeTableRoute", $"SELECT ... INTO via {source} is not recorded"));
+            }
+            if (database.Workspace.Depth > 0)
+            {
+                return ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.TransactionalDdlOverlay", "SELECT ... INTO inside an active Workspace transaction is not yet visible to subsequent catalog reads"));
+            }
+        }
         BoundAction? plan = BoundAction.Prepare(sql, database, out SqlFailure? failure);
         if (plan is null)
         {
@@ -172,9 +183,9 @@ public static unsafe class ActionExecutor
         }
         if (database.ReadOnly)
         {
-            if (plan.Kind == ActionKind.MakeTable && source == ActionErrorSource.Database)
+            if (plan.Kind == ActionKind.MakeTable && source == ActionErrorSource.Database && (options & DbFailOnError) != 0)
             {
-                // r-q52-ddl-make-domain/maketable-errors-dao-accdb, maketable-errors-dao-mdb call 35: SELECT ... INTO on read-only DB -> 3027.
+                // r-q52-ddl-make-domain/maketable-errors-dao-accdb, maketable-errors-dao-mdb call 35: SELECT ... INTO with dbFailOnError on read-only DB -> 3027.
                 return ActionOutcome.Fail(SqlFailure.Ace(SqlPhase.Execute, 3027, SqlMessages.CannotUpdateReadOnly));
             }
             // r-fix-cursor-dao/lock-readonly-db-insert-failonerror shows a read-only handle succeeding when the same

@@ -592,7 +592,7 @@ public sealed class SchemaWriter
             string name = request.Fields[i].Name;
             switch (FieldNameClashOf(request.Fields.Take(i).Select(f => f.Name), name, _sortOrder, out string? undecided))
             {
-                case FieldNameClash.Duplicate when request.IsMakeTable && request.Route is SchemaRoute.Sql or SchemaRoute.Ado:
+                case FieldNameClash.Duplicate when request.IsMakeTable && request.Route == SchemaRoute.Sql:
                     // r-q52-ddl-make-domain/maketable-errors-dao-accdb, maketable-errors-dao-mdb call 22 (SELECT ID, Qty AS ID INTO MT_DupCol):
                     // fails 3191 after incrementing MSysObjects/MSysACEs UniqueEntryCount and writing 2 commits on page 0.
                     return new SchemaRefusal(3191, null);
@@ -729,7 +729,7 @@ public sealed class SchemaWriter
                     {
                         return new SchemaRefusal(null, $"Decimal field {f.Name} on {request.Route} route: DECIMAL is recorded only on the ADO route (r-q21-ddl-types col-decimal-ado*, col-decimal-dao, r-q36-publication-bytes/create-nullfix-mdb) and variable MakeTable expressions (r-q52-ddl-make-domain/maketable-expr-agg-dao-*)");
                     }
-                    if (isJet4Mdb && f.ImplicitDecimalPrecision && !request.IsMakeTable)
+                    if (isJet4Mdb && f.ImplicitDecimalPrecision && !(request.IsMakeTable && f.VariableLayout))
                     {
                         return new SchemaRefusal(null, $"bare DECIMAL on field {f.Name} in a Jet 4 MDB is not recorded (r-q21-ddl-types/col-decimal-ado-bare records ACCDB only; r-q36-publication-bytes/create-nullfix-mdb records explicit DECIMAL(18, 2))");
                     }
@@ -823,9 +823,9 @@ public sealed class SchemaWriter
             else if (request.IsMakeTable)
             {
                 // r-q47-bigint-expr-edges/bi-select-into-accdb (4 BIGINT columns), r-q49-dt2-draftprops/dt2-select-into-accdb (1 DATETIME2 column).
-                if (bigIntCount > 0 && dateTime2Count > 0)
+                if ((bigIntCount > 0 && dateTime2Count > 0) || dateTime2Count > 1)
                 {
-                    return new SchemaRefusal(null, "SELECT ... INTO combining BIGINT and DATETIME2 in one table is not recorded");
+                    return new SchemaRefusal(null, $"SELECT ... INTO with {bigIntCount} BIGINT and {dateTime2Count} DATETIME2 column(s) is not recorded");
                 }
             }
             else if (bigIntCount > 1 || (dateTime2Count > 2) || (dateTime2Count == 2 && bigIntCount > 0) || sawDateTime2BeforeBigInt)
@@ -1503,8 +1503,8 @@ public sealed class SchemaWriter
             {
                 return CreateTableDaoDuplicateRollback(workspace, request, dateCreateBits, dateUpdateBits, refused);
             }
-            if ((refused.Error == 3380 || (refused.Error == 3191 && request.IsMakeTable))
-                && request.Route is SchemaRoute.Sql or SchemaRoute.Ado)
+            if ((refused.Error == 3380 && request.Route is SchemaRoute.Sql or SchemaRoute.Ado)
+                || (refused.Error == 3191 && request.IsMakeTable && request.Route == SchemaRoute.Sql))
             {
                 if (acceptsError is not null && !acceptsError(refused.Error.Value))
                 {
@@ -9592,11 +9592,11 @@ public sealed class SchemaWriter
                 case NewFieldType.Decimal:
                 {
                     // ADO DECIMAL(p, s): TypeInfo = precision | (scale << 8), fixed 17 bytes (r-q21 col-decimal-ado*, r-q36 create-nullfix-mdb);
-                    // SELECT ... INTO computed Decimal: variable Flags 0x02, Length 17 (r-q52-ddl-make-domain/maketable-expr-agg-dao-*).
+                    // SELECT ... INTO computed Decimal: variable Flags 0x02, Length 13 (0x000D) (r-q52-ddl-make-domain/maketable-expr-agg-dao-accdb page 57 offset 0x87, maketable-expr-agg-dao-mdb page 34 offset 0x87).
                     uint decimalInfo = f.Precision | ((uint)f.Scale << 8);
                     if (f.VariableLayout)
                     {
-                        columns.Add(new ColumnSpec(f.Name, NativeTypes.Numeric, (ushort)i, variables, (ushort)i, decimalInfo, VariableColumnFlags, 0x00, 0, 17));
+                        columns.Add(new ColumnSpec(f.Name, NativeTypes.Numeric, (ushort)i, variables, (ushort)i, decimalInfo, VariableColumnFlags, 0x00, 0, 13));
                         variables++;
                     }
                     else

@@ -1843,8 +1843,8 @@ public sealed class BoundSelect : IDisposable
                 {
                     return SqlFailure.Ace(SqlPhase.Bind, 3062, $"Duplicate output alias '{alias}'.");
                 }
-                if (!allowDuplicateOutputNames
-                    && _scope.Slot(alias) is not null && AllExpressions().Any(f => !ReferenceEquals(f, item.Expression)
+                if (_scope.Slot(alias) is not null && AllExpressions().Any(f => !ReferenceEquals(f, item.Expression)
+                    && !(allowDuplicateOutputNames && syntax.Items.Any(other => ReferenceEquals(other.Expression, f) && other.Alias is null && other.Expression?.Syntax.Root is { Kind: SyntaxKind.Name, Text: { } bare } && string.Equals(bare, alias, StringComparison.OrdinalIgnoreCase)))
                     && Walk(f.Syntax.Root!).Any(n => n.Kind == SyntaxKind.Name && string.Equals(n.Text, alias, StringComparison.OrdinalIgnoreCase))))
                 {
                     // r-sql-1/order-nulls-text: in SELECT id AS t, t AS x FROM S the second t is the alias (x is id), where
@@ -1871,7 +1871,7 @@ public sealed class BoundSelect : IDisposable
         /// </summary>
         private SqlFailure? Collisions()
         {
-            if (allowDuplicateOutputNames)
+            if (allowDuplicateOutputNames && bound.SourceList.Count == 1)
             {
                 return null;
             }

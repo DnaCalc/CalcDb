@@ -199,7 +199,7 @@ public sealed class BoundAction : IDisposable
             if (!SchemaWriter.IsValidName(col.Name))
             {
                 bound.Dispose();
-                failure = SqlFailure.Ace(SqlPhase.Bind, 3125, SqlMessages.InvalidObjectName(col.Name));
+                failure = SqlFailure.Open(SqlPhase.Bind, "NotModelled.MakeTableInvalidColumnName", $"SELECT ... INTO invalid output column name '{col.Name}' (only invalid target table names are recorded in r-q52-ddl-make-domain/maketable-errors-dao-accdb)");
                 return null;
             }
             if (!seenNames.Add(col.Name))
@@ -280,20 +280,15 @@ public sealed class BoundAction : IDisposable
 
         return daoType switch
         {
-            1 => new NewField(col.Name, NewFieldType.YesNo),
-            2 => new NewField(col.Name, NewFieldType.Byte),
             3 => new NewField(col.Name, NewFieldType.Short),
             4 => new NewField(col.Name, NewFieldType.Long, VariableLayout: true),
             5 => new NewField(col.Name, NewFieldType.Currency, VariableLayout: true),
-            6 => new NewField(col.Name, NewFieldType.Single, VariableLayout: true),
             7 => new NewField(col.Name, NewFieldType.Double, VariableLayout: true),
             8 => new NewField(col.Name, NewFieldType.DateTime, VariableLayout: true),
             9 => new NewField(col.Name, NewFieldType.VarBinary, Size: col.Size is > 0 and <= 510 ? col.Size.Value : 510),
             10 => new NewField(col.Name, NewFieldType.Text, Size: col.Size is > 0 and <= 255 ? col.Size.Value : 255),
-            12 => new NewField(col.Name, NewFieldType.Memo),
             16 => new NewField(col.Name, NewFieldType.BigInt),
             20 => new NewField(col.Name, NewFieldType.Decimal, Precision: col.DecimalPrecision ?? 28, Scale: col.DecimalScale ?? 0, VariableLayout: true),
-            26 => new NewField(col.Name, NewFieldType.DateTime2),
             _ => FailMakeTableField(col, $"DAO FieldType {daoType}", out failure),
         };
     }
