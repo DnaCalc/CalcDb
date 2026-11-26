@@ -205,9 +205,18 @@ public sealed unsafe class OwnedVariant : IDisposable
     public DecimalValue AsDecimal()
     {
         Require(VarType.Decimal);
-        byte* b = (byte*)_cell;
-        DecimalLayout d = TargetDeclarations.WindowsX64.Decimal;
-        return new DecimalValue(b[d.ScaleOffset], b[d.SignOffset] == d.NegativeSign, *(uint*)(b + d.High32Offset), *(ulong*)(b + d.Low64Offset));
+        return ReadDecimal(*_cell);
+    }
+
+    /// <summary>Read the <see cref="DecimalValue"/> fields of a <see cref="VarType.Decimal"/> cell.</summary>
+    public static DecimalValue ReadDecimal(in NativeVariant cell)
+    {
+        fixed (NativeVariant* p = &cell)
+        {
+            byte* b = (byte*)p;
+            DecimalLayout d = TargetDeclarations.WindowsX64.Decimal;
+            return new DecimalValue(b[d.ScaleOffset], b[d.SignOffset] == d.NegativeSign, *(uint*)(b + d.High32Offset), *(ulong*)(b + d.Low64Offset));
+        }
     }
 
     private void Require(VarType type)
@@ -251,7 +260,7 @@ public sealed unsafe class OwnedVariant : IDisposable
     /// </summary>
     public static bool TryChangeScalar(NativeVariant* source, VarType target, uint lcid, out NativeVariant result, out int hr)
     {
-        if (target is not (VarType.I2 or VarType.I4 or VarType.R4 or VarType.R8 or VarType.Currency or VarType.Date or VarType.Bool or VarType.UI1))
+        if (target is not (VarType.I2 or VarType.I4 or VarType.I8 or VarType.R4 or VarType.R8 or VarType.Currency or VarType.Decimal or VarType.Date or VarType.Bool or VarType.UI1))
         {
             throw new ArgumentOutOfRangeException(nameof(target), "a scalar target that owns no resource");
         }

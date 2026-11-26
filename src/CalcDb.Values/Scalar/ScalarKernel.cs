@@ -157,19 +157,17 @@ public static unsafe partial class ScalarKernel
             }
             return d.First.IsTypedSource || d.Second.IsTypedSource ? Fail(d, AceError.Overflow) : Open(d, NotModelledCase.LongOverflowOfExpression);
         }
-        if (d.Operation <= ScalarOperation.Multiply && (ta == VarType.I8 || tb == VarType.I8) && Tag(&r) != VarType.I8 && (ta == VarType.I8 ? tb : ta) is VarType.I8 or VarType.UI1 or VarType.I2 or VarType.I4 or VarType.Bool)
-        {
-            // bigint-stored-arith: B + 1 and B * 2 at the extremes overflow; ACE has no wider integer.
-            OleAut.VariantClear(&r);
-            return Fail(d, AceError.Overflow);
-        }
+        // evidence/r-def-expr-sql/expr-bigint-stored-arith: oleaut32 widens VT_I8 +, -, *, / to VT_R8 on overflow
+        // (or always for '/'), so inner VarType(...) sees 5 (Double) while SQL projection to Field.Type = 16 converts
+        // back to VT_I8 and raises 6 (Overflow) when out of 64-bit range (SelectCursor.TryProjectValue).
         return ScalarOutcome.Of(r);
     }
 
     /// <summary>
     /// Unary minus through VarNeg (arith-overflow-promotion: <c>-CByte(1)</c> is Integer -1, <c>-'3'</c> Double -3). VarNeg
     /// widens Integer -32768 to Long and Long -2147483648 to Double; ACE fails both with 6 (<c>-CInt(-32768)</c>,
-    /// <c>-CLng(-2147483648)</c>).
+    /// <c>-CLng(-2147483648)</c>). For VT_I8 -9223372036854775808, VarNeg widens to VT_R8 so VarType(-B) is 5 and
+    /// SQL projection to Field.Type = 16 raises 6 (evidence/r-def-expr-sql/expr-bigint-stored-arith).
     /// </summary>
     private static ScalarOutcome Negate(in ScalarDescriptor d, NativeVariant* a)
     {
@@ -177,13 +175,13 @@ public static unsafe partial class ScalarKernel
         {
             return refused;
         }
+        VarType ta = Tag(a);
         NativeVariant r = default;
         int hr = OleAut.VarNeg(a, &r);
         if (hr < 0)
         {
             return Failure(d, hr);
         }
-        VarType ta = Tag(a);
         if ((ta == VarType.I2 || ta == VarType.I4) && Tag(&r) != ta)
         {
             OleAut.VariantClear(&r);
@@ -565,11 +563,53 @@ public static unsafe partial class ScalarKernel
         }
     }
 
+    private static bool TryReadIntegral64(NativeVariant* v, out long value)
+    {
+        switch (Tag(v))
+        {
+            case VarType.UI1:
+                value = (byte)v->Int64;
+                return true;
+            case VarType.I2 or VarType.Bool:
+                value = (short)v->Int64;
+                return true;
+            case VarType.I4:
+                value = (int)v->Int64;
+                return true;
+            case VarType.I8:
+                value = v->Int64;
+                return true;
+            default:
+                value = 0;
+                return false;
+        }
+    }
+
     /// <summary>VarCmp's answer (VARCMP_LT/EQ/GT) for two numbers, with ACE's Single/Double-against-Decimal rule.</summary>
     private static int NumericOrder(in ScalarDescriptor d, NativeVariant* a, NativeVariant* b, ExpressionContext c, out ScalarOutcome? failed)
     {
         failed = null;
         VarType ta = Tag(a), tb = Tag(b);
+        if (ta == VarType.I8 || tb == VarType.I8)
+        {
+            // evidence/r-q47-bigint-expr-edges/bi-select-compare-accdb: exact 64-bit comparison for BigInt against
+            // integral values and Decimal literals (e.g., B > 9223372036854775806 distinguishes Int64.MaxValue).
+            if (TryReadIntegral64(a, out long ax) && TryReadIntegral64(b, out long by))
+            {
+                int ord = ax.CompareTo(by);
+                return ord < 0 ? 0 : ord > 0 ? 2 : 1;
+            }
+            if (ta == VarType.I8 && tb == VarType.Decimal)
+            {
+                int ord = ((decimal)a->Int64).CompareTo(OwnedVariant.ReadDecimal(*b).ToDecimal());
+                return ord < 0 ? 0 : ord > 0 ? 2 : 1;
+            }
+            if (tb == VarType.I8 && ta == VarType.Decimal)
+            {
+                int ord = OwnedVariant.ReadDecimal(*a).ToDecimal().CompareTo((decimal)b->Int64);
+                return ord < 0 ? 0 : ord > 0 ? 2 : 1;
+            }
+        }
         bool decimalAgainstFloating = (ta == VarType.Decimal && tb is VarType.R4 or VarType.R8) || (tb == VarType.Decimal && ta is VarType.R4 or VarType.R8);
         if (!decimalAgainstFloating)
         {
@@ -777,13 +817,13 @@ public static unsafe partial class ScalarKernel
         return date.Value.Int64 == asDate.Int64 ? date : Open(d, NotModelledCase.DateOrNumberText);
     }
 
-    /// <summary>CStr (conv-cstr-forms): oleaut32's text form under the context's locale ("2024/03/05" in en-ZA).</summary>
+    /// <summary>CStr (conv-cstr-forms, r-q47-bigint-expr-edges/bi-select-conversions-dao-ado-accdb): oleaut32's text form under the context's locale ("2024/03/05" in en-ZA); Null fails 94 (Invalid use of Null).</summary>
     private static ScalarOutcome ToText(in ScalarDescriptor d, NativeVariant* a, ExpressionContext c)
     {
         VarType t = Tag(a);
         if (t == VarType.Null)
         {
-            return Open(d, NotModelledCase.NullArgument);
+            return Fail(d, AceError.InvalidUseOfNull);
         }
         if (t == VarType.Bool)
         {

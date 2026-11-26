@@ -589,10 +589,12 @@ public sealed class NativeRowAndDataPageTests
     [Fact]
     public void TableDefUpdater_TryUpdateCounts_applies_empty_built_and_bulk_built_statistics_word_rules()
     {
-        // R-FMT-2 II-05 (evidence/r-q-fmt-sort/dc-rules-accdb, evidence/r-q10-statistics-words):
+        // R-FMT-2 II-05 (evidence/r-q-fmt-sort/dc-rules-accdb, evidence/r-q10-statistics-words,
+        // evidence/r-q51-codecs-props-compact/dec-desc-keys-accdb):
         // word0=0 (empty-built): word1 rises on new key and never falls.
-        // word0>0 (bulk-built): removals lower word0 by 1; inserts never raise word0; new key raises word1;
-        // while word0>0, word1 is clamped at most word0 (delete-two-unique (8,7)->(6,6), insert-new (8,7)->(8,8), delete-all -> (0,0)).
+        // word0>0 (bulk-built): removals lower word0 by 1 and clamp word1 <= word0 (delete-two-unique (8,7)->(6,6),
+        // delete-all -> (0,0)); inserts never raise word0 and raise word1 by 1 even past word0
+        // (insert-new (8,7)->(8,8); dec-desc-keys-accdb (10,10)->(10,11)).
         byte[] MakeTableDefWithIndex(uint rowCount, uint w0, uint w1)
         {
             byte[] td = new byte[D.PageSize];
@@ -631,14 +633,15 @@ public sealed class NativeRowAndDataPageTests
         Assert.True(TableDefUpdater.TryReadEntryCount(bulkDelAll, 0, D, out w0) && w0 == 0);
         Assert.True(TableDefUpdater.TryReadUniqueEntryCount(bulkDelAll, 0, D, out w1) && w1 == 0);
 
-        // Bulk-built (8, 7): insert-new -> (8, 8); second insert-new stays clamped at (8, 8)
+        // Bulk-built (8, 7): insert-new -> (8, 8); second insert-new advances past word0 to (8, 9)
+        // (evidence/r-q51-codecs-props-compact/dec-desc-keys-accdb: (10, 10) -> (10, 11)).
         byte[] bulkIns = MakeTableDefWithIndex(8, w0: 8, w1: 7);
         Assert.True(TableDefUpdater.TryUpdateCounts(bulkIns, +1, null, [0], [], D, out err), err);
         Assert.True(TableDefUpdater.TryReadEntryCount(bulkIns, 0, D, out w0) && w0 == 8);
         Assert.True(TableDefUpdater.TryReadUniqueEntryCount(bulkIns, 0, D, out w1) && w1 == 8);
         Assert.True(TableDefUpdater.TryUpdateCounts(bulkIns, +1, null, [0], [], D, out err), err);
         Assert.True(TableDefUpdater.TryReadEntryCount(bulkIns, 0, D, out w0) && w0 == 8);
-        Assert.True(TableDefUpdater.TryReadUniqueEntryCount(bulkIns, 0, D, out w1) && w1 == 8);
+        Assert.True(TableDefUpdater.TryReadUniqueEntryCount(bulkIns, 0, D, out w1) && w1 == 9);
 
         // Bulk-built (8, 7): update-key -> (7, 7), RowCount unchanged
         byte[] bulkUpd = MakeTableDefWithIndex(8, w0: 8, w1: 7);

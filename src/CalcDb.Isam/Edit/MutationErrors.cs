@@ -99,6 +99,9 @@ public readonly record struct MutationError(int Number, MutationErrorSource Sour
     /// <summary>3421 "Data type conversion error." (r-q-fmt-sort/scalar-bounds-accdb, from DAO.Field at the put).</summary>
     public const int Conversion = 3421;
 
+    /// <summary>13 (0x800A000D, Type mismatch without overwriting DBEngine.Errors; r-q49-dt2-draftprops/dt2-update-invalid-accdb, dt2-dao-createfield-addnew-accdb, r-q-fmt-sort/dt2-ticks-accdb).</summary>
+    public const int ExtendedDateTimeInvalid = 13;
+
     /// <summary>3802, a rule whose evaluation fails (r-expr-1/mut-validation-rules: "Error evaluating  CHECK constraint. ").</summary>
     public const int RuleEvaluation = 3802;
 

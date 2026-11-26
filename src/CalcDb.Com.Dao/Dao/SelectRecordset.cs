@@ -1059,7 +1059,7 @@ internal static unsafe class SqlResults
         VarType.Bstr => CallResult.OfOwnedBstr(Bstrs.FromUnits(Bstrs.Chars(value.Pointer).Length, value.Pointer, static (dest, source) => Bstrs.Chars(source).CopyTo(dest))),
         VarType.Array | VarType.UI1 => CopyByteArray(value.Pointer, member),
         VarType.Decimal => CallResult.Of(OwnedVariant.Adopt(value)),
-        VarType.Empty or VarType.Null or VarType.Bool or VarType.UI1 or VarType.I2 or VarType.I4 or VarType.Currency or VarType.R4 or VarType.R8 or VarType.Date => CallResult.OfScalar((VarType)value.Vt, value.Int64),
+        VarType.Empty or VarType.Null or VarType.Bool or VarType.UI1 or VarType.I2 or VarType.I4 or VarType.I8 or VarType.Currency or VarType.R4 or VarType.R8 or VarType.Date => CallResult.OfScalar((VarType)value.Vt, value.Int64),
         var other => CallResult.Fail(Failure.NotImplemented($"{member} of a {other} value")),
     };
 
@@ -1644,9 +1644,10 @@ internal sealed unsafe class SelectFieldObject : DaoObject
             {
                 3 => Int32(2),
                 4 => Int32(4),
-                5 or 7 or 8 => Int32(8),
+                5 or 7 or 8 or 16 => Int32(8),
                 9 or 10 => Int32(0),
                 20 => Int32(16),
+                26 => Int32(42),
                 _ => CallResult.Fail(Failure.NotModelled("NotModelled.FieldSize.ExpressionType", $"Field.Size of an expression column of DAO type {type} ({Column.Name}: not recorded)")),
             };
         }
@@ -1739,7 +1740,7 @@ internal sealed unsafe class SelectFieldObject : DaoObject
                 return type switch
                 {
                     3 or 4 or 5 or 7 or 8 or 9 or 20 => Int32(1),
-                    10 => Int32(2),
+                    10 or 16 => Int32(2),
                     _ => CallResult.Fail(Failure.NotModelled("NotModelled.FieldAttributes.ExpressionType", $"Field.Attributes of an expression column of DAO type {type} ({Column.Name}: not recorded)")),
                 };
             }
@@ -1752,7 +1753,7 @@ internal sealed unsafe class SelectFieldObject : DaoObject
                 return type switch
                 {
                     3 or 4 or 7 or 8 => Int32(1),
-                    10 => Int32(2),
+                    10 or 16 or 26 => Int32(2),
                     _ => CallResult.Fail(Failure.NotModelled("NotModelled.FieldAttributes.AggregateType", $"Field.Attributes of an aggregate column of DAO type {type} ({Column.Name}: not recorded)")),
                 };
             }
@@ -1952,7 +1953,12 @@ internal sealed unsafe class SelectFieldObject : DaoObject
                 "Field.Value put without Edit on a depth-0 SELECT dynaset (not recorded)"));
         }
         NativeVariant incoming = ByRefValues.Dereference(Args.Cell(value));
-        return EditPublication.Of(frame.Assign(sc.Column, incoming));
+        EditOutcome outcome = frame.Assign(sc.Column, incoming, ExtendedDateTimeWriteMode.SqlUpdateOrDynaset);
+        if (outcome.Error is { Number: MutationError.ExtendedDateTimeInvalid })
+        {
+            return FieldObject.PublishExtendedDateTimeInvalid(Engine);
+        }
+        return EditPublication.Of(outcome);
     }
 
     /// <summary>The current row's value of column <paramref name="ordinal"/> of an open query recordset (Field.Value, Recordset.Collect, Recordset.GetRows).</summary>
@@ -2024,6 +2030,20 @@ internal sealed unsafe class SelectFieldObject : DaoObject
         }
         ResultColumn readColumn = recordset.Cursor.Columns[ordinal];
         bool isByteArray = (VarType)value.Vt == (VarType.Array | VarType.UI1);
+        bool isExtendedDateTimeColumn = readColumn.FieldType == 26
+            || (readColumn.Origin == ColumnOrigin.BaseColumn && readColumn.SourceColumn?.Column is { TypeCode: NativeTypes.ExtendedDateTime });
+        if (isExtendedDateTimeColumn && isByteArray && value.Pointer != 0)
+        {
+            (int Lower, int Count)[] shape = SafeArrays.Shape(value.Pointer);
+            if (shape.Length == 1 && shape[0].Count == ExtendedDateTimeCodec.PayloadBytes)
+            {
+                ReadOnlySpan<byte> dt2Bytes = new(SafeArrays.ElementPointer(value.Pointer, shape[0].Lower), ExtendedDateTimeCodec.PayloadBytes);
+                if (ExtendedDateTimeCodec.TryDecode(dt2Bytes, out ExtendedDateTimeValue dt2))
+                {
+                    return Text(dt2.FormatDao());
+                }
+            }
+        }
         bool isBinaryOrOleBaseColumn = readColumn.Origin == ColumnOrigin.BaseColumn
             && readColumn.SourceColumn?.Column is { TypeCode: NativeTypes.Binary or NativeTypes.Ole };
         if (isBinaryOrOleBaseColumn)

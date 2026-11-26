@@ -175,6 +175,25 @@ public sealed unsafe class BinaryProjectionTests
         }
     }
 
+    [Fact]
+    public void Select_orders_bare_binary_column_ascending_and_descending()
+    {
+        // evidence/r-q51-codecs-props-compact/bin-desc-keys-accdb, bin-desc-keys-mdb: ORDER BY on bare Binary (native type 9).
+        var db = new SqlFixture(WireDaoSha);
+        using BoundSelect? plan = BoundSelect.Prepare("SELECT ID, FBin FROM W WHERE ID IN (1000, 1001, 1002, 1003, 1007) ORDER BY FBin DESC", db, out SqlFailure? bindFail);
+        Assert.Null(bindFail);
+        using SelectCursor? cur = SelectCursor.Open(plan!, db, ResultKind.Snapshot, out SqlFailure? openFail);
+        Assert.Null(openFail);
+        var ids = new List<int>();
+        for (MoveOutcome m = cur!.MoveFirst(); m == MoveOutcome.Moved; m = cur.MoveNext())
+        {
+            Assert.True(cur.Read(0, out NativeVariant idVar, out SqlFailure? f0), f0?.ToString());
+            ids.Add((int)idVar.Int64);
+        }
+        // 1003 (00 01 02 03), 1007 (00 00 01 02), 1001 (00 00 01 00), 1002 (00 00 00 00), 1000 (Null)
+        Assert.Equal([1003, 1007, 1001, 1002, 1000], ids);
+    }
+
     [Theory]
     [InlineData("SELECT FBin & 'x' FROM W", "NotModelled.FieldType")]
     [InlineData("SELECT FOle & 'x' FROM W", "NotModelled.FieldType")]
@@ -184,7 +203,6 @@ public sealed unsafe class BinaryProjectionTests
     [InlineData("SELECT -FBin FROM W", "NotModelled.FieldType")]
     [InlineData("SELECT ID FROM W WHERE FBin Is Null", "NotModelled.FieldType")]
     [InlineData("SELECT ID FROM W WHERE FOle Is Not Null", "NotModelled.FieldType")]
-    [InlineData("SELECT ID FROM W ORDER BY FBin", "NotModelled.FieldType")]
     [InlineData("SELECT ID FROM W ORDER BY FOle", "NotModelled.FieldType")]
     [InlineData("SELECT FBin FROM W GROUP BY FBin", "NotModelled.FieldType")]
     [InlineData("SELECT Count(FBin) FROM W", "NotModelled.FieldType")]

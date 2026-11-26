@@ -210,6 +210,15 @@ public static unsafe class ActionExecutor
             // qualified.md R-SQL-1 SQL-B, r-cat-1b/qd-execute-param-action, r-sql-2-3/act-qdef-params.
             return ActionOutcome.Fail(SqlFailure.Ace(SqlPhase.Execute, 3061, SqlMessages.TooFewParameters(missing)));
         }
+        for (int i = 0; i < plan.Parameters.Count; i++)
+        {
+            if (plan.Parameters[i].DaoType == 19)
+            {
+                // evidence/r-q47-bigint-expr-edges/bi-params-dao-querydef-accdb, bi-params-ado-cmd-accdb:
+                // ACE 16.0.20625.20044 evaluates non-Null BigInt parameters as 0 during action execution; refuse explicitly.
+                return ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.BigIntParameterExecution", $"executing an action query with bound BigInt parameter '{plan.Parameters[i].Name}' (ACE 16.0.20625.20044 evaluates non-Null BigInt parameters as 0)"));
+            }
+        }
 
         var paramValues = new NativeVariant[plan.Parameters.Count];
         for (int i = 0; i < paramValues.Length; i++)
@@ -554,7 +563,7 @@ public static unsafe class ActionExecutor
                         NativeVariant[] rawRow = sourceRows[r];
                         for (int c = 0; c < rawRow.Length; c++)
                         {
-                            if (!ConvertForColumn(rawRow[c], plan.InsertColumns[c], plan.Context, errorSource, out converted[c], out SqlFailure? convFail))
+                            if (!ConvertForColumn(rawRow[c], plan.InsertColumns[c], plan.Context, errorSource, out converted[c], out SqlFailure? convFail, r8OverflowAs6: true))
                             {
                                 ClearAll(converted);
                                 if (!convFail!.IsNotModelled
@@ -799,7 +808,7 @@ public static unsafe class ActionExecutor
                             continue;
                         }
 
-                        if (!ConvertForColumn(assign.Value.Value, assign.Column, plan.Context, errorSource, out evaluated[i], out SqlFailure? convFail))
+                        if (!ConvertForColumn(assign.Value.Value, assign.Column, plan.Context, errorSource, out evaluated[i], out SqlFailure? convFail, r8OverflowAs6: true))
                         {
                             if (convFail!.IsNotModelled || failOnError)
                             {
@@ -830,7 +839,7 @@ public static unsafe class ActionExecutor
 
                     for (int i = 0; i < plan.Assignments.Count; i++)
                     {
-                        EditOutcome assignOutcome = frame.Assign(plan.Assignments[i].Column, evaluated[i]);
+                        EditOutcome assignOutcome = frame.Assign(plan.Assignments[i].Column, evaluated[i], ExtendedDateTimeWriteMode.SqlUpdateOrDynaset);
                         if (!assignOutcome.Succeeded)
                         {
                             frame.Discard();
@@ -1101,7 +1110,7 @@ public static unsafe class ActionExecutor
         }
         for (int i = 0; i < columns.Count; i++)
         {
-            EditOutcome assign = frame.Assign(columns[i], values[i]);
+            EditOutcome assign = frame.Assign(columns[i], values[i], ExtendedDateTimeWriteMode.SqlInsert);
             if (!assign.Succeeded)
             {
                 frame.Discard();
@@ -1251,7 +1260,8 @@ public static unsafe class ActionExecutor
         ExpressionContext context,
         ActionErrorSource errorSource,
         out NativeVariant converted,
-        out SqlFailure? failure)
+        out SqlFailure? failure,
+        bool r8OverflowAs6 = false)
     {
         converted = default;
         failure = null;
@@ -1307,6 +1317,32 @@ public static unsafe class ActionExecutor
                     return true;
                 }
                 failure = MapConversionKernelFailure(r, column, overflowIs3464: true, overflowIs6: false);
+                return false;
+            }
+            case NativeTypes.BigInt:
+            {
+                // evidence/r-q47-bigint-expr-edges/bi-ddl-insert-bounds-accdb, bi-insert-overflow-accdb, bi-update-bounds-accdb;
+                // evidence/r-def-expr-sql/expr-bigint-stored-arith:
+                // SQL literal overflow (VT_DECIMAL 9223372036854775808 or VALUES VT_R8 1E19) fails 3464;
+                // expression arithmetic overflow widened to VT_R8 in INSERT...SELECT / UPDATE (B + 1, B - 1) fails 6 (Overflow).
+                NativeVariant source = incoming;
+                if (OwnedVariant.TryChangeScalar(&source, VarType.I8, context.Lcid, out converted, out int hr))
+                {
+                    return true;
+                }
+                const int DispETypeMismatch = unchecked((int)0x80020005);
+                const int DispEOverflow = unchecked((int)0x8002000A);
+                if (hr == DispEOverflow && r8OverflowAs6 && vt == VarType.R8)
+                {
+                    failure = SqlFailure.Ace(SqlPhase.Execute, 6, SqlMessages.Overflow);
+                    return false;
+                }
+                if (hr is DispEOverflow or DispETypeMismatch)
+                {
+                    failure = SqlFailure.Ace(SqlPhase.Execute, 3464, SqlMessages.DataTypeMismatch);
+                    return false;
+                }
+                failure = SqlFailure.Open(SqlPhase.Execute, "NotModelled.ActionConversion", $"converting {vt} into BIGINT column '{column.Name}' (hr 0x{hr:X8})");
                 return false;
             }
             case NativeTypes.Single:
@@ -1438,6 +1474,46 @@ public static unsafe class ActionExecutor
                     return true;
                 }
                 failure = SqlFailure.Open(SqlPhase.Execute, "NotModelled.ActionConversion", $"non-text {vt} into GUID column '{column.Name}'");
+                return false;
+            }
+            case NativeTypes.Numeric:
+            {
+                // evidence/r-q51-codecs-props-compact/dec-desc-keys-accdb, dec-desc-keys-mdb, seek-args-decimal-accdb, seek-args-decimal-mdb:
+                // SQL INSERT of numeric literals into DECIMAL(p, s).
+                NativeVariant source = incoming;
+                if (OwnedVariant.TryChangeScalar(&source, VarType.Decimal, context.Lcid, out converted, out _))
+                {
+                    return true;
+                }
+                failure = SqlFailure.Open(SqlPhase.Execute, "NotModelled.ActionConversion", $"converting {vt} into DECIMAL column '{column.Name}'");
+                return false;
+            }
+            case NativeTypes.ExtendedDateTime:
+            {
+                // evidence/r-q49-dt2-draftprops/dt2-ddl-insert-bounds-accdb, dt2-update-invalid-accdb,
+                // evidence/r-q-fmt-sort/dt2-ticks-accdb: SQL INSERT/UPDATE accepts valid ISO/date/time text and
+                // #date# (VT_DATE); invalid dates, year 0, year >= 10000, and numbers fail 3464.
+                if (vt == VarType.Bstr)
+                {
+                    if (!ExtendedDateTimeCodec.TryParseText(Bstrs.Chars(incoming.Pointer), out _))
+                    {
+                        failure = SqlFailure.Ace(SqlPhase.Execute, 3464, SqlMessages.DataTypeMismatch);
+                        return false;
+                    }
+                    converted = SelectValues.Copy(incoming);
+                    return true;
+                }
+                if (vt == VarType.Date)
+                {
+                    if (!ExtendedDateTimeCodec.TryFromOleDate(incoming.Double, out _))
+                    {
+                        failure = SqlFailure.Ace(SqlPhase.Execute, 3464, SqlMessages.DataTypeMismatch);
+                        return false;
+                    }
+                    converted = incoming;
+                    return true;
+                }
+                failure = SqlFailure.Ace(SqlPhase.Execute, 3464, SqlMessages.DataTypeMismatch);
                 return false;
             }
             default:

@@ -60,7 +60,7 @@ internal sealed unsafe class NewTableDefObject : DaoObject
     /// DAO types (1..12, 15) are accepted with ACE's exact default Size.
     /// </summary>
     private CallResult CreateField(nint name, nint type, nint size) =>
-        NewFieldObject.Create(Engine, forAttachedTable: false, name, type, size);
+        NewFieldObject.Create(Engine, forAttachedTable: false, isJet4: _database.Profile.Format == FileFormat.Jet4, name, type, size);
 
     /// <summary>The typed request this draft appends as: its fields in Append order, by the DAO route.</summary>
     public CreateTableRequest? Request(out string? notWritten)
@@ -166,6 +166,14 @@ internal sealed unsafe class NewFieldObject : DaoObject
     public const short DbGUID = 15;
     public const short DbBigInt = 16;
     public const short DbDecimal = 20;
+    public const short DbDateTimeExtended = 26;
+
+    internal enum DraftExtendedKind : byte
+    {
+        None,
+        BigInt,
+        DateTime2,
+    }
 
     private static readonly InterfaceDecl Decl = DaoTypes.Field3;
     private static readonly nint Vtable = DualEntries.Build(Decl);
@@ -217,6 +225,9 @@ internal sealed unsafe class NewFieldObject : DaoObject
     /// <summary>True when created via attached <c>TableDef.CreateField(name, 20)</c> (dbDecimal).</summary>
     public bool IsAttachedDecimal { get; }
 
+    /// <summary>Distinguishes draft <c>dbBigInt</c> (16 -> draft Type=19) and <c>dbDateTimeExtended</c> (26 -> draft Type=20).</summary>
+    internal DraftExtendedKind ExtendedKind { get; }
+
     /// <summary>Explicit <c>Required</c> put on the draft field, or null if unset.</summary>
     public bool? RequiredPut { get; private set; }
 
@@ -267,7 +278,7 @@ internal sealed unsafe class NewFieldObject : DaoObject
     /// Shared factory for draft (<c>NewTableDefObject.CreateField</c>) and attached (<c>TableDefObject.CreateField</c>)
     /// fields (r-dao-1-err-1/draft-tabledef-field, r-q46-dao-ddl-multi/cf-*).
     /// </summary>
-    public static CallResult Create(EngineState engine, bool forAttachedTable, nint name, nint type, nint size)
+    public static CallResult Create(EngineState engine, bool forAttachedTable, bool isJet4, nint name, nint type, nint size)
     {
         string fieldName = name == 0 ? "" : Args.Text(name) ?? "";
         int? fieldType = Args.Int32(type, 0);
@@ -286,7 +297,37 @@ internal sealed unsafe class NewFieldObject : DaoObject
         }
         if (t == DbBigInt)
         {
-            return CallResult.Fail(Failure.NotModelled("NotModelled.DaoCreateFieldBigInt", "TableDef.CreateField of dbBigInt (16) is not modelled (BIGINT DAO write path belongs to a follow-up slice)"));
+            if (forAttachedTable)
+            {
+                return CallResult.Fail(Failure.NotModelled("NotModelled.DaoAttachedCreateFieldBigInt", "attached TableDef.CreateField of dbBigInt (16) is not recorded (only draft CreateField is recorded in evidence/r-q47-bigint-expr-edges/bi-dao-createfield-addnew-accdb)"));
+            }
+            if (isJet4)
+            {
+                return CallResult.Fail(Failure.NotModelled("NotModelled.DaoCreateFieldBigIntMdb", "draft TableDef.CreateField of dbBigInt (16) on Jet 4 MDB is not recorded (only ACCDB is recorded in evidence/r-q47-bigint-expr-edges/bi-dao-createfield-addnew-accdb)"));
+            }
+            // evidence/r-q47-bigint-expr-edges/bi-dao-createfield-addnew-accdb:
+            // draft CreateField("B", 16) returns a draft Field with Type=19, Size=8, Attributes=0 before Append.
+            var biField = new NewFieldObject(engine, fieldName, type: 19, size: 8, isAttachedDecimal: false, extendedKind: DraftExtendedKind.BigInt);
+            CallResult biResult = Object(biField);
+            biField.Release();
+            return biResult;
+        }
+        if (t == DbDateTimeExtended)
+        {
+            if (forAttachedTable)
+            {
+                return CallResult.Fail(Failure.NotModelled("NotModelled.DaoAttachedCreateFieldDateTime2", "attached TableDef.CreateField of dbDateTimeExtended (26) is not recorded (only draft CreateField is recorded in evidence/r-q49-dt2-draftprops/dt2-dao-createfield-addnew-accdb)"));
+            }
+            if (isJet4)
+            {
+                return CallResult.Fail(Failure.NotModelled("NotModelled.DaoCreateFieldDateTime2Mdb", "draft TableDef.CreateField of dbDateTimeExtended (26) on Jet 4 MDB is not recorded (only ACCDB is recorded in evidence/r-q49-dt2-draftprops/dt2-dao-createfield-addnew-accdb)"));
+            }
+            // evidence/r-q49-dt2-draftprops/dt2-dao-createfield-addnew-accdb:
+            // draft CreateField("D", 26) returns a draft Field with Type=20, Size=42, Attributes=0 before Append.
+            var dt2Field = new NewFieldObject(engine, fieldName, type: 20, size: 42, isAttachedDecimal: false, extendedKind: DraftExtendedKind.DateTime2);
+            CallResult dt2Result = Object(dt2Field);
+            dt2Field.Release();
+            return dt2Result;
         }
         if (t == DbDecimal)
         {
@@ -389,6 +430,24 @@ internal sealed unsafe class NewFieldObject : DaoObject
 
         bool required = RequiredPut ?? false;
         bool azl = AllowZeroLengthPut ?? false;
+        if (ExtendedKind == DraftExtendedKind.BigInt)
+        {
+            if (forAttachedTable)
+            {
+                notWritten = "attached TableDef.Fields.Append of dbBigInt is not recorded";
+                return null;
+            }
+            return new NewField(Name, NewFieldType.BigInt, Required: required, AllowZeroLength: azl);
+        }
+        if (ExtendedKind == DraftExtendedKind.DateTime2)
+        {
+            if (forAttachedTable)
+            {
+                notWritten = "attached TableDef.Fields.Append of dbDateTimeExtended is not recorded";
+                return null;
+            }
+            return new NewField(Name, NewFieldType.DateTime2, Required: required, AllowZeroLength: azl);
+        }
         switch (Type)
         {
             case DbBoolean:
@@ -500,13 +559,14 @@ internal sealed unsafe class NewFieldObject : DaoObject
         return CallResult.Nothing;
     }
 
-    public NewFieldObject(EngineState engine, string name, short type, int size, bool isAttachedDecimal = false)
+    public NewFieldObject(EngineState engine, string name, short type, int size, bool isAttachedDecimal = false, DraftExtendedKind extendedKind = DraftExtendedKind.None)
         : base(Decl, Vtable, engine, "DAO.Field")
     {
         Name = name;
         Type = type;
         Size = size;
         IsAttachedDecimal = isAttachedDecimal;
+        ExtendedKind = extendedKind;
     }
 
     public string Name { get; }

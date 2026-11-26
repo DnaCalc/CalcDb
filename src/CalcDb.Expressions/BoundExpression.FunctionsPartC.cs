@@ -1,4 +1,5 @@
 using System.Globalization;
+using CalcDb.Format;
 using CalcDb.Foundation;
 using CalcDb.Values;
 using CalcDb.Values.Scalar;
@@ -355,7 +356,18 @@ public sealed unsafe partial class BoundExpression
             {
                 return ScalarOutcome.Of(new NativeVariant { Vt = (ushort)VarType.Null });
             }
-            if (!TryConvertDate(_descriptors[d + 2], dateArg, _active, out double oaDate, out fail))
+            bool isExtendedDate = _stack[first + 2].ExtendedDateTimeTag;
+            double oaDate = 0;
+            if (isExtendedDate)
+            {
+                // evidence/r-q49-dt2-draftprops/dt2-select-funcs-convert-dao-ado-accdb: DateAdd on DATETIME2 converts to OLE
+                // VT_DATE first (year < 100 fails 3464) and overflows past 9999-12-31 with 3071.
+                if (!TryReadExtendedDateTimeBytes(dateArg, out ExtendedDateTimeValue dt2) || !dt2.TryToOleDate(out oaDate))
+                {
+                    return FailAce(_descriptors[d + 2], AceError.TypeMismatch);
+                }
+            }
+            else if (!TryConvertDate(_descriptors[d + 2], dateArg, _active, out oaDate, out fail))
             {
                 return fail;
             }
@@ -363,6 +375,7 @@ public sealed unsafe partial class BoundExpression
             {
                 return FailAce(_descriptors[d + 2], ScalarFormat.IsOverflowHResult(hr) ? AceError.Overflow : AceError.InvalidProcedureCall);
             }
+            int rangeError = isExtendedDate ? AceError.ExpressionTooComplex : AceError.InvalidProcedureCall;
 
             double resultDate;
             switch (interval)
@@ -386,7 +399,7 @@ public sealed unsafe partial class BoundExpression
                     }
                     if (newYear < 100 || newYear > 9999)
                     {
-                        return FailAce(_descriptors[d], AceError.InvalidProcedureCall);
+                        return FailAce(_descriptors[d], rangeError);
                     }
                     int y = (int)newYear;
                     int m = (int)newMonth0 + 1;
@@ -406,7 +419,7 @@ public sealed unsafe partial class BoundExpression
                     long newDays = days + deltaDays;
                     if (newDays < MinOaDay || newDays > MaxOaDay)
                     {
-                        return FailAce(_descriptors[d], AceError.InvalidProcedureCall);
+                        return FailAce(_descriptors[d], rangeError);
                     }
                     resultDate = CombineOaDate(newDays, frac);
                     break;
@@ -427,7 +440,7 @@ public sealed unsafe partial class BoundExpression
                     double newFrac = continuous - newDays;
                     if (newDays < MinOaDay || newDays > MaxOaDay)
                     {
-                        return FailAce(_descriptors[d], AceError.InvalidProcedureCall);
+                        return FailAce(_descriptors[d], rangeError);
                     }
                     resultDate = CombineOaDate(newDays, newFrac);
                     break;
@@ -492,18 +505,36 @@ public sealed unsafe partial class BoundExpression
             {
                 return ScalarOutcome.Of(new NativeVariant { Vt = (ushort)VarType.Null });
             }
-            if (!TryConvertDate(_descriptors[d + 1], d1Arg, _active, out double oa1, out fail)
-                || !TryConvertDate(_descriptors[d + 2], d2Arg, _active, out double oa2, out fail))
+            OleUDate u1, u2;
+            long day1, day2;
+            bool isExtended = _stack[first + 1].ExtendedDateTimeTag || _stack[first + 2].ExtendedDateTimeTag;
+            double oa1 = 0, oa2 = 0;
+            if (isExtended)
             {
-                return fail;
+                if (!TryReadExtendedDateTimeArg(_descriptors[d + 1], _stack[first + 1], out ExtendedDateTimeValue dt1, out fail)
+                    || !TryReadExtendedDateTimeArg(_descriptors[d + 2], _stack[first + 2], out ExtendedDateTimeValue dt2, out fail))
+                {
+                    return fail;
+                }
+                u1 = ToExtendedUDate(dt1);
+                u2 = ToExtendedUDate(dt2);
+                day1 = dt1.Days - ExtendedDateTimeValue.OleEpochDays;
+                day2 = dt2.Days - ExtendedDateTimeValue.OleEpochDays;
             }
-            if (!ScalarFormat.TryDateToUDate(oa1, out OleUDate u1, out _) || !ScalarFormat.TryDateToUDate(oa2, out OleUDate u2, out _))
+            else
             {
-                return FailAce(_descriptors[d + 1], AceError.InvalidProcedureCall);
+                if (!TryConvertDate(_descriptors[d + 1], d1Arg, _active, out oa1, out fail)
+                    || !TryConvertDate(_descriptors[d + 2], d2Arg, _active, out oa2, out fail))
+                {
+                    return fail;
+                }
+                if (!ScalarFormat.TryDateToUDate(oa1, out u1, out _) || !ScalarFormat.TryDateToUDate(oa2, out u2, out _))
+                {
+                    return FailAce(_descriptors[d + 1], AceError.InvalidProcedureCall);
+                }
+                day1 = (long)(new DateTime(u1.St.Year, u1.St.Month, u1.St.Day) - new DateTime(1899, 12, 30)).Days;
+                day2 = (long)(new DateTime(u2.St.Year, u2.St.Month, u2.St.Day) - new DateTime(1899, 12, 30)).Days;
             }
-
-            long day1 = (long)(new DateTime(u1.St.Year, u1.St.Month, u1.St.Day) - new DateTime(1899, 12, 30)).Days;
-            long day2 = (long)(new DateTime(u2.St.Year, u2.St.Month, u2.St.Day) - new DateTime(1899, 12, 30)).Days;
             long diff;
             switch (interval)
             {
@@ -536,6 +567,10 @@ public sealed unsafe partial class BoundExpression
                 case DateInterval.Minute:
                 case DateInterval.Second:
                 {
+                    if (isExtended)
+                    {
+                        return ScalarOutcome.Fail(ScalarFailure.Open(NotModelledCase.UnsupportedOperandType, _descriptors[d].Site, _descriptors[d].Operation));
+                    }
                     // r-expr-1/c-date-payloads (qd19): ACE adds a ~0.5 ms rounding nudge before splitting negative OA dates
                     // into linear days and truncating toward zero (so DateDiff('h', -0.25, +0.25) = 1, (0, -0.25) = 5, (-1.5, -0.5) = 23).
                     double unitsPerDay = interval switch
@@ -667,13 +702,25 @@ public sealed unsafe partial class BoundExpression
             {
                 return ScalarOutcome.Of(new NativeVariant { Vt = (ushort)VarType.Null });
             }
-            if (!TryConvertDate(_descriptors[d + 1], dateArg, _active, out double oaDate, out fail))
+            OleUDate ud;
+            if (_stack[first + 1].ExtendedDateTimeTag)
             {
-                return fail;
+                if (!TryReadExtendedDateTimeBytes(dateArg, out ExtendedDateTimeValue dt2))
+                {
+                    return FailAce(_descriptors[d + 1], AceError.TypeMismatch);
+                }
+                ud = ToExtendedUDate(dt2);
             }
-            if (!ScalarFormat.TryDateToUDate(oaDate, out OleUDate ud, out _))
+            else
             {
-                return FailAce(_descriptors[d + 1], AceError.InvalidProcedureCall);
+                if (!TryConvertDate(_descriptors[d + 1], dateArg, _active, out double oaDate, out fail))
+                {
+                    return fail;
+                }
+                if (!ScalarFormat.TryDateToUDate(oaDate, out ud, out _))
+                {
+                    return FailAce(_descriptors[d + 1], AceError.InvalidProcedureCall);
+                }
             }
 
             int value = interval switch
@@ -849,13 +896,25 @@ public sealed unsafe partial class BoundExpression
             {
                 return ScalarOutcome.Of(new NativeVariant { Vt = (ushort)VarType.Null });
             }
-            if (!TryConvertDate(_descriptors[d], arg, _active, out double oaDate, out ScalarOutcome fail))
+            OleUDate ud;
+            if (_stack[first].ExtendedDateTimeTag)
             {
-                return fail;
+                if (!TryReadExtendedDateTimeBytes(arg, out ExtendedDateTimeValue dt2))
+                {
+                    return FailAce(_descriptors[d], AceError.TypeMismatch);
+                }
+                ud = ToExtendedUDate(dt2);
             }
-            if (!ScalarFormat.TryDateToUDate(oaDate, out OleUDate ud, out _))
+            else
             {
-                return FailAce(_descriptors[d], AceError.TypeMismatch);
+                if (!TryConvertDate(_descriptors[d], arg, _active, out double oaDate, out ScalarOutcome fail))
+                {
+                    return fail;
+                }
+                if (!ScalarFormat.TryDateToUDate(oaDate, out ud, out _))
+                {
+                    return FailAce(_descriptors[d], AceError.TypeMismatch);
+                }
             }
             short val = ins.Function switch
             {
@@ -1102,6 +1161,13 @@ public sealed unsafe partial class BoundExpression
             if (arg.Vt == (ushort)VarType.Null)
             {
                 return ScalarOutcome.Of(new NativeVariant { Vt = (ushort)VarType.Null });
+            }
+            if (arg.Vt == (ushort)VarType.I8)
+            {
+                // evidence/r-def-expr-sql/expr-bigint-stored-compare-convert: Str(VT_I8) keeps exact 64-bit digits.
+                long iv = arg.Int64;
+                string exact = iv.ToString(CultureInfo.InvariantCulture);
+                return MakeBstr(iv >= 0 ? " " + exact : exact);
             }
             if (!TryConvertDouble(_descriptors[d], arg, _active, out double val, out ScalarOutcome fail))
             {

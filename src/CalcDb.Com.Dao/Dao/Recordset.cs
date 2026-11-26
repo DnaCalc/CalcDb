@@ -480,6 +480,7 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
             KeyArgumentFailure failure = KeyArgumentFailure.NotEncoded;
             SeekKey? key = column is null ? null
                 : IndexKeys.IsText(column.TypeCode) ? SeekTextKeyOf(i, &keyCell, out failure)
+                : column.TypeCode is NativeTypes.Guid or NativeTypes.Binary ? SeekBytesKeyOf(i, &keyCell, column.TypeCode, out failure)
                 : SeekKeyOf(&keyCell, column.TypeCode, out failure);
             if (key is null)
             {
@@ -511,6 +512,7 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
 
     private SeekKey[]? _seekKeys;
     private char[]?[]? _seekText;
+    private byte[]?[]? _seekBytes;
 
     /// <summary>Why a Seek argument gives no key value.</summary>
     private enum KeyArgumentFailure
@@ -573,14 +575,137 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
     private const int TextIndexUnits = 255;
 
     /// <summary>
+    /// A Seek key for a GUID or Binary/VarBinary column:
+    /// <list type="bullet">
+    /// <item>GUID (<c>evidence/r-q51-codecs-props-compact/seek-args-guid-accdb</c>, <c>seek-args-guid-mdb</c>): Null/Empty are the Null key;
+    /// BSTR <c>{guid {uuid}}</c> (case-insensitive) or bare braced <c>{uuid}</c> parses to its 16 Windows raw row bytes;
+    /// every other input (unbraced UUID, SAFEARRAY, invalid text, empty text, numbers) fails 3421.</item>
+    /// <item>Binary/VarBinary (<c>evidence/r-q51-codecs-props-compact/seek-args-binary-accdb</c>, <c>seek-args-binary-mdb</c>): Null, Empty,
+    /// <c>""</c>, and 0- or 1-byte arrays are the Null key; 1D <c>VT_ARRAY|VT_UI1</c> truncates odd lengths to
+    /// <c>len &amp; ~1</c> bytes without zero-padding to column width; BSTR takes its UTF-16LE bytes; other scalars convert
+    /// via <c>VariantChangeTypeEx(..., VT_BSTR)</c> to UTF-16LE bytes (or fail 3421).</item>
+    /// </list>
+    /// </summary>
+    private SeekKey? SeekBytesKeyOf(int ordinal, NativeVariant* v, byte type, out KeyArgumentFailure failure)
+    {
+        failure = KeyArgumentFailure.None;
+        VarType vt = (VarType)v->Vt;
+        if (vt is VarType.Null or VarType.Empty)
+        {
+            return new SeekKey(KeyValue.Null);
+        }
+        if (type == NativeTypes.Guid)
+        {
+            if (vt != VarType.Bstr || v->Pointer == 0)
+            {
+                failure = KeyArgumentFailure.Conversion;
+                return null;
+            }
+            ReadOnlySpan<char> text = Bstrs.Chars(v->Pointer);
+            ReadOnlySpan<char> inner = text;
+            if (text.Length == 45
+                && text.StartsWith("{guid ", StringComparison.OrdinalIgnoreCase)
+                && text[^1] == '}')
+            {
+                inner = text.Slice(6, 38);
+            }
+            if (inner.Length != 38 || inner[0] != '{' || inner[^1] != '}' || !Guid.TryParseExact(inner, "B", out Guid parsed))
+            {
+                failure = KeyArgumentFailure.Conversion;
+                return null;
+            }
+            byte[] guidBuf = RentSeekBytes(ordinal, 16);
+            parsed.TryWriteBytes(guidBuf);
+            return new SeekKey(KeyValue.OfBytes(guidBuf.AsMemory(0, 16)));
+        }
+        // NativeTypes.Binary (BINARY / VARBINARY)
+        if (vt == (VarType.Array | VarType.UI1))
+        {
+            if (v->Pointer == 0)
+            {
+                return new SeekKey(KeyValue.Null);
+            }
+            (int Lower, int Count)[] shape = SafeArrays.Shape(v->Pointer);
+            if (shape.Length != 1)
+            {
+                failure = KeyArgumentFailure.Conversion;
+                return null;
+            }
+            int len = shape[0].Count & ~1;
+            if (len == 0)
+            {
+                return new SeekKey(KeyValue.Null);
+            }
+            byte[] buf = RentSeekBytes(ordinal, len);
+            new ReadOnlySpan<byte>(SafeArrays.ElementPointer(v->Pointer, shape[0].Lower), len).CopyTo(buf);
+            return new SeekKey(KeyValue.OfBytes(buf.AsMemory(0, len)));
+        }
+        if (vt == VarType.Bstr)
+        {
+            ReadOnlySpan<char> chars = v->Pointer == 0 ? default : Bstrs.Chars(v->Pointer);
+            if (chars.IsEmpty)
+            {
+                return new SeekKey(KeyValue.Null);
+            }
+            int byteLen = chars.Length * 2;
+            byte[] buf = RentSeekBytes(ordinal, byteLen);
+            new ReadOnlySpan<byte>((void*)v->Pointer, byteLen).CopyTo(buf);
+            return new SeekKey(KeyValue.OfBytes(buf.AsMemory(0, byteLen)));
+        }
+        NativeVariant converted = default;
+        int hr = OleAut.VariantChangeTypeEx(&converted, v, SessionLocale.Lcid, 0, (ushort)VarType.Bstr);
+        if (hr < 0)
+        {
+            failure = KeyArgumentFailure.Conversion;
+            return null;
+        }
+        try
+        {
+            ReadOnlySpan<char> chars = converted.Pointer == 0 ? default : Bstrs.Chars(converted.Pointer);
+            if (chars.IsEmpty)
+            {
+                return new SeekKey(KeyValue.Null);
+            }
+            int byteLen = chars.Length * 2;
+            byte[] buf = RentSeekBytes(ordinal, byteLen);
+            new ReadOnlySpan<byte>((void*)converted.Pointer, byteLen).CopyTo(buf);
+            return new SeekKey(KeyValue.OfBytes(buf.AsMemory(0, byteLen)));
+        }
+        finally
+        {
+            OleAut.VariantClear(&converted);
+        }
+    }
+
+    private byte[] RentSeekBytes(int ordinal, int length)
+    {
+        byte[]?[] buffers = _seekBytes ??= new byte[MaxSeekKeys][];
+        if (buffers[ordinal] is not { } buffer || buffer.Length < length)
+        {
+            buffer = buffers[ordinal] = new byte[Math.Max(length, 64)];
+        }
+        return buffer;
+    }
+
+    /// <summary>
     /// A Seek key as its column's stored value: Null and Empty are the Null key, except for a Yes/No column (3162);
     /// integer columns take the numeric value (a fraction lies between two stored values); Currency, Single, Double, Date
-    /// and Boolean convert as VariantChangeType does, or fail with 3421. Null with <paramref name="failure"/>
+    /// and Boolean convert as VariantChangeType does, or fail with 3421; NUMERIC coerces every argument to the Null key
+    /// (<c>evidence/r-q51-codecs-props-compact/seek-args-decimal-accdb</c>, <c>seek-args-decimal-mdb</c>, <c>dec-desc-keys-accdb</c>, <c>dec-desc-keys-mdb</c>);
+    /// BigInt and ExtendedDateTime refuse non-Null/non-Empty Seek arguments with 3421
+    /// (<c>evidence/r-q47-bigint-expr-edges/bi-index-keys-accdb</c>,
+    /// <c>evidence/r-q49-dt2-draftprops/dt2-index-keys-asc-desc-accdb</c>). Null with <paramref name="failure"/>
     /// NotEncoded is a column type the codec does not encode.
     /// </summary>
     private static SeekKey? SeekKeyOf(NativeVariant* v, byte type, out KeyArgumentFailure failure)
     {
         failure = KeyArgumentFailure.None;
+        if (type == NativeTypes.Numeric)
+        {
+            // evidence/r-q51-codecs-props-compact/seek-args-decimal-accdb, seek-args-decimal-mdb, dec-desc-keys-accdb, dec-desc-keys-mdb:
+            // DAO Seek on DECIMAL(18,4) coerces every argument (including BSTR, numbers, arrays, VT_DISPATCH) to Null.
+            return new SeekKey(KeyValue.Null);
+        }
         VarType vt = (VarType)v->Vt;
         if (vt is VarType.Null or VarType.Empty)
         {
@@ -589,7 +714,20 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
                 failure = KeyArgumentFailure.NullForYesNo;
                 return null;
             }
+            if (type is NativeTypes.BigInt or NativeTypes.ExtendedDateTime)
+            {
+                // Null/Empty Seek on BigInt/DateTime2 is not recorded; keep named rather than guessing.
+                failure = KeyArgumentFailure.NotEncoded;
+                return null;
+            }
             return new SeekKey(KeyValue.Null);
+        }
+        if (type is NativeTypes.BigInt or NativeTypes.ExtendedDateTime)
+        {
+            // evidence/r-q47-bigint-expr-edges/bi-index-keys-accdb & r-q49-dt2-draftprops/dt2-index-keys-asc-desc-accdb:
+            // DAO Seek on BigInt and DateTime2 indexes fails 3421 ("Data type conversion error.") on all non-Null args.
+            failure = KeyArgumentFailure.Conversion;
+            return null;
         }
         VarType? target = type switch
         {
@@ -2442,7 +2580,32 @@ internal sealed unsafe class FieldObject : DaoObject
                 : FieldFailure(MutationError.NoEdit, "Update or CancelUpdate without AddNew or Edit.");
         }
         NativeVariant incoming = ByRefValues.Dereference(Args.Cell(value));
-        return EditPublication.Of(frame.Assign(column, incoming));
+        EditOutcome outcome = frame.Assign(column, incoming);
+        if (outcome.Error is { Number: MutationError.ExtendedDateTimeInvalid })
+        {
+            return PublishExtendedDateTimeInvalid(recordset.Engine);
+        }
+        return EditPublication.Of(outcome);
+    }
+
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<EngineState, Failure> LastConsumedStaleError = new();
+
+    /// <summary>
+    /// ACE's <c>DATETIME2</c> invalid DAO put behavior (<c>evidence/r-q49-dt2-draftprops/dt2-update-invalid-accdb</c>,
+    /// <c>dt2-dao-createfield-addnew-accdb</c>, <c>evidence/r-q-fmt-sort/dt2-ticks-accdb</c>): never overwrites
+    /// <c>DBEngine.Errors</c>; if an unconsumed prior DAO error sits in <c>DBEngine.Errors</c>, surfaces that error's
+    /// EXCEPINFO once (consuming it); otherwise returns <c>0x800A000D</c> with empty source/description.
+    /// </summary>
+    internal static CallResult PublishExtendedDateTimeInvalid(EngineState engine)
+    {
+        Failure? latest = engine.Errors.Count > 0 ? engine.Errors[^1] : null;
+        if (latest is not null
+            && (!LastConsumedStaleError.TryGetValue(engine, out Failure? consumed) || !ReferenceEquals(consumed, latest)))
+        {
+            LastConsumedStaleError.AddOrUpdate(engine, latest);
+            return CallResult.Fail(latest with { Kind = FailureKind.Ado, PublishesErrorInfo = false });
+        }
+        return CallResult.Fail(new Failure(FailureKind.Ado, unchecked((int)0x800A000D), "", "", null, 0));
     }
 
     /// <summary>ValidateOnSet (EXPR-STAGE): True runs the field's rule at the put, False at Update.</summary>
@@ -2496,6 +2659,7 @@ internal sealed unsafe class FieldObject : DaoObject
         NativeKind.Byte => CallResult.OfScalar(VarType.UI1, (byte)v.Integer),
         NativeKind.Integer => CallResult.OfScalar(VarType.I2, (ushort)(short)v.Integer),
         NativeKind.Long => CallResult.OfScalar(VarType.I4, (uint)(int)v.Integer),
+        NativeKind.BigInt => CallResult.OfScalar(VarType.I8, v.Integer),
         NativeKind.Currency => CallResult.OfScalar(VarType.Currency, v.Integer),
         NativeKind.Single => CallResult.OfScalar(VarType.R4, (uint)v.Bits),
         NativeKind.Double => CallResult.OfScalar(VarType.R8, (long)v.Bits),
@@ -2513,6 +2677,8 @@ internal sealed unsafe class FieldObject : DaoObject
         NativeKind.Decimal => OwnedVariant.FromDecimal(new DecimalValue(v.Scale, v.Decimal.Negative, v.Decimal.High32, v.Decimal.Low64)),
         NativeKind.Binary or NativeKind.LongBinary => v.Bytes is { Length: > 0 } bytes ? ByteArray(bytes) : OwnedVariant.Null(),
         NativeKind.Guid => OwnedVariant.FromText("{guid " + new Guid(v.Bytes!).ToString("B").ToUpperInvariant() + "}"),
+        NativeKind.ExtendedDateTime when v.Bytes is { Length: ExtendedDateTimeCodec.PayloadBytes } bytes && ExtendedDateTimeCodec.TryDecode(bytes, out ExtendedDateTimeValue dt2) =>
+            OwnedVariant.FromText(dt2.FormatDao()),
         // An edit buffer's text cell: the owned candidate the frame keeps (a stored row's text is read in Value).
         NativeKind.Text when v.Text is { } text => OwnedVariant.FromText(text),
         _ => null,

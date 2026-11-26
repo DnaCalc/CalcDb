@@ -609,7 +609,12 @@ public sealed class TableCursor : IRecordCursor, IRowPositioned, IMutableCursor
                 }
                 return IndexRefusal.KeyNotEncodable;
             }
-            needed += keys[i].Value.Kind == KeyValueKind.Text ? codec.MaxFieldBytesFor(keys[i].Value.Text.Length) : codec.MaxFieldBytes;
+            needed += keys[i].Value.Kind switch
+            {
+                KeyValueKind.Text => codec.MaxFieldBytesFor(keys[i].Value.Text.Length),
+                KeyValueKind.Bytes => IndexKeys.ChunkedFieldBytes(Math.Max(keys[i].Value.Bytes.Length, 1)),
+                _ => codec.MaxFieldBytes,
+            };
         }
         if (_keyScratch.Length < needed)
         {

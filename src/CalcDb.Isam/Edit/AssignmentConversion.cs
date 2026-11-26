@@ -27,7 +27,11 @@ public static unsafe class AssignmentConversion
     private const int DispOverflow = unchecked((int)0x8002000A);
 
     /// <summary>Convert <paramref name="incoming"/>, borrowed from the caller, into <paramref name="column"/>'s type under <paramref name="lcid"/>.</summary>
-    public static ConversionResult Convert(in NativeVariant incoming, ColumnDescriptor column, uint lcid)
+    public static ConversionResult Convert(
+        in NativeVariant incoming,
+        ColumnDescriptor column,
+        uint lcid,
+        ExtendedDateTimeWriteMode dt2Mode = ExtendedDateTimeWriteMode.DaoTable)
     {
         VarType vt = incoming.Type;
         if (vt == VarType.Null)
@@ -39,6 +43,10 @@ public static unsafe class AssignmentConversion
         if (column.TypeCode == NativeTypes.Ole && vt == (VarType.Array | VarType.UI1))
         {
             return ByteArray(incoming);
+        }
+        if (column.TypeCode == NativeTypes.Binary)
+        {
+            return Binary(incoming, column);
         }
         if (vt is VarType.Empty or VarType.Error || ((ushort)vt & 0xF000) != 0)
         {
@@ -52,6 +60,8 @@ public static unsafe class AssignmentConversion
                 return Text(incoming, column);
             case NativeTypes.Guid:
                 return Guid(incoming);
+            case NativeTypes.Numeric:
+                return Numeric(incoming, column, lcid);
             case NativeTypes.Boolean:
                 return Scalar(incoming, VarType.Bool, lcid);
             case NativeTypes.Byte:
@@ -60,6 +70,8 @@ public static unsafe class AssignmentConversion
                 return Scalar(incoming, VarType.I2, lcid);
             case NativeTypes.Long:
                 return Scalar(incoming, VarType.I4, lcid);
+            case NativeTypes.BigInt:
+                return BigInt(incoming, lcid);
             case NativeTypes.Single:
                 return Scalar(incoming, VarType.R4, lcid);
             case NativeTypes.Double:
@@ -68,6 +80,8 @@ public static unsafe class AssignmentConversion
                 return Scalar(incoming, VarType.Currency, lcid);
             case NativeTypes.DateTime:
                 return Scalar(incoming, VarType.Date, lcid);
+            case NativeTypes.ExtendedDateTime:
+                return ExtendedDateTime(incoming, dt2Mode);
             default:
                 return Open(MutationOpen.ColumnType);
         }
@@ -95,6 +109,126 @@ public static unsafe class AssignmentConversion
         }
         byte[] bytes = new ReadOnlySpan<byte>(SafeArrays.ElementPointer(incoming.Pointer, shape[0].Lower), shape[0].Count).ToArray();
         return new ConversionResult(new NativeValue(NativeKind.LongBinary) { Bytes = bytes });
+    }
+
+    /// <summary>
+    /// Assignment into fixed <c>BINARY(n)</c> or variable <c>VARBINARY(n)</c> (evidence/r-q51-codecs-props-compact/bin-desc-keys-accdb,
+    /// bin-desc-keys-mdb): a 0-byte <c>VT_ARRAY|VT_UI1</c> or empty <c>VT_BSTR ""</c> stores Null; a non-empty 1D
+    /// <c>VT_ARRAY|VT_UI1</c> up to <c>column.Length</c> bytes is right-zero-padded to <c>column.Length</c> when fixed
+    /// (<c>BINARY(n)</c>) and kept at exact length when variable (<c>VARBINARY(n)</c>). Over-length or non-empty string
+    /// puts are not recorded.
+    /// </summary>
+    private static ConversionResult Binary(in NativeVariant incoming, ColumnDescriptor column)
+    {
+        VarType vt = incoming.Type;
+        if (vt == VarType.Bstr)
+        {
+            ReadOnlySpan<char> chars = incoming.Pointer == 0 ? default : Bstrs.Chars(incoming.Pointer);
+            // Empty BSTR stores Null (evidence/r-q51-codecs-props-compact/bin-desc-keys-accdb, bin-desc-keys-mdb);
+            // non-empty BSTR stays ColumnType so ADO immediate edit maps to 0x80040E21 (AdoImmediateEditTests).
+            return chars.IsEmpty ? new ConversionResult(NativeValue.Null) : Open(MutationOpen.ColumnType);
+        }
+        if (vt != (VarType.Array | VarType.UI1) || incoming.Pointer == 0)
+        {
+            return Open(MutationOpen.ConversionNotRecorded);
+        }
+        (int Lower, int Count)[] shape = SafeArrays.Shape(incoming.Pointer);
+        if (shape.Length != 1)
+        {
+            return Open(MutationOpen.ConversionNotRecorded);
+        }
+        int count = shape[0].Count;
+        if (count == 0)
+        {
+            return new ConversionResult(NativeValue.Null);
+        }
+        if (column.Length <= 0 || count > column.Length)
+        {
+            return Open(MutationOpen.ConversionNotRecorded);
+        }
+        ReadOnlySpan<byte> src = new(SafeArrays.ElementPointer(incoming.Pointer, shape[0].Lower), count);
+        byte[] bytes;
+        if (column.IsFixed)
+        {
+            bytes = new byte[column.Length];
+            src.CopyTo(bytes);
+        }
+        else
+        {
+            bytes = src.ToArray();
+        }
+        return new ConversionResult(new NativeValue(NativeKind.Binary) { Bytes = bytes });
+    }
+
+    /// <summary>
+    /// Assignment into fixed <c>DECIMAL(p, s)</c> (native type <c>0x10</c>; evidence/r-q51-codecs-props-compact/dec-desc-keys-*,
+    /// seek-args-decimal-*): converts through <c>VariantChangeTypeEx(..., VT_DECIMAL)</c>, rescales exact decimal values
+    /// to <c>column.NumericScale</c>, and verifies the magnitude fits <c>column.NumericPrecision</c>. Values requiring
+    /// fractional rounding or exceeding precision stay refused by name until probed.
+    /// </summary>
+    private static ConversionResult Numeric(in NativeVariant incoming, ColumnDescriptor column, uint lcid)
+    {
+        // Unrecorded precision/scale or non-decimal direct COM puts (BSTR/R8/Currency) stay ColumnType so ADO
+        // immediate edit preserves 0x80040E21 (AdoImmediateEditTests); SQL INSERT converts literals to VT_DECIMAL first.
+        if (column.NumericPrecision is 0 or > 28
+            || column.NumericScale > column.NumericPrecision
+            || incoming.Type is VarType.Bstr or VarType.R8 or VarType.Currency)
+        {
+            return Open(MutationOpen.ColumnType);
+        }
+        NativeVariant source = incoming;
+        if (!OwnedVariant.TryChangeScalar(&source, VarType.Decimal, lcid, out NativeVariant result, out _))
+        {
+            return Open(MutationOpen.ConversionNotRecorded);
+        }
+        DecimalValue dv = OwnedVariant.ReadDecimal(result);
+        UInt128 magnitude = ((UInt128)dv.High32 << 64) | dv.Low64;
+        byte scale = dv.Scale;
+        while (scale > column.NumericScale && magnitude != 0 && magnitude % 10 == 0)
+        {
+            magnitude /= 10;
+            scale--;
+        }
+        if (scale > column.NumericScale)
+        {
+            return Open(MutationOpen.ConversionNotRecorded);
+        }
+        while (scale < column.NumericScale)
+        {
+            magnitude *= 10;
+            scale++;
+        }
+        UInt128 limit = UInt128.One;
+        for (int i = 0; i < column.NumericPrecision; i++)
+        {
+            limit *= 10;
+        }
+        if (magnitude >= limit)
+        {
+            return Open(MutationOpen.ConversionNotRecorded);
+        }
+        bool negative = magnitude != 0 && dv.Negative;
+        return new ConversionResult(NativeValue.Of(new NativeDecimal(negative, magnitude, column.NumericScale)));
+    }
+
+    /// <summary>
+    /// Assignment into <c>BIGINT</c> (native type <c>0x13</c>; evidence/r-q47-bigint-expr-edges/bi-dao-createfield-addnew-accdb,
+    /// bi-ddl-insert-bounds-accdb, bi-update-bounds-accdb): converts via <c>VariantChangeTypeEx(..., VT_I8)</c>; out-of-range
+    /// values (<c>"9223372036854775808"</c>, <c>"-9223372036854775809"</c>) and non-numeric strings fail 3421 from DAO.Field.
+    /// </summary>
+    private static ConversionResult BigInt(in NativeVariant incoming, uint lcid)
+    {
+        NativeVariant source = incoming;
+        OwnedVariant.TryChangeScalar(&source, VarType.I8, lcid, out NativeVariant result, out int hr);
+        if (hr == DispOverflow || hr == DispTypeMismatch)
+        {
+            return new ConversionResult(default, new MutationError(MutationError.Conversion, MutationErrorSource.Field));
+        }
+        if (hr != 0)
+        {
+            return Open(MutationOpen.ConversionNotRecorded);
+        }
+        return new ConversionResult(new NativeValue(NativeKind.BigInt) { Integer = result.Int64, Bits = (ulong)result.Int64 });
     }
 
     private static ConversionResult Scalar(in NativeVariant incoming, VarType target, uint lcid)
@@ -156,6 +290,33 @@ public static unsafe class AssignmentConversion
             return new ConversionResult(default, new MutationError(MutationError.Conversion, MutationErrorSource.Field));
         }
         return new ConversionResult(new NativeValue(NativeKind.Guid) { Bytes = parsed.ToByteArray() });
+    }
+
+    private static ConversionResult ExtendedDateTime(in NativeVariant incoming, ExtendedDateTimeWriteMode mode)
+    {
+        // evidence/r-q49-dt2-draftprops/dt2-dao-createfield-addnew-accdb, dt2-update-invalid-accdb,
+        // evidence/r-q-fmt-sort/dt2-ticks-accdb: accepts ISO/date/time text and OLE VT_DATE; refuses invalid text,
+        // year 0, year >= 10000, empty string, and plain numbers with ExtendedDateTimeInvalid (0x800A000D).
+        ExtendedDateTimeValue parsed;
+        if (incoming.Type == VarType.Bstr)
+        {
+            if (!ExtendedDateTimeCodec.TryParseText(Bstrs.Chars(incoming.Pointer), out parsed))
+            {
+                return new ConversionResult(default, new MutationError(MutationError.ExtendedDateTimeInvalid, MutationErrorSource.Field));
+            }
+        }
+        else if (incoming.Type == VarType.Date)
+        {
+            if (!ExtendedDateTimeCodec.TryFromOleDate(incoming.Double, out parsed))
+            {
+                return new ConversionResult(default, new MutationError(MutationError.ExtendedDateTimeInvalid, MutationErrorSource.Field));
+            }
+        }
+        else
+        {
+            return new ConversionResult(default, new MutationError(MutationError.ExtendedDateTimeInvalid, MutationErrorSource.Field));
+        }
+        return new ConversionResult(new NativeValue(NativeKind.ExtendedDateTime) { Bytes = ExtendedDateTimeCodec.Encode(parsed, mode) });
     }
 
     private static ConversionResult Open(MutationOpen open) => new(default, null, open);

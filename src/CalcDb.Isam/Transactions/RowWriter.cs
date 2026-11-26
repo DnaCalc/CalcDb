@@ -825,7 +825,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
     /// split, <see cref="GrownTree"/>), and updates TableDef RowCount, AutoNumber (setting 0x14..0x17 to the explicit
     /// value when <paramref name="reseedAutoNumber"/> is true under unit increment,
     /// <c>evidence/r-q27-autonumber-txn/exp-gap-5</c>, <c>exp-gap-10</c>) and each physical index's
-    /// UniqueEntryCount (DistinctCount) when the user key was not already present (clamped to word0 while word0 &gt; 0).
+    /// UniqueEntryCount (DistinctCount) when the user key was not already present (evidence/r-q51-codecs-props-compact/dec-desc-keys-accdb: not clamped to word0 on insert).
     /// The pages one insert allocates come from one <see cref="PageAllocator"/>.
     /// </summary>
     public CompiledChange CompileInsert(
@@ -1511,7 +1511,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
     /// evidence/r-q10-commit-counter-edits, evidence/r-q18-statements/ins-dup-plain) or 3201 by a foreign-key physical
     /// index (<c>evidence/r-q27-autonumber-txn/ins-fk-3201-fail</c>): each physical index strictly before
     /// <paramref name="refusingPhysicalNumber"/> whose candidate key is not already present increments its
-    /// UniqueEntryCount (word1, clamped to word0 while word0 &gt; 0), and the AutoNumber floor is persisted; with
+    /// UniqueEntryCount (word1), and the AutoNumber floor is persisted; with
     /// <paramref name="reseedAutoNumber"/> the word takes the explicit value exactly, also downward or when equal to the
     /// stored word (<c>evidence/r-q-expr-sql/act-ins-autonumber</c> seq 349,
     /// <c>evidence/r-q-fmt-sort/auto-cancel-fail-accdb</c> seq 257, <c>evidence/r-sql-2-3/act-ins-defaults</c> seq 81 and
@@ -3085,7 +3085,7 @@ public static class EntryKeys
     public static KeyValue? ValueOf(in NativeValue v) => v.Kind switch
     {
         NativeKind.Null => KeyValue.Null,
-        NativeKind.Byte or NativeKind.Integer or NativeKind.Long => new KeyValue(KeyValueKind.Integer, Integer: v.Integer),
+        NativeKind.Byte or NativeKind.Integer or NativeKind.Long or NativeKind.BigInt => new KeyValue(KeyValueKind.Integer, Integer: v.Integer),
         NativeKind.Currency => new KeyValue(KeyValueKind.ScaledCurrency, Integer: v.Integer),
         NativeKind.Single or NativeKind.Double or NativeKind.DateTime => new KeyValue(KeyValueKind.FloatBits, Bits: v.Bits),
         NativeKind.Boolean => new KeyValue(KeyValueKind.Boolean, Boolean: v.Boolean),

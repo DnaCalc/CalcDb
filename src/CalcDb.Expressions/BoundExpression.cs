@@ -32,7 +32,7 @@ public readonly record struct ColumnBinding(int Source, ColumnDescriptor Column)
 /// result, W-06/parser-binder-scan): its slot in <see cref="IExpressionRow.Slot"/>, its declared type, its static type,
 /// and its operand origin.
 /// </summary>
-public readonly record struct SlotBinding(int Slot, VarType Declared, StaticType Type, OperandOrigin Origin = OperandOrigin.Field);
+public readonly record struct SlotBinding(int Slot, VarType Declared, StaticType Type, OperandOrigin Origin = OperandOrigin.Field, bool IsExtendedDateTime = false);
 
 /// <summary>
 /// The row an expression is evaluated on (II-10 §4: a native row reaches the evaluator without a second value system):
@@ -179,6 +179,9 @@ public sealed unsafe partial class BoundExpression : IDisposable
     /// <summary>Whether the last evaluation failure came from a binary comparison involving a stored <c>YESNO</c> field.</summary>
     public bool LastFailureWasStoredBooleanComparison { get; private set; }
 
+    /// <summary>Whether the last evaluation failure came from a <c>DATETIME2</c> comparison failing 3464.</summary>
+    public bool LastFailureWasExtendedDateTimeComparison { get; private set; }
+
     private enum Op : byte
     {
         LoadField,
@@ -227,6 +230,13 @@ public sealed unsafe partial class BoundExpression : IDisposable
         /// IsNumeric, IsDate) or stored Yes/No field so inner VarType/TypeName report 11/"Boolean" while DAO projection stays VT_I2.
         /// </summary>
         public bool BooleanTag;
+
+        /// <summary>
+        /// True when a slot originated from a <c>DATETIME2</c> (<c>0x14</c>) column or parameter (including when its
+        /// runtime value is <c>VT_NULL</c>), so SQL comparisons, <c>BETWEEN</c>, and date/info functions apply ACE's
+        /// <c>DATETIME2</c> rules (<c>r-q49-dt2-draftprops/dt2-select-*</c>).
+        /// </summary>
+        public bool ExtendedDateTimeTag;
     }
 
     /// <summary>
@@ -357,6 +367,7 @@ public sealed unsafe partial class BoundExpression : IDisposable
     {
         _active = context;
         LastFailureWasStoredBooleanComparison = false;
+        LastFailureWasExtendedDateTimeComparison = false;
         if (_holdsResult)
         {
             Release(ref _stack[0]);
@@ -383,20 +394,35 @@ public sealed unsafe partial class BoundExpression : IDisposable
                     stack[sp].Value = row!.Slot(ins.Operand);
                     stack[sp].Owned = false;
                     stack[sp].BooleanTag = stack[sp].Value.Vt == (ushort)VarType.Bool;
+                    stack[sp].ExtendedDateTimeTag = ins.Flag;
                     sp++;
                     continue;
                 case Op.LoadConstant:
                     stack[sp].Value = _constants[ins.Operand];
                     stack[sp].Owned = false;
                     stack[sp].BooleanTag = false;
+                    stack[sp].ExtendedDateTimeTag = false;
                     sp++;
                     continue;
                 case Op.Unary:
                 {
                     bool prevBool = stack[sp - 1].BooleanTag;
+                    bool prevExtDt = stack[sp - 1].ExtendedDateTimeTag;
                     ScalarDescriptor desc = _descriptors[ins.Descriptor];
                     NativeVariant input = stack[sp - 1].Value;
-                    r = ScalarKernel.Apply(desc, input, _active);
+                    if (prevExtDt && input.Vt != (ushort)VarType.Null
+                        && (desc.Operation is ScalarOperation.CStr or ScalarOperation.CDate
+                            || (desc.Operation == ScalarOperation.IsNull && ins.Flag)))
+                    {
+                        // evidence/r-q49-dt2-draftprops/dt2-select-funcs-convert-dao-ado-accdb:
+                        // CStr(D), CDate(D), and IsNull(D) fail 3071 on non-Null DATETIME2; Null keeps standard VBA behavior.
+                        // SQL `D IS NULL` uses ins.Flag == false and continues to work on DATETIME2.
+                        r = ScalarOutcome.Fail(ScalarFailure.Ace(AceError.ExpressionTooComplex, desc.Site, desc.Operation));
+                    }
+                    else
+                    {
+                        r = ScalarKernel.Apply(desc, input, _active);
+                    }
                     if (!r.Succeeded
                         && _active.FoldsAtOpen
                         && desc.Operation == ScalarOperation.Negate
@@ -425,7 +451,15 @@ public sealed unsafe partial class BoundExpression : IDisposable
                     ScalarDescriptor desc = _descriptors[ins.Descriptor];
                     NativeVariant left = stack[sp - 2].Value;
                     NativeVariant right = stack[sp - 1].Value;
-                    r = ScalarKernel.Apply(desc, left, right, _active);
+                    if (desc.Operation is >= ScalarOperation.Equal and <= ScalarOperation.GreaterOrEqual
+                        && (stack[sp - 2].ExtendedDateTimeTag || stack[sp - 1].ExtendedDateTimeTag))
+                    {
+                        r = CompareExtendedDateTime(desc, stack[sp - 2], stack[sp - 1]);
+                    }
+                    else
+                    {
+                        r = ScalarKernel.Apply(desc, left, right, _active);
+                    }
                     if (r.Succeeded
                         && desc.Operation == ScalarOperation.Add
                         && left.Vt == (ushort)VarType.UI1
@@ -512,6 +546,7 @@ public sealed unsafe partial class BoundExpression : IDisposable
             stack[sp].Value = r.Value;
             stack[sp].Owned = r.Type == VarType.Bstr;
             stack[sp].BooleanTag = booleanTag;
+            stack[sp].ExtendedDateTimeTag = false;
             sp++;
         }
         return true;
@@ -581,13 +616,137 @@ public sealed unsafe partial class BoundExpression : IDisposable
     /// <summary>(x &gt;= low) And (x &lt;= high), with the three descriptors from <paramref name="d"/>.</summary>
     private ScalarOutcome Within(int d, int x, int low, int high)
     {
-        ScalarOutcome ge = ScalarKernel.Apply(_descriptors[d], _stack[x].Value, _stack[low].Value, _active);
+        bool extGe = _stack[x].ExtendedDateTimeTag || _stack[low].ExtendedDateTimeTag;
+        ScalarOutcome ge = extGe
+            ? CompareExtendedDateTime(_descriptors[d], _stack[x], _stack[low])
+            : ScalarKernel.Apply(_descriptors[d], _stack[x].Value, _stack[low].Value, _active);
         if (!ge.Succeeded)
         {
             return ge;
         }
-        ScalarOutcome le = ScalarKernel.Apply(_descriptors[d + 1], _stack[x].Value, _stack[high].Value, _active);
+        bool extLe = _stack[x].ExtendedDateTimeTag || _stack[high].ExtendedDateTimeTag;
+        ScalarOutcome le = extLe
+            ? CompareExtendedDateTime(_descriptors[d + 1], _stack[x], _stack[high])
+            : ScalarKernel.Apply(_descriptors[d + 1], _stack[x].Value, _stack[high].Value, _active);
         return le.Succeeded ? ScalarKernel.Apply(_descriptors[d + 2], ge.Value, le.Value, _active) : le;
+    }
+
+    /// <summary>
+    /// Chronological comparison involving at least one <c>DATETIME2</c> column or parameter
+    /// (<c>evidence/r-q49-dt2-draftprops/dt2-select-compare-accdb</c>, <c>dt2-params-dao-querydef-accdb</c>):
+    /// <list type="bullet">
+    /// <item>Two <c>DATETIME2</c> operands (<c>D = D2</c>, <c>D &lt; D2</c>, <c>D &gt; D2</c>, or <c>D = p</c> with
+    /// <c>PARAMETERS p DateTime2</c>): fail 3464 if either side is <c>Null</c>; otherwise compare chronologically.</item>
+    /// <item>One <c>DATETIME2</c> operand against a literal or <c>DateTime</c> parameter: propagate <c>Null</c>; parse
+    /// <c>BSTR</c> or <c>VT_DATE</c> chronologically; refuse unparseable values with 3464.</item>
+    /// </list>
+    /// </summary>
+    private ScalarOutcome CompareExtendedDateTime(in ScalarDescriptor desc, in Slot left, in Slot right)
+    {
+        bool leftNull = left.Value.Vt == (ushort)VarType.Null;
+        bool rightNull = right.Value.Vt == (ushort)VarType.Null;
+        if (left.ExtendedDateTimeTag && right.ExtendedDateTimeTag)
+        {
+            if (leftNull || rightNull)
+            {
+                LastFailureWasExtendedDateTimeComparison = true;
+                return ScalarOutcome.Fail(ScalarFailure.Ace(AceError.TypeMismatch, desc.Site, desc.Operation));
+            }
+        }
+        else if (leftNull || rightNull)
+        {
+            return ScalarOutcome.Of(new NativeVariant { Vt = (ushort)VarType.Null });
+        }
+        if (!TryReadExtendedDateTimeArg(desc, left, out ExtendedDateTimeValue a, out ScalarOutcome fail)
+            || !TryReadExtendedDateTimeArg(desc, right, out ExtendedDateTimeValue b, out fail))
+        {
+            LastFailureWasExtendedDateTimeComparison = true;
+            return fail;
+        }
+        int cmp = a.CompareTo(b);
+        bool truth = desc.Operation switch
+        {
+            ScalarOperation.Equal => cmp == 0,
+            ScalarOperation.NotEqual => cmp != 0,
+            ScalarOperation.Less => cmp < 0,
+            ScalarOperation.LessOrEqual => cmp <= 0,
+            ScalarOperation.Greater => cmp > 0,
+            ScalarOperation.GreaterOrEqual => cmp >= 0,
+            _ => false,
+        };
+        return ScalarOutcome.Of(new NativeVariant { Vt = (ushort)VarType.I2, Int64 = truth ? 0xFFFF : 0 });
+    }
+
+    private static bool TryReadExtendedDateTimeBytes(in NativeVariant v, out ExtendedDateTimeValue dt2)
+    {
+        dt2 = default;
+        if (v.Vt != (ushort)(VarType.Array | VarType.UI1) || v.Pointer == 0)
+        {
+            return false;
+        }
+        (int Lower, int Count)[] shape = SafeArrays.Shape(v.Pointer);
+        if (shape.Length != 1 || shape[0].Count != ExtendedDateTimeCodec.PayloadBytes)
+        {
+            return false;
+        }
+        ReadOnlySpan<byte> bytes = new(SafeArrays.ElementPointer(v.Pointer, shape[0].Lower), ExtendedDateTimeCodec.PayloadBytes);
+        return ExtendedDateTimeCodec.TryDecode(bytes, out dt2);
+    }
+
+    private bool TryReadExtendedDateTimeArg(in ScalarDescriptor desc, in Slot slot, out ExtendedDateTimeValue dt2, out ScalarOutcome fail)
+    {
+        fail = default;
+        if (slot.ExtendedDateTimeTag)
+        {
+            if (TryReadExtendedDateTimeBytes(slot.Value, out dt2))
+            {
+                return true;
+            }
+            fail = ScalarOutcome.Fail(ScalarFailure.Ace(AceError.TypeMismatch, desc.Site, desc.Operation));
+            return false;
+        }
+        if (slot.Value.Vt == (ushort)VarType.Bstr)
+        {
+            if (ExtendedDateTimeCodec.TryParseText(Bstrs.Chars(slot.Value.Pointer), out dt2))
+            {
+                return true;
+            }
+            fail = ScalarOutcome.Fail(ScalarFailure.Ace(AceError.TypeMismatch, desc.Site, desc.Operation));
+            return false;
+        }
+        if (slot.Value.Vt == (ushort)VarType.Date)
+        {
+            if (ExtendedDateTimeCodec.TryFromOleDate(slot.Value.Double, out dt2))
+            {
+                return true;
+            }
+            fail = ScalarOutcome.Fail(ScalarFailure.Ace(AceError.TypeMismatch, desc.Site, desc.Operation));
+            return false;
+        }
+        dt2 = default;
+        fail = ScalarOutcome.Fail(ScalarFailure.Ace(AceError.TypeMismatch, desc.Site, desc.Operation));
+        return false;
+    }
+
+    private static OleUDate ToExtendedUDate(ExtendedDateTimeValue dt2)
+    {
+        dt2.ToComponents(out int year, out int month, out int day, out int hour, out int minute, out int second, out _);
+        DateTime d = new(year, month, day);
+        return new OleUDate
+        {
+            St = new OleSystemTime
+            {
+                Year = (ushort)year,
+                Month = (ushort)month,
+                DayOfWeek = (ushort)d.DayOfWeek,
+                Day = (ushort)day,
+                Hour = (ushort)hour,
+                Minute = (ushort)minute,
+                Second = (ushort)second,
+                Milliseconds = 0,
+            },
+            DayOfYear = (ushort)d.DayOfYear,
+        };
     }
 
     /// <summary>
@@ -896,6 +1055,7 @@ public sealed unsafe partial class BoundExpression : IDisposable
         ColumnDescriptor column = _fields[index].Column;
         slot.Owned = false;
         slot.BooleanTag = false;
+        slot.ExtendedDateTimeTag = column.TypeCode == NativeTypes.ExtendedDateTime;
         if (cursor is null)
         {
             slot.Value = new NativeVariant { Vt = (ushort)VarType.Null };
@@ -927,7 +1087,7 @@ public sealed unsafe partial class BoundExpression : IDisposable
             return false;
         }
         NativeValue v = read.Value;
-        if (v.Kind is NativeKind.Binary or NativeKind.LongBinary)
+        if (v.Kind is NativeKind.Binary or NativeKind.LongBinary or NativeKind.ExtendedDateTime)
         {
             if (v.Bytes is { Length: > 0 } bytes)
             {
@@ -949,6 +1109,7 @@ public sealed unsafe partial class BoundExpression : IDisposable
             NativeKind.Byte => new NativeVariant { Vt = (ushort)VarType.UI1, Int64 = (byte)v.Integer },
             NativeKind.Integer => new NativeVariant { Vt = (ushort)VarType.I2, Int64 = (ushort)(short)v.Integer },
             NativeKind.Long => new NativeVariant { Vt = (ushort)VarType.I4, Int64 = (uint)(int)v.Integer },
+            NativeKind.BigInt => new NativeVariant { Vt = (ushort)VarType.I8, Int64 = v.Integer },
             NativeKind.Currency => new NativeVariant { Vt = (ushort)VarType.Currency, Int64 = v.Integer },
             NativeKind.Single => new NativeVariant { Vt = (ushort)VarType.R4, Int64 = (uint)v.Bits },
             NativeKind.Double => new NativeVariant { Vt = (ushort)VarType.R8, Int64 = (long)v.Bits },
@@ -1015,6 +1176,7 @@ public sealed unsafe partial class BoundExpression : IDisposable
         }
         slot.Value = default;
         slot.BooleanTag = false;
+        slot.ExtendedDateTimeTag = false;
     }
 
     private void Unwind(int sp)
@@ -1088,11 +1250,11 @@ public sealed unsafe partial class BoundExpression : IDisposable
         {
             if (schema.Substitute(node) is { } slot)
             {
-                if (slot.Declared == (VarType.Array | VarType.UI1))
+                if (slot.Declared == (VarType.Array | VarType.UI1) && !slot.IsExtendedDateTime)
                 {
                     throw Open("NotModelled.FieldType", $"derived or slot field {node.Text} of binary type in an expression");
                 }
-                Program.Add(new Instruction(Op.LoadSlot, slot.Slot, 0));
+                Program.Add(new Instruction(Op.LoadSlot, slot.Slot, 0, slot.IsExtendedDateTime));
                 UsesSlots = true;
                 MaxDepth = Math.Max(MaxDepth, at + 1);
                 return new Bound(slot.Type, new OperandContract(slot.Origin, slot.Declared), 1);
@@ -1155,12 +1317,14 @@ public sealed unsafe partial class BoundExpression : IDisposable
                 NativeTypes.Byte => VarType.UI1,
                 NativeTypes.Integer => VarType.I2,
                 NativeTypes.Long => VarType.I4,
+                NativeTypes.BigInt => VarType.I8,
                 NativeTypes.Currency => VarType.Currency,
                 NativeTypes.Single => VarType.R4,
                 NativeTypes.Double => VarType.R8,
                 NativeTypes.DateTime => VarType.Date,
                 NativeTypes.Text or NativeTypes.Memo => VarType.Bstr,
                 NativeTypes.Numeric => VarType.Decimal,
+                NativeTypes.ExtendedDateTime when column.CalculatedResultType is null => VarType.Array | VarType.UI1,
                 NativeTypes.Binary or NativeTypes.Ole when allowBinary && column.CalculatedResultType is null => VarType.Array | VarType.UI1,
                 _ => throw Open("NotModelled.FieldType", $"field {column.Name} of native type {column.TypeCode} in an expression (W-04/private-codecs)"),
             };

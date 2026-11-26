@@ -1146,19 +1146,28 @@ public static class DdlBinder
             {
                 continue;
             }
-            if (col.TypeCode is NativeTypes.Double or NativeTypes.DateTime or NativeTypes.Guid or NativeTypes.Memo)
+            if (col.TypeCode is NativeTypes.Double or NativeTypes.DateTime or NativeTypes.Guid or NativeTypes.Memo
+                or NativeTypes.Numeric or NativeTypes.Binary or NativeTypes.BigInt or NativeTypes.ExtendedDateTime)
             {
                 if (route != SchemaRoute.Sql || stmt.Columns.Count != 1 || primary || disallowNull || ignoreNull)
                 {
-                    return Fail(BindOpen("NotModelled.DdlIndexKeyType", $"CREATE INDEX on native type 0x{col.TypeCode:X2} via {route} with {stmt.Columns.Count} column(s) or PRIMARY/DISALLOW NULL/IGNORE NULL options is not recorded (evidence/r-q44-ddl-alter-types/ixtype-* records single-column DAO CREATE [UNIQUE] INDEX only)"), out failure);
+                    return Fail(BindOpen("NotModelled.DdlIndexKeyType", $"CREATE INDEX on native type 0x{col.TypeCode:X2} via {route} with {stmt.Columns.Count} column(s) or PRIMARY/DISALLOW NULL/IGNORE NULL options is not recorded (r-q44/r-q47/r-q49/r-q51 record single-column DAO CREATE [UNIQUE] INDEX only)"), out failure);
                 }
                 if (col.TypeCode == NativeTypes.Memo && stmt.Columns[i].Descending)
                 {
                     return Fail(BindOpen("NotModelled.DdlIndexKeyType", "descending CREATE INDEX on Memo (0x0C) is not recorded (evidence/r-q44-ddl-alter-types/ixtype-memo-* records ascending only)"), out failure);
                 }
+                if (stmt.Unique && col.TypeCode is NativeTypes.Numeric or NativeTypes.Binary or NativeTypes.BigInt)
+                {
+                    return Fail(BindOpen("NotModelled.DdlIndexKeyType", $"CREATE UNIQUE INDEX on native type 0x{col.TypeCode:X2} is not recorded (r-q47/r-q51 record non-unique single-column CREATE INDEX only)"), out failure);
+                }
+                if (stmt.Unique && col.TypeCode == NativeTypes.ExtendedDateTime && stmt.Columns[i].Descending)
+                {
+                    return Fail(BindOpen("NotModelled.DdlIndexKeyType", "descending CREATE UNIQUE INDEX on ExtendedDateTime (0x14) is not recorded (r-q49 records ascending UNIQUE only)"), out failure);
+                }
                 continue;
             }
-            return Fail(BindOpen("NotModelled.DdlIndexKeyType", $"CREATE INDEX on native type 0x{col.TypeCode:X2} is not modelled in SchemaWriter (r-q11/r-q21/r-q44 record Long, Text, Double, DateTime, GUID, and Memo)"), out failure);
+            return Fail(BindOpen("NotModelled.DdlIndexKeyType", $"CREATE INDEX on native type 0x{col.TypeCode:X2} is not modelled in SchemaWriter (r-q11/r-q21/r-q44/r-q47/r-q49/r-q51 record Long, Text, Double, DateTime, GUID, Memo, Numeric, Binary, BigInt, and ExtendedDateTime)"), out failure);
         }
 
         var newIndex = new NewIndex(
@@ -1516,6 +1525,23 @@ public static class DdlBinder
                     case DdlTypeKind.DateTime2:
                         addField = new NewField(addCol.Name, NewFieldType.DateTime2, Required: addRequired, DefaultValue: addCol.DefaultExpression);
                         break;
+                    case DdlTypeKind.Decimal:
+                    {
+                        if (route != SchemaRoute.Ado)
+                        {
+                            return BindOpen("NotModelled.DdlAlterTable", $"ALTER TABLE ADD COLUMN '{addCol.Name}' DECIMAL is recorded only on the ADO route");
+                        }
+                        if (addCol.DataType.Precision is not int decPrec || addCol.DataType.Scale is not int decScale)
+                        {
+                            return BindOpen("NotModelled.DdlAlterTable", $"ALTER TABLE ADD COLUMN '{addCol.Name}' DECIMAL without explicit (precision, scale) is not recorded");
+                        }
+                        if (decPrec is < 1 or > 28 || decScale < 0 || decScale > decPrec)
+                        {
+                            return BindOpen("NotModelled.DdlDecimalPrecision", $"DECIMAL({decPrec}, {decScale}) on ALTER TABLE ADD COLUMN '{addCol.Name}' is outside 1..28 / 0..precision");
+                        }
+                        addField = new NewField(addCol.Name, NewFieldType.Decimal, Precision: (byte)decPrec, Scale: (byte)decScale, Required: addRequired, DefaultValue: addCol.DefaultExpression);
+                        break;
+                    }
                     default:
                         return BindOpen("NotModelled.DdlAlterTable", $"ALTER TABLE ADD COLUMN '{addCol.Name}' of type {addCol.DataType.Kind} is not recorded (evidence/r-q44 and r-q49 record Long, Text, DateTime, Memo, BigInt, and DateTime2)");
                 }

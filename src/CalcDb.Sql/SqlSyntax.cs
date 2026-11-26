@@ -208,8 +208,8 @@ public static class SqlParser
         ["Bit"] = 1, ["Byte"] = 2, ["Short"] = 3, ["Long"] = 4, ["Integer"] = 4, ["Int"] = 4, ["Currency"] = 5,
         ["IEEESingle"] = 6, ["Single"] = 6, ["Real"] = 6, ["IEEEDouble"] = 7, ["Double"] = 7, ["Float"] = 7, ["Numeric"] = 7,
         ["DateTime"] = 8, ["Binary"] = 9, ["Text"] = 10, ["Char"] = 10, ["VarChar"] = 10, ["Value"] = 10, ["LongBinary"] = 11,
-        ["LongText"] = 12, ["Guid"] = 15, ["BigInt"] = 19,
-        ["Decimal"] = 0, ["Memo"] = 0, ["Counter"] = 0, ["Boolean"] = 0, ["Variant"] = 0, ["TinyInt"] = 0,
+        ["LongText"] = 12, ["Guid"] = 15, ["BigInt"] = 19, ["DateTime2"] = 20,
+        ["Decimal"] = 0, ["Memo"] = 0, ["Counter"] = 0, ["Boolean"] = 0, ["Variant"] = 0, ["TinyInt"] = 0, ["DateTimeExtended"] = 0,
     };
 
     [Flags]
@@ -842,7 +842,7 @@ public static class SqlParser
                     }
                     textSize = parsedSize;
                 }
-                statement.Parameters.Add(new ParameterDeclaration(name, type, typeWord.ToUpperInvariant() switch { "VALUE" => null, "BIGINT" => 16, _ => type }, textSize));
+                statement.Parameters.Add(new ParameterDeclaration(name, type, typeWord.ToUpperInvariant() switch { "VALUE" => null, "BIGINT" => 16, "DATETIME2" => 26, _ => type }, textSize));
             }
             while (TakeSymbol(','));
             return TakeSymbol(';') ? null : clause;

@@ -29,6 +29,9 @@ public static class AceError
     /// <summary>"Internal OLE Automation error": an oleaut32 failure ACE does not translate (VarPow's E_INVALIDARG).</summary>
     public const int AutomationError = 440;
 
+    /// <summary>"This expression is typed incorrectly, or it is too complex to be evaluated..." (r-q49-dt2-draftprops/dt2-select-funcs-convert-dao-ado-accdb).</summary>
+    public const int ExpressionTooComplex = 3071;
+
     /// <summary>"Wrong number of arguments used with function in query expression" (one-argument CDec; a bind refusal).</summary>
     public const int WrongArgumentCount = 3075;
 
@@ -48,6 +51,7 @@ public static class AceError
         InvalidUseOfNull => "Invalid use of Null",
         ArgumentCountMismatch => "Argument count mismatch",
         AutomationError => "Internal OLE Automation error",
+        ExpressionTooComplex => "This expression is typed incorrectly, or it is too complex to be evaluated. For example, a numeric expression may contain too many complicated elements. Try simplifying the expression by assigning parts of the expression to variables.",
         WrongArgumentCount => "Wrong number of arguments used with function in query expression",
         TypeMismatch => "Data type mismatch in criteria expression.",
         _ => "Error " + number.ToString(System.Globalization.CultureInfo.InvariantCulture),

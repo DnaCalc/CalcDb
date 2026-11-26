@@ -986,8 +986,21 @@ public sealed class ActionReplayTests(ITestOutputHelper output)
             }
             else
             {
+                string expected = e.ExcepInfo.Description?.Text ?? "";
+                string actual = fail.Message;
                 string scode = $"0x{unchecked((uint)(int)0x800A0000 | (uint)fail.Number):X8}";
-                Check(where, $"{e.ExcepInfo.Scode} {e.ExcepInfo.Description?.Text ?? ""}", $"{scode} {fail.Message}");
+                if (!fail.ExcerptExact)
+                {
+                    int ai = expected.IndexOf(fail.Quote, StringComparison.Ordinal);
+                    int mi = actual.IndexOf(fail.Quote, StringComparison.Ordinal);
+                    if (ai >= 0 && mi >= 0)
+                    {
+                        Open.Add($"{where}: NotModelled.QueryExpressionExcerpt: ACE '{expected[(ai + fail.Quote.Length)..]}', CalcDb '{actual[(mi + fail.Quote.Length)..]}'");
+                        expected = expected[..ai];
+                        actual = actual[..mi];
+                    }
+                }
+                Check(where, $"{e.ExcepInfo.Scode} {expected}", $"{scode} {actual}");
             }
             rs.Stopped = "failed open";
             Bind(e, rs);
