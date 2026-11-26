@@ -305,10 +305,15 @@ issued it. Writes are marked cached (WriteFile into the system cache) or paging 
 FileKey, so paging writes are attributed, the system lazy writer's (pid 4) included. `etw-check` checks this with an
 unflushed cached write; events with no attempt file are only counted in the recorder's status line.
 
-In a CodeAlta worktree, pass `--store C:\Work\DnaCalc\CalcDb\.oracle-runs` to `etw-check`, `submit`, `run`, `batch`,
+In a secondary worktree (such as `CalcDb-probe`, `CalcDb-w1`, or `CalcDb-w2`), pass `--store C:\Work\DnaCalc\CalcDb\.oracle-runs` to `etw-check`, `submit`, `run`, `batch`,
 `show` and `retain` so ACE attempts lie under the installed recorder's allowed root
 (`C:\Work\DnaCalc\CalcDb\.oracle-runs\attempts`). Attempts live in that store, while `retain` (and `batch --retain`)
 still writes retained records and their `evidence/artifacts/` copies into the worktree's `evidence/` (task shmk).
+
+**Store disk hygiene.** All `attempts/` data in `%LOCALAPPDATA%\CalcDb\compare-store\` is disposable candidate verification
+output (`inputs/`, `work/`, `artifacts/`, and `capture.json` copies, plus `jobs/`, `questions/`, and `comparisons.jsonl`).
+Only `%LOCALAPPDATA%\CalcDb\compare-store\compare-sets\` (standing `compare-set` TSV runs) and `cas/` need to persist, and
+%LOCALAPPDATA%\CalcDb\compare-bin\ keeps the 10 newest snapshots automatically. Periodically run `calcdb-oracle prune --days N --store C:\Work\DnaCalc\CalcDb\.oracle-runs` to clear file copies from older sealed oracle attempts (note that `inputs/` files are marked read-only while sealed, so direct deletion must clear `ReadOnly` attributes first), delete idle `<worktree>\.oracle-runs` folders when resetting check or writer slots (`CalcDb-w1`, `CalcDb-w2`, `CalcDb-check`), and reset disposable `%LOCALAPPDATA%\CalcDb\compare-store\{attempts,jobs,questions,comparisons.jsonl}` while keeping `compare-sets/` and `cas/`.
 
 **An owned out-of-process server (OR-OWN).** COM starts a local server such as Access.Application outside the
 runner's job. The operation `claimProcess` asks the bound object for a window handle (`hWndAccessApp`), takes the
