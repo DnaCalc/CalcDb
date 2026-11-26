@@ -145,6 +145,12 @@ public sealed class BoundAction : IDisposable
 
     private static BoundAction? BindMakeTable(ActionSyntax syntax, ISqlDatabase database, out SqlFailure? failure)
     {
+        if (database is ISqlActionDatabase actionDb && actionDb.Workspace.Depth > 0)
+        {
+            syntax.Dispose();
+            failure = SqlFailure.Open(SqlPhase.Execute, "NotModelled.TransactionalDdlOverlay", "SELECT ... INTO inside an active Workspace transaction is not yet visible to subsequent catalog reads");
+            return null;
+        }
         // r-q52-ddl-make-domain/maketable-errors-dao-accdb, maketable-errors-dao-mdb call 27: invalid target name [Bad.Name] -> 3125.
         if (!SchemaWriter.IsValidName(syntax.TargetName))
         {
