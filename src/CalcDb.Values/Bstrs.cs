@@ -41,6 +41,9 @@ public static unsafe class Bstrs
     /// <summary>The UTF-16 units of a BSTR, borrowed for as long as the caller's string lives (empty for a null BSTR).</summary>
     public static ReadOnlySpan<char> Chars(nint bstr) => bstr == 0 ? default : new ReadOnlySpan<char>((void*)bstr, (int)OleAut.SysStringLen(bstr));
 
+    /// <summary>The raw bytes of a BSTR (including odd byte lengths from StrConv(..., 128)), borrowed while the BSTR lives.</summary>
+    public static ReadOnlySpan<byte> Bytes(nint bstr) => bstr == 0 ? default : new ReadOnlySpan<byte>((void*)bstr, (int)OleAut.SysStringByteLen(bstr));
+
     /// <summary>Frees a BSTR this caller owns (SysFreeString; a null BSTR is allowed).</summary>
     public static void Free(nint bstr) => OleAut.SysFreeString(bstr);
 }

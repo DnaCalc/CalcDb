@@ -23,6 +23,9 @@ public static class AceError
     /// <summary>"Invalid use of Null" (CInt(Null) and the other value conversions).</summary>
     public const int InvalidUseOfNull = 94;
 
+    /// <summary>"Argument count mismatch" (r-def-expr-sql/expr-financial-ppmt-ipmt-pmt: PPmt with 3 args).</summary>
+    public const int ArgumentCountMismatch = 101;
+
     /// <summary>"Internal OLE Automation error": an oleaut32 failure ACE does not translate (VarPow's E_INVALIDARG).</summary>
     public const int AutomationError = 440;
 
@@ -43,6 +46,7 @@ public static class AceError
         Overflow => "Overflow",
         DivisionByZero => "Division by zero",
         InvalidUseOfNull => "Invalid use of Null",
+        ArgumentCountMismatch => "Argument count mismatch",
         AutomationError => "Internal OLE Automation error",
         WrongArgumentCount => "Wrong number of arguments used with function in query expression",
         TypeMismatch => "Data type mismatch in criteria expression.",

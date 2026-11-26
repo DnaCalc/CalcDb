@@ -162,6 +162,12 @@ public static unsafe partial class ScalarKernel
             {
                 continue;
             }
+            // r-expr-1b/meta-memo-functions (#201: SELECT Val(Mm) on 300-char non-numeric Memo -> 0.0):
+            // a leading character that cannot start a decimal number, sign, or radix prefix stops immediately at 0.0.
+            if (n == 0 && !char.IsAsciiDigit(ch) && ch is not ('-' or '.' or '&' or '+'))
+            {
+                return ScalarOutcome.Of(new NativeVariant { Vt = (ushort)VarType.R8, Double = 0 });
+            }
             if (n == MaxUnits)
             {
                 return Open(d, NotModelledCase.ValForm);

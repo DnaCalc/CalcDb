@@ -45,13 +45,20 @@ public abstract class TextCollation
 /// </summary>
 public sealed class ExpressionContext
 {
+    private sealed class RndState
+    {
+        public uint Value = 0x50000u;
+    }
+
+    private readonly RndState _rnd;
+
     public ExpressionContext(
         uint lcid,
         TextCompareMode compare,
         TextCollation? databaseOrder = null,
         ExpressionUse use = ExpressionUse.Query,
         TextCollation? textOrder = null)
-        : this(lcid, compare, databaseOrder, use, textOrder, foldsAtOpen: false)
+        : this(lcid, compare, databaseOrder, use, textOrder, foldsAtOpen: false, new RndState())
     {
     }
 
@@ -61,7 +68,8 @@ public sealed class ExpressionContext
         TextCollation? databaseOrder,
         ExpressionUse use,
         TextCollation? textOrder,
-        bool foldsAtOpen)
+        bool foldsAtOpen,
+        RndState rnd)
     {
         Lcid = lcid;
         Compare = compare;
@@ -69,7 +77,14 @@ public sealed class ExpressionContext
         Use = use;
         TextOrder = textOrder;
         FoldsAtOpen = foldsAtOpen;
+        _rnd = rnd;
     }
+
+    /// <summary>Current 24-bit VB/VBA <c>Rnd</c> LCG state for this context (initial <c>0x50000</c>; shared with <see cref="Folding"/>).</summary>
+    public uint GetRndState() => _rnd.Value;
+
+    /// <summary>Update the 24-bit VB/VBA <c>Rnd</c> LCG state for this context.</summary>
+    public void SetRndState(uint state) => _rnd.Value = state & 0xFFFFFFu;
 
     /// <summary>
     /// Whether this context folds a constant at OpenRecordset (qualified.md R-EXPR-1 EXPR-STAGE, r-q3-sql/constant-phase
@@ -79,7 +94,7 @@ public sealed class ExpressionContext
     public bool FoldsAtOpen { get; }
 
     /// <summary>The same context for the open-time fold of a constant (made once, kept).</summary>
-    public ExpressionContext Folding => FoldsAtOpen ? this : _folding ??= new ExpressionContext(Lcid, Compare, DatabaseOrder, Use, TextOrder, foldsAtOpen: true);
+    public ExpressionContext Folding => FoldsAtOpen ? this : _folding ??= new ExpressionContext(Lcid, Compare, DatabaseOrder, Use, TextOrder, foldsAtOpen: true, _rnd);
 
     private ExpressionContext? _folding;
 

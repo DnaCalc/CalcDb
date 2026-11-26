@@ -252,7 +252,8 @@ internal static class AdoSqlErrors
         out Failure? unmodelled,
         string? sql = null,
         bool allowAdoCheckViolation = false,
-        bool isConnectionExecuteAction = false)
+        bool isConnectionExecuteAction = false,
+        bool isSelect = false)
     {
         if (failure.IsNotModelled)
         {
@@ -326,8 +327,19 @@ internal static class AdoSqlErrors
             // r-oledb-odbc/error-record-channels #122-132, r-q2-expr-sql/act-ado-failure-lane #65,
             // r-q30-sql-check/ord-req-before-check #28-39 (Required field violation on Connection.Execute only)
             3314 when !isSavedQuery && isConnectionExecuteAction => Make(AdoObject.HResultFail, failure.Message, 5003000, "3314", -541331061, AdoObject.IidCommand),
-            // r-oledb-odbc/error-record-channels #173-183, r-q2-expr-sql/act-ado-failure-lane #62 (data type mismatch on Connection.Execute only)
+            // r-q44-ddl-alter-types/ext-bigint-mdb-ado #14, ext-datetime2-mdb-ado #14:
+            // ad-hoc Connection.Execute CREATE TABLE with an unsupported Jet 4 MDB column type (BIGINT/DATETIME2)
+            // fails 0x80004005 (E_FAIL), helpContext 5003001, IID_ICommand; SQLState/NativeError were not observed.
+            // Other routes and non-CREATE TABLE 3001 shapes have no ADO record and refuse by name.
+            3001 when !isSavedQuery && isConnectionExecuteAction && sql is not null && IsCreateTableSql(sql) =>
+                Make(AdoObject.HResultFail, failure.Message, 5003001, null, null, AdoObject.IidCommand),
+            3001 => FailUnmodelledDetail(
+                "ADO OLE DB error detail for ACE error 3001 on this route or statement is not recorded (only ad-hoc Connection.Execute CREATE TABLE is recorded in r-q44-ddl-alter-types/ext-bigint-mdb-ado and ext-datetime2-mdb-ado)",
+                out unmodelled),
+            // r-oledb-odbc/error-record-channels #173-183, r-q2-expr-sql/act-ado-failure-lane #62 (data type mismatch on Connection.Execute action)
             3464 when !isSavedQuery && isConnectionExecuteAction => Make(AdoObject.HResultCantConvertValue, failure.Message, 5003071, "3464", -539888598, AdoObject.IidCommand),
+            // r-q47-bigint-expr-edges/meta-dollar-str-dao-ado-accdb, meta-fmt-date-strconv-dao-ado-accdb (data type mismatch on ad-hoc SELECT; SQLState/NativeError not observed)
+            3464 when !isSavedQuery && isSelect => Make(AdoObject.HResultCantConvertValue, failure.Message, 5003071, null, null, AdoObject.IidCommand),
             // r-oledb-odbc/error-record-channels #193-203 (field too small on Connection.Execute only)
             3163 when !isSavedQuery && isConnectionExecuteAction => Make(AdoObject.HResultDataOverflow, failure.Message, 5003163, "3163", -68551703, AdoObject.IidCommand),
             // r-oledb-odbc/error-record-channels #253-263 (DROP TABLE / cannot delete index or table on Connection.Execute only)

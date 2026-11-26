@@ -13,6 +13,9 @@ public enum FunctionAvailability : byte
 
     /// <summary>A domain aggregate: 3072 "Function is not available in expressions" in a Find criteria.</summary>
     Domain,
+
+    /// <summary>Blocked in queries: 3072 "Function is not available in expressions" (r-def-expr-sql/expr-filehandle-functions-unopened: Input).</summary>
+    NotAvailableInQuery,
 }
 
 /// <summary>Expression-layer functions evaluated directly in <see cref="BoundExpression"/> rather than as one <see cref="ScalarOperation"/>.</summary>
@@ -65,6 +68,40 @@ internal enum ExprFunction : byte
     IsDate,
     Replace,
     StrReverse,
+    Format,
+    FormatDollar,
+    FormatNumber,
+    FormatCurrency,
+    FormatPercent,
+    FormatDateTime,
+    DateAdd,
+    DateDiff,
+    DatePart,
+    Weekday,
+    WeekdayName,
+    MonthName,
+    Year,
+    Month,
+    Day,
+    Hour,
+    Minute,
+    Second,
+    DateValue,
+    TimeValue,
+    TimeSerial,
+    Rnd,
+    StrConv,
+    AscB,
+    Str,
+    PPmt,
+    IPmt,
+    Pmt,
+    Partition,
+    RGB,
+    QBColor,
+    IMEStatus,
+    IsMissing,
+    IsObject,
 }
 
 /// <summary>
@@ -170,12 +207,57 @@ public static class FunctionInventory
         Expr("IsDate", ExprFunction.IsDate, StaticType.Boolean);
         Expr("Replace", ExprFunction.Replace);
         Expr("StrReverse", ExprFunction.StrReverse);
+        Expr("Format", ExprFunction.Format);
+        Expr("Format$", ExprFunction.FormatDollar);
+        Expr("FormatNumber", ExprFunction.FormatNumber);
+        Expr("FormatCurrency", ExprFunction.FormatCurrency);
+        Expr("FormatPercent", ExprFunction.FormatPercent);
+        Expr("FormatDateTime", ExprFunction.FormatDateTime);
+        Expr("DateAdd", ExprFunction.DateAdd);
+        Expr("DateDiff", ExprFunction.DateDiff);
+        Expr("DatePart", ExprFunction.DatePart);
+        Expr("Weekday", ExprFunction.Weekday);
+        Expr("WeekdayName", ExprFunction.WeekdayName);
+        Expr("MonthName", ExprFunction.MonthName);
+        Expr("Year", ExprFunction.Year);
+        Expr("Month", ExprFunction.Month);
+        Expr("Day", ExprFunction.Day);
+        Expr("Hour", ExprFunction.Hour);
+        Expr("Minute", ExprFunction.Minute);
+        Expr("Second", ExprFunction.Second);
+        Expr("DateValue", ExprFunction.DateValue);
+        Expr("TimeValue", ExprFunction.TimeValue);
+        Expr("TimeSerial", ExprFunction.TimeSerial);
+        // Now(), Date(), Time(), Timer() stay refused as NotModelled.Function until host-clock replay design lands (ActionExecutionTests.cs:185).
+        Expr("Rnd", ExprFunction.Rnd);
+        Expr("StrConv", ExprFunction.StrConv);
+        Expr("AscB", ExprFunction.AscB);
+        Expr("Str", ExprFunction.Str);
+        Expr("PPmt", ExprFunction.PPmt);
+        Expr("IPmt", ExprFunction.IPmt);
+        Expr("Pmt", ExprFunction.Pmt);
+        Expr("Partition", ExprFunction.Partition);
+        Expr("RGB", ExprFunction.RGB);
+        Expr("QBColor", ExprFunction.QBColor);
+        Expr("IMEStatus", ExprFunction.IMEStatus);
+        Expr("IsMissing", ExprFunction.IsMissing, StaticType.Boolean);
+        Expr("IsObject", ExprFunction.IsObject, StaticType.Boolean);
 
+        // Standalone ACE unknown functions (3085 in queries, 3072 in Find):
+        // qualified.md "function availability"; r-expr-1b/sandbox-system-and-file-functions,
+        // r-expr-1b/sandbox-access-hosted-names, r-expr-1b/sandbox-vba-library;
+        // r-def-expr-sql/expr-filehandle-functions-unopened; r-def-cat-txn/fmt-guid-genguid-values;
+        // r-expr-1b/str-chr-asc-range (ChrB); r-expr-1b/num-sqr-exp-log-trig (Atan2..Cot).
+        // ColumnHistory is intentionally NOT listed so it stays refused as NotModelled.Function.
         foreach (string name in new[]
         {
-            "Nz", "CVErr", "IsArray", "Eval", "Environ", "CurDir", "Dir", "FileLen", "Command", "Join", "Split",
+            "Nz", "CVErr", "IsArray", "Eval", "Environ", "Environ$", "CurDir", "CurDir$", "Dir", "Dir$",
+            "FileLen", "FileDateTime", "GetAttr", "Command", "Command$", "Join", "Split",
             "Filter", "UBound", "Randomize", "Log10", "CurrentUser", "CurrentDb", "CLngLng", "CLngPtr",
             "ChrB", "Atan2", "Pi", "Sinh", "Sec", "Tanh", "Cot",
+            "GenGUID", "FreeFile", "EOF", "LOF", "Loc", "Seek", "FileAttr", "Spc", "Tab",
+            "TempVars", "SysCmd", "IsLoaded", "HyperlinkPart",
+            "Error", "Error$", "Err", "Erl",
         })
         {
             names.Add(name, new Record(new Entry(FunctionAvailability.Unknown, null, StaticType.Unknown), ExprFunction.None));
@@ -184,6 +266,8 @@ public static class FunctionInventory
         {
             names.Add(name, new Record(new Entry(FunctionAvailability.Domain, null, StaticType.Unknown), ExprFunction.None));
         }
+        // r-def-expr-sql/expr-filehandle-functions-unopened (#168, #175): Input(...) fails 3072 "Function is not available in expressions" in queries.
+        names.Add("Input", new Record(new Entry(FunctionAvailability.NotAvailableInQuery, null, StaticType.Unknown), ExprFunction.None));
         return names;
     }
 }
