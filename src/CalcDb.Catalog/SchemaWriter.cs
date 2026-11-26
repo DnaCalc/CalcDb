@@ -419,7 +419,7 @@ public sealed class SchemaWriter
             }
             if (type == NewFieldType.Long)
             {
-                // evidence/r-q49-dt2-draftprops/ddl-default-eval-edge-ado-{accdb,mdb} TE_BadType:
+                // evidence/r-q49-dt2-draftprops/ddl-default-eval-edge-ado-accdb, ddl-default-eval-edge-ado-mdb TE_BadType:
                 // A LONG DEFAULT 'abc' fails ACE 3000 ("Type mismatch") when the string is not numeric.
                 string inner = trimmed[1..^1];
                 if (!int.TryParse(inner, System.Globalization.NumberStyles.AllowLeadingSign, System.Globalization.CultureInfo.InvariantCulture, out _))
@@ -467,7 +467,7 @@ public sealed class SchemaWriter
             string innerName = trimmed[1..^1];
             if (type == NewFieldType.Long && innerName.Length > 0)
             {
-                // evidence/r-q49-dt2-draftprops/ddl-default-eval-edge-ado-{accdb,mdb} TE_BadCol:
+                // evidence/r-q49-dt2-draftprops/ddl-default-eval-edge-ado-accdb, ddl-default-eval-edge-ado-mdb TE_BadCol:
                 // A LONG DEFAULT [ID] fails ACE 3355.
                 unrecognizedFieldName = innerName;
                 return DefaultValueCheckKind.UnrecognizedField;
@@ -2862,7 +2862,7 @@ public sealed class SchemaWriter
         else if (propSteps.Count > 0)
         {
             // When MSysObjects.LvProp shrinks from an inline blob to a 12-byte LVAL reference during ADD COLUMN
-            // (evidence/r-q49-dt2-draftprops/ddl-default-alter-ado-{accdb,mdb} after-add-s-live), ACE first updates
+            // (evidence/r-q49-dt2-draftprops/ddl-default-alter-ado-accdb, ddl-default-alter-ado-mdb after-add-s-live), ACE first updates
             // DateUpdate in place on the inline row (visible in the vacated bytes) before rewriting LvProp to LVAL.
             if (setDateUpdateBeforeSpill && !work.SetDateUpdate(this, entry, dateUpdateBits))
             {
