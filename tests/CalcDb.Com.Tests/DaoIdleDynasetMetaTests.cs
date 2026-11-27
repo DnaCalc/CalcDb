@@ -470,7 +470,7 @@ public sealed unsafe class DaoIdleDynasetMetaTests : IDisposable
             rows.ReleaseUntaken();
             Ok(Method(rs, "Close"));
         }
-        // guid-select-proj (evidence/r-q54-excl-ddl-ix-cmd/field-meta-and-lockwait-{accdb,mdb} calls 135-152):
+        // guid-select-proj (evidence/r-q54-excl-ddl-ix-cmd/field-meta-and-lockwait-accdb, field-meta-and-lockwait-mdb calls 135-152):
         // bare GUID projection succeeds cleanly; expressions over GUID stay refused as NotModelled.FieldType.
         SelectRecordsetObject guidRs = Recover<SelectRecordsetObject>(Ok(Method(db, "OpenRecordset", "SELECT G FROM AllTypes", 2)));
         Ok(Method(guidRs, "Close"));

@@ -231,7 +231,7 @@ public sealed unsafe class AdoImmediateEditTests
         nint cn = OpenAceConnection(dbPath);
         try
         {
-            // guid-select-proj (evidence/r-q54-excl-ddl-ix-cmd/field-meta-and-lockwait-{accdb,mdb} calls 135-152):
+            // guid-select-proj (evidence/r-q54-excl-ddl-ix-cmd/field-meta-and-lockwait-accdb, field-meta-and-lockwait-mdb calls 135-152):
             // SELECT * FROM T ORDER BY ID now projects GUID column G (native type 15) cleanly.
             nint rsStar = New(OwnRecordset);
             Assert.Null(Put(rsStar, "CursorLocation", 2).Failure);

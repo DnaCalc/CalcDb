@@ -141,7 +141,7 @@ public sealed unsafe class BinaryProjectionTests
         }
 
         // T also has a GUID column (native type 15); SELECT * FROM T binds and projects G (guid-select-proj,
-        // evidence/r-q54-excl-ddl-ix-cmd/field-meta-and-lockwait-{accdb,mdb} calls 135-152), while expressions and
+        // evidence/r-q54-excl-ddl-ix-cmd/field-meta-and-lockwait-accdb, field-meta-and-lockwait-mdb calls 135-152), while expressions and
         // ORDER BY over G stay refused as NotModelled.FieldType.
         using (BoundSelect? guidStar = BoundSelect.Prepare("SELECT * FROM T", db, out SqlFailure? gf))
         {

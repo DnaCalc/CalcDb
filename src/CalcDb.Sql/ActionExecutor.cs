@@ -1532,7 +1532,7 @@ public static unsafe class ActionExecutor
         }
         if (vt == VarType.Empty)
         {
-            // evidence/r-q53-conv-abspos-subq-loc/conv-sql-ins-upd-{accdb,mdb}, conv-dao-scalars-{accdb,mdb}:
+            // evidence/r-q53-conv-abspos-subq-loc/conv-sql-ins-upd-accdb, conv-sql-ins-upd-mdb, conv-dao-scalars-accdb, conv-dao-scalars-mdb:
             // VT_EMPTY maps to False (0) on Yes/No and Null on other scalar columns.
             if (column.TypeCode == NativeTypes.Boolean)
             {
@@ -1574,7 +1574,7 @@ public static unsafe class ActionExecutor
         }
         if (column.TypeCode == NativeTypes.Guid && vt == (VarType.Array | VarType.UI1))
         {
-            // evidence/r-q53-conv-abspos-subq-loc/conv-sql-ins-upd-{accdb,mdb}, conv-dao-scalars-{accdb,mdb}:
+            // evidence/r-q53-conv-abspos-subq-loc/conv-sql-ins-upd-accdb, conv-sql-ins-upd-mdb, conv-dao-scalars-accdb, conv-dao-scalars-mdb:
             // non-BSTR (including 16-byte array) into GUID fails 3464.
             failure = SqlFailure.Ace(SqlPhase.Execute, 3464, SqlMessages.DataTypeMismatch);
             return false;
@@ -1727,7 +1727,7 @@ public static unsafe class ActionExecutor
                 }
                 else if (vt == VarType.Bool)
                 {
-                    // evidence/r-q53-conv-abspos-subq-loc/conv-dao-scalars-{accdb,mdb}, conv-sql-ins-upd-{accdb,mdb}:
+                    // evidence/r-q53-conv-abspos-subq-loc/conv-dao-scalars-accdb, conv-dao-scalars-mdb, conv-sql-ins-upd-accdb, conv-sql-ins-upd-mdb:
                     // Boolean -> Text/Memo formats True as "-1" and False as "0".
                     string boolText = (short)incoming.Int64 != 0 ? "-1" : "0";
                     textVar = new NativeVariant
@@ -1799,7 +1799,7 @@ public static unsafe class ActionExecutor
                     converted = SelectValues.Copy(incoming);
                     return true;
                 }
-                // evidence/r-q53-conv-abspos-subq-loc/conv-sql-ins-upd-{accdb,mdb}, conv-dao-scalars-{accdb,mdb}:
+                // evidence/r-q53-conv-abspos-subq-loc/conv-sql-ins-upd-accdb, conv-sql-ins-upd-mdb, conv-dao-scalars-accdb, conv-dao-scalars-mdb:
                 // non-BSTR into GUID fails 3464.
                 failure = SqlFailure.Ace(SqlPhase.Execute, 3464, SqlMessages.DataTypeMismatch);
                 return false;
