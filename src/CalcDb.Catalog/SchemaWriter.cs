@@ -2193,9 +2193,9 @@ public sealed class SchemaWriter
                 // when the session already has an active reservation with 0 pending rolled-back pages, 0-byte 3058 is
                 // recorded only for single-column ascending Long PRIMARY / DISALLOW NULL (0-byte 3022 is not recorded).
                 if (nullInDisallowOrPrimary
-                    && request.Index.Columns.Count == 1
+                    && request.Index.Fields.Count == 1
                     && (request.Index.Descending is null || !request.Index.Descending[0])
-                    && table.Columns.FirstOrDefault(c => FieldNameLookupClashOf(c.Name, request.Index.Columns[0], _sortOrder, out _) == FieldNameClash.Duplicate)?.TypeCode == NativeTypes.Long)
+                    && table.Columns.FirstOrDefault(c => FieldNameLookupClashOf(c.Name, request.Index.Fields[0], _sortOrder, out _) == FieldNameClash.Duplicate)?.TypeCode == NativeTypes.Long)
                 {
                     if (acceptsError is not null && !acceptsError(errNum))
                     {
