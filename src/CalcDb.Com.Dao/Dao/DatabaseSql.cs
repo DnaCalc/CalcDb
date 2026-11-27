@@ -170,7 +170,7 @@ internal static unsafe class SelectRoute
                 database.Workspace.Transactions.EndLazyBurst(database.Cache);
             }
             InnerJoinKeys? innerJoin = ExtractInnerJoinKeys(syntax, plan);
-            DerivedSourceSpec? derivedSpec = singleTableRowSelect ? BuildDerivedSpec(plan, baseWhere: null, baseOrderBy: null, hasOriginalWhere: syntax.Where is not null) : null;
+            DerivedSourceSpec? derivedSpec = singleTableRowSelect ? BuildDerivedSpec(plan, baseWhere: null, baseOrderBy: null, hasOriginalWhere: syntax.Where is not null, hasOriginalOrderBy: hasOrderBy) : null;
             var recordset = new SelectRecordsetObject(database, plan, cursor, recordsetType, singleTableRowSelect, hasOrderBy, snapshotView, snapshotOverlay, options, database.Engine.NextSequence(), innerJoin, hasGroupBy, derivedSpec);
             adopted = true;
             return database.Adopt(recordset);
@@ -187,9 +187,9 @@ internal static unsafe class SelectRoute
         }
     }
 
-    internal static DerivedSourceSpec? BuildDerivedSpec(BoundSelect plan, string? baseWhere, string? baseOrderBy, bool hasOriginalWhere = false)
+    internal static DerivedSourceSpec? BuildDerivedSpec(BoundSelect plan, string? baseWhere, string? baseOrderBy, bool hasOriginalWhere = false, bool hasOriginalOrderBy = false)
     {
-        if (plan.Sources.Count != 1 || plan.Sources[0].Table is null || hasOriginalWhere)
+        if (plan.Sources.Count != 1 || plan.Sources[0].Table is null || hasOriginalWhere || hasOriginalOrderBy)
         {
             return null;
         }
@@ -258,7 +258,7 @@ internal static unsafe class SelectRoute
         if (trimmedSort.Length > 0 && trimmedSort.StartsWith("ORDER BY", StringComparison.OrdinalIgnoreCase)
             && (trimmedSort.Length == 8 || char.IsWhiteSpace(trimmedSort[8])))
         {
-            // filter-sort-edit-errors-{accdb,mdb} call 173: Sort = "ORDER BY ID" -> 3138 "Syntax error in ORDER BY clause."
+            // filter-sort-edit-errors-accdb, filter-sort-edit-errors-mdb call 173: Sort = "ORDER BY ID" -> 3138 "Syntax error in ORDER BY clause."
             return caller.Fail(3138, "Syntax error in ORDER BY clause.");
         }
 
@@ -287,13 +287,20 @@ internal static unsafe class SelectRoute
         {
             return PublishedDerived(caller, failure!, trimmedFilter, trimmedSort);
         }
-        if (plan.Parameters.Count > 0)
+        if (plan.Parameters.Count == 1)
         {
-            // filter-sort-edit-errors-{accdb,mdb} calls 140, 157: unknown column in Filter or Sort reports
-            // 3061 "Too few parameters. Expected 2." (ACE counts +1 on derived OpenRecordset).
-            int expected = plan.Parameters.Count + 1;
+            // filter-sort-edit-errors-accdb, filter-sort-edit-errors-mdb calls 140, 157: single unknown column in
+            // Filter or Sort reports 3061 "Too few parameters. Expected 2."
             plan.Dispose();
-            return caller.Fail(3061, $"Too few parameters. Expected {expected}.");
+            return caller.Fail(3061, "Too few parameters. Expected 2.");
+        }
+        if (plan.Parameters.Count > 1)
+        {
+            int count = plan.Parameters.Count;
+            plan.Dispose();
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.DerivedOpenRecordsetParameters",
+                $"Recordset.OpenRecordset with {count} unbound parameters in Filter/Sort (only 1 is recorded)"));
         }
         foreach (SourceSlot slot in plan.Sources)
         {
@@ -322,7 +329,7 @@ internal static unsafe class SelectRoute
             }
             if (hasOrderBy && !cursor.Eof)
             {
-                // filter-sort-openrs-read-{accdb,mdb} calls 37, 77, 106, 129, 148:
+                // filter-sort-openrs-read-accdb, filter-sort-openrs-read-mdb calls 37, 77, 106, 129, 148:
                 // a derived recordset with Sort (ORDER BY) reports its full RecordCount immediately at open.
                 cursor.MoveLast();
                 cursor.MoveFirst();
@@ -348,37 +355,33 @@ internal static unsafe class SelectRoute
     {
         if (failure.IsNotModelled)
         {
-            if (fromParse && sort.Length > 0 && filter.Length == 0)
+            if (fromParse && sort.Length > 0 && filter.Length == 0
+                && failure.NotModelled == "NotModelled.SqlSyntax"
+                && failure.Message.StartsWith("text after the statement at ", StringComparison.Ordinal))
             {
-                // filter-sort-edit-errors-{accdb,mdb} call 165: Sort = "ID BADDIR" fails 3075 with expression 'ID BADDIR'.
+                // filter-sort-edit-errors-accdb, filter-sort-edit-errors-mdb call 165: Sort = "ID BADDIR" fails 3075 with expression 'ID BADDIR'.
                 return caller.Fail(3075, $"Syntax error (missing operator) in query expression '{sort}'.");
             }
             if (failure.NotModelled is "NotModelled.WhereFailureAtOpen" or "NotModelled.WhereRowFailure"
                 && failure.Message.Contains("3464", StringComparison.Ordinal))
             {
-                // filter-sort-edit-errors-{accdb,mdb} call 148: Filter = "N = 'notanum'" fails 3464 at derived OpenRecordset.
+                // filter-sort-edit-errors-accdb, filter-sort-edit-errors-mdb call 148: Filter = "N = 'notanum'" fails 3464 at derived OpenRecordset.
                 return caller.Fail(3464, "Data type mismatch in criteria expression.");
             }
             return CallResult.Fail(Failure.NotModelled(failure.NotModelled!, failure.Message));
         }
-        if (failure.Number == 3075)
-        {
-            string expr = filter.Length > 0 ? filter : sort;
-            return caller.Fail(3075, $"Syntax error (missing operator) in query expression '{expr}'.");
-        }
         if (failure.Number == 3138)
         {
-            // filter-sort-edit-errors-{accdb,mdb} call 165: Sort = "ID BADDIR" fails 3075 with expression 'ID BADDIR'.
+            // filter-sort-edit-errors-accdb, filter-sort-edit-errors-mdb call 165: Sort = "ID BADDIR" fails 3075 with expression 'ID BADDIR'.
             if (sort.Length > 0 && !sort.StartsWith("ORDER BY", StringComparison.OrdinalIgnoreCase))
             {
                 return caller.Fail(3075, $"Syntax error (missing operator) in query expression '{sort}'.");
             }
             return caller.Fail(3138, "Syntax error in ORDER BY clause.");
         }
-        if (failure.Number == 3061 && failure.Message.StartsWith("Too few parameters. Expected ", StringComparison.Ordinal)
-            && int.TryParse(failure.Message["Too few parameters. Expected ".Length..].TrimEnd('.'), out int expected))
+        if (failure.Number == 3061 && failure.Message == "Too few parameters. Expected 1.")
         {
-            return caller.Fail(3061, $"Too few parameters. Expected {expected + 1}.");
+            return caller.Fail(3061, "Too few parameters. Expected 2.");
         }
         return caller.Fail(failure.Number, failure.Message);
     }

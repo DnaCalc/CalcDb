@@ -497,12 +497,10 @@ public sealed unsafe class DaoCloneRequeryTests : IDisposable
         Ok(Method(over, "Close"));
         Ok(Method(writer, "Close"));
 
-        // Query (SELECT) recordset Clone and Requery: single-table SELECT dynaset Clone succeeds (r-q53 filter-sort-openrs-read);
-        // closed is 3420; forward-only Clone and unrecorded Requery refuse by name.
+        // Query (SELECT) recordset Clone and Requery: closed is 3420; non-derived SELECT Clone and unrecorded Requery refuse by name.
         DatabaseObject defDb = Open(DefCursorMain, readOnly: true);
         SelectRecordsetObject qd = Recover<SelectRecordsetObject>(Ok(Method(defDb, "OpenRecordset", "SELECT ID, N FROM T", 2)));
-        SelectRecordsetObject qdc = Recover<SelectRecordsetObject>(Ok(Method(qd, "Clone")));
-        Ok(Method(qdc, "Close"));
+        AssertNotModelled(Method(qd, "Clone"), "NotModelled.QueryRecordsetClone");
         AssertNotModelled(Method(qd, "Requery"), "NotModelled.QueryRecordsetRequery");
         Ok(Method(qd, "Close"));
         AssertDaoError(Method(qd, "Clone"), 3420, "DAO.Recordset");

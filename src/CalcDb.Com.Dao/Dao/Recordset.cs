@@ -474,8 +474,8 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
             Failure.NotModelled("NotModelled.MoveArgumentType", $"Recordset.Move with {sourceType} argument (only I4, I2, UI1, Bool, Empty, Null, R8 and BSTR are recorded)"),
         ("PercentPosition", 0) when member.Kind == InvokeKind.PropertyPut && sourceType is not (VarType.I4 or VarType.R4 or VarType.R8 or VarType.Bstr or VarType.Empty or VarType.Null) =>
             Failure.NotModelled("NotModelled.PercentPositionArgumentType", $"Recordset.PercentPosition put with {sourceType} argument (only I4, R4, R8, BSTR, Empty and Null are recorded)"),
-        ("AbsolutePosition", 0) when member.Kind == InvokeKind.PropertyPut && sourceType is not (VarType.I4 or VarType.I2 or VarType.UI1 or VarType.Bool or VarType.R4 or VarType.R8 or VarType.Bstr or VarType.Empty or VarType.Null) =>
-            Failure.NotModelled("NotModelled.AbsolutePositionArgumentType", $"Recordset.AbsolutePosition put with {sourceType} argument (only I4, I2, UI1, Bool, R4, R8, BSTR, Empty and Null are recorded)"),
+        ("AbsolutePosition", 0) when member.Kind == InvokeKind.PropertyPut && sourceType is not (VarType.I4 or VarType.R8 or VarType.Bstr or VarType.Empty or VarType.Null) =>
+            Failure.NotModelled("NotModelled.AbsolutePositionArgumentType", $"Recordset.AbsolutePosition put with {sourceType} argument (only I4, R8, BSTR, Empty and Null are recorded)"),
         ("Seek", 0) when sourceType is not (VarType.Bstr or VarType.Empty or VarType.Null or VarType.I4 or VarType.Bool) =>
             Failure.NotModelled("NotModelled.SeekComparisonType", $"Recordset.Seek comparison with {sourceType} argument (only BSTR, Empty, Null, I4 and Bool are recorded)"),
         ("FindFirst" or "FindNext", 0) when sourceType is not (VarType.Bstr or VarType.Empty or VarType.Null or VarType.I4 or VarType.R8 or VarType.Bool) =>
@@ -2207,16 +2207,9 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
             {
                 return Fail(3021, DaoErrors.NoCurrentRecord);
             }
-            if (Cursor is PopulationCursor pop)
+            if (Cursor is PopulationCursor pop && _family.BookmarkBaseRefusal is { } refusal)
             {
-                if (pop.BookmarksInvalidatedByDelete)
-                {
-                    return CallResult.Fail(Failure.NotModelled("NotModelled.BookmarkAfterDelete", "Bookmark on a dynaset after a cursor Delete shifted the keyset (not recorded)"));
-                }
-                if (_family.BookmarkBaseRefusal is { } refusal)
-                {
-                    return CallResult.Fail(Failure.NotModelled(refusal.Name, refusal.Detail));
-                }
+                return CallResult.Fail(Failure.NotModelled(refusal.Name, refusal.Detail));
             }
             return CallResult.Fail(Failure.NotImplemented("Bookmark: " + failure));
         }

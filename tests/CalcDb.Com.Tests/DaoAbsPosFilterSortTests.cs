@@ -232,9 +232,11 @@ public sealed unsafe class DaoAbsPosFilterSortTests : IDisposable
         Assert.Equal(1, Int32Value(Ok(FieldValue(dSub, "ID"))));
         Ok(Method(dSub, "Close"));
 
-        // Clone survives parent Close().
-        SelectRecordsetObject dClone = Recover<SelectRecordsetObject>(Ok(Method(d, "Clone")));
-        Assert.Equal(3, Int32Value(Ok(Get(dClone, "RecordCount"))));
+        // Clone on a writable-database derived dynaset is unrecorded and refused by name.
+        CallResult wrClone = Method(d, "Clone");
+        Assert.NotNull(wrClone.Failure);
+        Assert.Equal(FailureKind.NotModelled, wrClone.Failure!.Kind);
+        Assert.StartsWith("NotModelled.QueryRecordsetClone:", wrClone.Failure.Description);
 
         // Edit + AddNew (matching and non-matching filter rows both appear in subsequent walk) + FindFirst + Delete.
         Ok(Method(d, "Edit"));
@@ -305,7 +307,16 @@ public sealed unsafe class DaoAbsPosFilterSortTests : IDisposable
         Ok(Method(rs, "Close"));
         AssertDaoError(Method(rs, "OpenRecordset"), 3420, "DAO.Recordset", errorInfo: false);
 
-        // Clone survived parent Close().
+        // Clone on a read-only-database derived dynaset (Options 0) survives parent Close() (filter-sort-openrs-read calls 55-84).
+        DatabaseObject dbRo = OpenFixture(sha, ext, readOnly: true);
+        RecordsetObject rsRo = Recover<RecordsetObject>(Ok(Method(dbRo, "OpenRecordset", "Items", 2)));
+        Ok(Put(rsRo, "Filter", "Cat = 'A'"));
+        Ok(Put(rsRo, "Sort", "ID DESC"));
+        SelectRecordsetObject dRo = Recover<SelectRecordsetObject>(Ok(Method(rsRo, "OpenRecordset")));
+        SelectRecordsetObject dClone = Recover<SelectRecordsetObject>(Ok(Method(dRo, "Clone")));
+        Assert.Equal(3, Int32Value(Ok(Get(dClone, "RecordCount"))));
+        Ok(Method(dRo, "Close"));
+        Ok(Method(rsRo, "Close"));
         Ok(Method(dClone, "MoveFirst"));
         Assert.Equal(3, Int32Value(Ok(FieldValue(dClone, "ID"))));
         Ok(Method(dClone, "Close"));
