@@ -305,6 +305,7 @@ internal abstract class AdoObject : DispatchObject
         {
             PublishesErrorInfo = true,
             ErrorInfoIid = Guid.Empty,
+            NullExcepStrings = true,
         };
 
     /// <summary>0x80040E21 read-only property put while open (r-ado-1b/conn-set-while-open: Connection publishes IErrorInfo; Property does not).</summary>

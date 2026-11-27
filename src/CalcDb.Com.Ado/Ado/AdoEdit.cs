@@ -43,6 +43,7 @@ internal sealed unsafe class KeysetRowSource : IAdoRowSource
     private int _failedAddPutOrdinal = -1;
     private bool _failedAddPutRead;
     private bool _failedDelete;
+    private bool _hasPendingDateTime2BstrPut;
     private int _recordStatus;
     private OwnedVariant[]? _originalSnapshot;
 
@@ -327,6 +328,7 @@ internal sealed unsafe class KeysetRowSource : IAdoRowSource
         _deletedCurrent = false;
         _deletedAtDepth = -1;
         _failedDelete = false;
+        _hasPendingDateTime2BstrPut = false;
         _recordStatus = 0;
         _currentIndex = -1;
         return true;
@@ -460,6 +462,26 @@ internal sealed unsafe class KeysetRowSource : IAdoRowSource
             // r-ado-1b/fields-assign-conversion #44-45: VT_EMPTY into Long stores Null.
             effective = new NativeVariant { Vt = (ushort)VarType.Null };
         }
+        else if (col.TypeCode == NativeTypes.ExtendedDateTime && incoming.Type == VarType.Bstr)
+        {
+            // r-q49-dt2-draftprops/dt2-ado-addnew-edit-accdb #42/#71/#80/#89/#120/#134/#148:
+            // ACE OLE DB coerces BSTR puts on DATETIME2 (adDBTimeStamp=135) via VariantChangeTypeEx(..., VT_DATE),
+            // failing Provider 0x80020005 "Type mismatch." for fractional seconds / out-of-range / non-dates while
+            // accepting OLE-parseable strings like "0000-01-01 00:00:00".
+            NativeVariant copy = incoming;
+            tempConverted = OwnedVariant.ChangeType(&copy, VarType.Date, SessionLocale.Lcid, flags: 0, out _);
+            if (tempConverted is null)
+            {
+                if (startedImplicitEdit)
+                {
+                    _frame.Discard();
+                    DisposeOriginalSnapshot();
+                }
+                providerError = AdoSqlErrors.TypeMismatchOn(errorIid);
+                return false;
+            }
+            effective = *tempConverted.Pointer;
+        }
         else if (col.TypeCode is NativeTypes.Text or NativeTypes.Memo && incoming.Type != VarType.Bstr && incoming.Type != VarType.Null)
         {
             if (TryCoerceToTextVariant(col.TypeCode, in incoming, out tempConverted))
@@ -507,6 +529,16 @@ internal sealed unsafe class KeysetRowSource : IAdoRowSource
             }
             return false;
         }
+        if (col.TypeCode == NativeTypes.ExtendedDateTime && incoming.Type == VarType.Bstr)
+        {
+            // r-q49-dt2-draftprops/dt2-ado-addnew-edit-accdb #134/#140: OLE-parseable BSTR put on DATETIME2 is
+            // accepted in-buffer and cancelled via CancelUpdate(); committing it via Update() is refused by name.
+            _hasPendingDateTime2BstrPut = true;
+        }
+        else if (col.TypeCode == NativeTypes.ExtendedDateTime && incoming.Type == VarType.Null)
+        {
+            _hasPendingDateTime2BstrPut = false;
+        }
         return true;
     }
 
@@ -531,6 +563,9 @@ internal sealed unsafe class KeysetRowSource : IAdoRowSource
         NativeTypes.Binary or NativeTypes.Ole => vt is (VarType.Array | VarType.UI1) or VarType.Bstr or VarType.Null,
         NativeTypes.Guid => vt is VarType.Bstr or VarType.Null,
         NativeTypes.Numeric => vt is VarType.Bstr or VarType.R8 or VarType.Currency,
+        // r-q49-dt2-draftprops/dt2-ado-addnew-edit-accdb: VT_NULL + Update, failing BSTR 0x80020005, and OLE-parseable
+        // BSTR + CancelUpdate are modelled; VT_DATE puts (which store ACE's corrupted bytes reading back 0x80040E39) stay refused.
+        NativeTypes.ExtendedDateTime => vt is VarType.Bstr or VarType.Null,
         _ => false,
     };
 
@@ -598,6 +633,7 @@ internal sealed unsafe class KeysetRowSource : IAdoRowSource
         _failedAddPutOrdinal = -1;
         _failedAddPutRead = false;
         _failedDelete = false;
+        _hasPendingDateTime2BstrPut = false;
         _recordStatus = 0;
         // Finding #12: Field.OriginalValue during AddNew is not recorded and is refused before reaching ReadOriginalValue.
         DisposeOriginalSnapshot();
@@ -629,6 +665,14 @@ internal sealed unsafe class KeysetRowSource : IAdoRowSource
             // r-oledb-odbc/update-errors #257-276: calling Update() right after a failed ACE Field.Value put in AddNew fails 3020 with EditMode=2 and Status=16.
             _recordStatus = 16;
             providerError = AdoSqlErrors.UpdateWithoutAddNewOrEdit();
+            return false;
+        }
+
+        if (_hasPendingDateTime2BstrPut)
+        {
+            refusal = Failure.NotModelled(
+                "NotModelled.AdoDateTime2Commit",
+                "Committing a non-Null BSTR put on a DATETIME2 column via ADO Recordset.Update has no retained ACE commit-byte record");
             return false;
         }
 
@@ -712,6 +756,7 @@ internal sealed unsafe class KeysetRowSource : IAdoRowSource
         _failedAddPutOrdinal = -1;
         _failedAddPutRead = false;
         _failedDelete = false;
+        _hasPendingDateTime2BstrPut = false;
         _recordStatus = 0;
     }
 

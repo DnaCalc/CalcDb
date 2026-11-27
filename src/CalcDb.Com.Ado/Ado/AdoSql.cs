@@ -17,6 +17,28 @@ internal readonly record struct MappedProviderError(Failure ComFailure, AdoError
 /// </summary>
 internal static class AdoSqlErrors
 {
+    /// <summary>Division by zero during row fetch on a server cursor (r-q2-expr-sql/demand-ado-events-failing-row #28[1].3).</summary>
+    public static MappedProviderError DivisionByZeroOnRowset() => Make(
+        AdoObject.HResultFail,
+        "Division by zero",
+        5003071,
+        null,
+        null,
+        AdoObject.IidRowset);
+
+    /// <summary>
+    /// Reading a non-Null DATETIME2 (adDBTimeStamp=135) value through ADO Field.Value on ACE OLE DB
+    /// (r-q49-dt2-draftprops/dt2-ado-addnew-edit-accdb #210[0].1[1].1, dt2-params-ado-cmd-accdb #106/#126/#146/#226/#286,
+    /// dt2-select-aggregates-dao-ado-accdb #98[0..1]): fails 0x80040E21 on IID_IRowset with Connection.Errors entry.
+    /// </summary>
+    public static MappedProviderError DateTime2ReadFailure() => Make(
+        AdoObject.HResultErrorsOccurred,
+        AdoObject.MultipleStepDescription,
+        5000000,
+        "",
+        0,
+        AdoObject.IidRowset);
+
     /// <summary>Empty command text on Recordset.Open (r-ado-1b/rs-open-by-properties #72).</summary>
     public static MappedProviderError CommandTextNotSet() => Make(
         AdoObject.HResultCommandNotSet,
@@ -489,8 +511,11 @@ internal static class AdoSqlErrors
                 out unmodelled),
             // r-oledb-odbc/error-record-channels #173-183, r-q2-expr-sql/act-ado-failure-lane #62 (data type mismatch on Connection.Execute action)
             3464 when !isSavedQuery && isConnectionExecuteAction => Make(AdoObject.HResultCantConvertValue, failure.Message, 5003071, "3464", -539888598, AdoObject.IidCommand),
-            // r-q47-bigint-expr-edges/meta-dollar-str-dao-ado-accdb, meta-fmt-date-strconv-dao-ado-accdb (data type mismatch on ad-hoc SELECT; SQLState/NativeError not observed)
-            3464 when !isSavedQuery && isSelect => Make(AdoObject.HResultCantConvertValue, failure.Message, 5003071, null, null, AdoObject.IidCommand),
+            // r-q47-bigint-expr-edges/meta-dollar-str-dao-ado-accdb, meta-fmt-date-strconv-dao-ado-accdb,
+            // r-q49-dt2-draftprops/dt2-params-ado-cmd-accdb #156/#236/#296, dt2-select-aggregates-dao-ado-accdb #114/#127
+            3464 when !isSavedQuery && isSelect => Make(AdoObject.HResultCantConvertValue, failure.Message, 5003071, "3464", -539888598, AdoObject.IidCommand),
+            // r-q2-expr-sql/demand-ado-events-failing-row #48: Division by zero in aggregate SELECT fails 0x80040E14 on Open.
+            11 when !isSavedQuery && isSelect => Make(AdoObject.HResultErrorsInCommand, failure.Message, 5003071, null, null, AdoObject.IidCommand),
             // r-oledb-odbc/error-record-channels #193-203 (field too small on Connection.Execute only)
             3163 when !isSavedQuery && isConnectionExecuteAction => Make(AdoObject.HResultDataOverflow, failure.Message, 5003163, "3163", -68551703, AdoObject.IidCommand),
             // r-oledb-odbc/error-record-channels #253-263 (DROP TABLE / cannot delete index or table on Connection.Execute only)

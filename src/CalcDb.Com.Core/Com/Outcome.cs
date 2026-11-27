@@ -121,13 +121,16 @@ internal static unsafe partial class ErrorPublication
             nint** vt = (nint**)create;
             Guid g = iid;
             ((delegate* unmanaged<nint, Guid*, int>)(*vt)[3])(create, &g);
-            fixed (char* s = failure.Source)
+            if (!failure.NullExcepStrings)
             {
-                ((delegate* unmanaged<nint, char*, int>)(*vt)[4])(create, s);
-            }
-            fixed (char* d = failure.Description)
-            {
-                ((delegate* unmanaged<nint, char*, int>)(*vt)[5])(create, d);
+                fixed (char* s = failure.Source)
+                {
+                    ((delegate* unmanaged<nint, char*, int>)(*vt)[4])(create, s);
+                }
+                fixed (char* d = failure.Description)
+                {
+                    ((delegate* unmanaged<nint, char*, int>)(*vt)[5])(create, d);
+                }
             }
             if (failure.HelpFile is { } file)
             {

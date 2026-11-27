@@ -1759,8 +1759,9 @@ public sealed unsafe class AdoExecuteAndRecordsetTests
         Assert.Equal(FailureKind.NotModelled, unmSaved?.Kind);
         Assert.Contains("NotModelled.AdoProviderError", unmSaved!.Description);
 
-        // r-q47-bigint-expr-edges/meta-dollar-str-dao-ado-accdb, meta-fmt-date-strconv-dao-ado-accdb:
-        // ad-hoc SELECT failing 3464 maps to 0x80040E07, 5003071, IID_ICommand (SQLState/NativeError unobserved -> null).
+        // r-q47-bigint-expr-edges/meta-dollar-str-dao-ado-accdb, meta-fmt-date-strconv-dao-ado-accdb,
+        // r-q49-dt2-draftprops/dt2-params-ado-cmd-accdb #159[0].1/#159[0].2:
+        // ad-hoc SELECT failing 3464 maps to 0x80040E07, 5003071, IID_ICommand with SQLState "3464", NativeError -539888598.
         var f3464 = new CalcDb.Sql.SqlFailure(CalcDb.Sql.SqlPhase.Open, 3464, "Data type mismatch in criteria expression.");
         CalcDb.Com.Ado.MappedProviderError? mapped3464 = CalcDb.Com.Ado.AdoSqlErrors.TryMap(f3464, isSavedQuery: false, out Failure? unmodelled3464, isSelect: true);
         Assert.NotNull(mapped3464);
@@ -1768,8 +1769,8 @@ public sealed unsafe class AdoExecuteAndRecordsetTests
         Assert.Equal(unchecked((int)0x80040E07), mapped3464!.Value.ComFailure.Scode);
         Assert.Equal(5003071, mapped3464.Value.ComFailure.HelpContext);
         Assert.Equal(IidCommand, mapped3464.Value.ComFailure.ErrorInfoIid);
-        Assert.Null(mapped3464.Value.ErrorEntry.SqlState);
-        Assert.Null(mapped3464.Value.ErrorEntry.NativeError);
+        Assert.Equal("3464", mapped3464.Value.ErrorEntry.SqlState);
+        Assert.Equal(-539888598, mapped3464.Value.ErrorEntry.NativeError);
 
         // Saved-query 3464 and non-SELECT Command.Execute 3464 remain refused by name.
         Assert.Null(CalcDb.Com.Ado.AdoSqlErrors.TryMap(f3464, isSavedQuery: true, out Failure? unmSaved3464, isSelect: true));
