@@ -295,8 +295,7 @@ public sealed class DdlExclFkIxReplayTests
 
         // 4. Close frees all remaining reserved + rolled-back pages on page 1 (0xE02 +1)
         Assert.Equal(MutationOpen.None, db.Workspace.PublishCloseCommit(db.Cache).Open);
-        byte[] closed = db.Image.Snapshot();
-        Assert.Equal(snaps["after-close"][D.Map.GlobalMapPage * D.PageSize + 4038], closed[D.Map.GlobalMapPage * D.PageSize + 4038]);
+        AssertImagesEqual($"{question} [after-close]", snaps["after-close"], db.Image.Snapshot());
     }
 
     private static Dictionary<string, byte[]> ReadAllLabelSnapshots(string folder, string question)

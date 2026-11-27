@@ -105,20 +105,26 @@ public sealed unsafe class DdlExclFkIxTests
                 Assert.Null(Call(dbSh, "Execute", "CREATE UNIQUE INDEX UX_TU_AB ON TU (A, B)", 128).Failure);
                 Assert.Null(Call(dbSh, "Execute", "CREATE UNIQUE INDEX UX_TU_AB_IGN ON TU (A, B) WITH IGNORE NULL", 128).Failure);
 
-                // SQL CREATE UNIQUE INDEX duplicate -> 3022; WITH DISALLOW NULL -> 3058
+                // SQL CREATE UNIQUE INDEX duplicate -> 3022; post-reservation WITH DISALLOW NULL -> 3058 (fresh session)
                 Assert.Null(Call(dbSh, "Execute", "CREATE TABLE TD (ID LONG CONSTRAINT PK_TD PRIMARY KEY, K LONG, S TEXT(10))", 128).Failure);
                 Assert.Null(Call(dbSh, "Execute", "INSERT INTO TD VALUES (1, 10, 'a')", 128).Failure);
                 Assert.Null(Call(dbSh, "Execute", "INSERT INTO TD VALUES (2, 10, Null)", 128).Failure);
-                Outcome dup3022 = Call(dbSh, "Execute", "CREATE UNIQUE INDEX UX_TD_K ON TD (K)", 128);
-                Assert.NotNull(dup3022.Failure);
-                Assert.Equal(unchecked((int)0x800A0BCE), dup3022.Failure.Value.Scode); // 3022
-                Outcome null3058 = Call(dbSh, "Execute", "CREATE INDEX IX_TD_S ON TD (S) WITH DISALLOW NULL", 128);
-                Assert.NotNull(null3058.Failure);
-                Assert.Equal(unchecked((int)0x800A0BF2), null3058.Failure.Value.Scode); // 3058
-
-                // Populated indexed LVAL table DROP TABLE (external Memo > 2400 chars)
                 Assert.Null(Call(dbSh, "Close").Failure);
                 Release(dbSh);
+
+                Outcome errOpen = Call(eng, "OpenDatabase", dbPath, false, false);
+                Assert.Null(errOpen.Failure);
+                nint dbErr = (nint)errOpen.Value!;
+                Outcome dup3022 = Call(dbErr, "Execute", "CREATE UNIQUE INDEX UX_TD_K ON TD (K)", 128);
+                Assert.NotNull(dup3022.Failure);
+                Assert.Equal(unchecked((int)0x800A0BCE), dup3022.Failure.Value.Scode); // 3022
+                Outcome null3058 = Call(dbErr, "Execute", "CREATE INDEX IX_TD_S ON TD (S) WITH DISALLOW NULL", 128);
+                Assert.NotNull(null3058.Failure);
+                Assert.Equal(unchecked((int)0x800A0BF2), null3058.Failure.Value.Scode); // 3058
+                Assert.Null(Call(dbErr, "Close").Failure);
+                Release(dbErr);
+
+                // Populated indexed LVAL table DROP TABLE (external Memo > 2400 chars)
 
                 Outcome dropOpen = Call(eng, "OpenDatabase", dbPath, false, false);
                 Assert.Null(dropOpen.Failure);
