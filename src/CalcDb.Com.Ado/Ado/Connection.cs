@@ -325,6 +325,8 @@ internal sealed class AdoOpenSession : ISqlSessionHost
     private readonly List<CommandObject> _boundCommands = [];
     private ComSqlDatabase? _sql;
     private AdoSqlViewDatabase? _sqlWithViews;
+    private QueryCatalog? _queries;
+    private string? _queriesFailure;
     private bool _released;
 
     public AdoOpenSession(
@@ -391,7 +393,17 @@ internal sealed class AdoOpenSession : ISqlSessionHost
 
     public string? SchemaFailure => _shared.Core.SchemaFailure;
 
-    public QueryCatalog? Queries => _shared.Core.Queries;
+    public QueryCatalog? Queries
+    {
+        get
+        {
+            if (_queries is null && _queriesFailure is null)
+            {
+                _queries = QueryCatalog.Read(_shared.Core.Cache, _shared.Core.Format, _shared.Core.Catalog, _shared.Core.PageCount, out _queriesFailure);
+            }
+            return _queries;
+        }
+    }
 
     public SavedQuery? FindSavedQuery(string name) =>
         Queries?.Queries.FirstOrDefault(q => string.Equals(q.Name, name, StringComparison.OrdinalIgnoreCase));
@@ -412,6 +424,8 @@ internal sealed class AdoOpenSession : ISqlSessionHost
     {
         _sql?.Forget();
         _sqlWithViews = null;
+        _queries = null;
+        _queriesFailure = null;
     }
 
     public void SqlSchemaPublished(ulong extentPages) =>
@@ -2291,7 +2305,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
                 }
             }
         }
-        if (explicitCommand is null && family == QueryFamily.Update)
+        if (explicitCommand is null && noRecords && family == QueryFamily.Update && commandParameters is { Count: > 0 })
         {
             // r-q50-jk44-ddl-vis/ddl-proc-create-exec-drop-accdb, ddl-proc-create-exec-drop-mdb: Connection.Execute("EXEC P2 1, 'updated'", ..., adExecuteNoRecords)
             RenderedSql rendered = QuerySql.Render(query);

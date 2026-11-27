@@ -2112,7 +2112,12 @@ public sealed class SchemaWriter
             return new SchemaOutcome(null, new AcceptOutcome(false, null, MutationOpen.Publication, buildFailure), _pageCount);
         }
         IReadOnlyList<uint> sessionReserved = workspace.SessionReservedPages(_cache);
-        bool useSessionExtentReservation = !workspace.HasGlobalMapAllocationOrReservation(_cache);
+        // r-q50-jk44-ddl-vis/ddl-index-opts-empty-mdb, ddl-index-ignore-null-rows-accdb, ddl-index-ignore-null-rows-mdb,
+        // ddl-index-disallow-primary-rows-accdb, ddl-index-disallow-primary-rows-mdb: live snapshots after WITH IGNORE NULL /
+        // DISALLOW NULL / PRIMARY reserve the 32-page session extent on page 1 on first global-map activity.
+        bool useSessionExtentReservation =
+            (request.Index.IgnoreNull || request.Index.DisallowNull || request.Index.PrimaryKey)
+            && !workspace.HasGlobalMapAllocationOrReservation(_cache);
         ulong extent = _pageCount;
         AcceptOutcome accepted = workspace.AcceptSchemaChange(
             _cache,
@@ -6519,7 +6524,7 @@ public sealed class SchemaWriter
         }
         if (request.Route is SchemaRoute.Sql or SchemaRoute.Ado)
         {
-            bool useMultiSteps = hasDefault || request.Route == SchemaRoute.Ado;
+            bool useMultiSteps = hasDefault || request.CheckConstraint is not null;
             if (useMultiSteps)
             {
                 List<DaoPropertyStep> defaultSteps = BuildSqlAdoPropertySteps(request.Fields, checkConstraint: request.CheckConstraint);
