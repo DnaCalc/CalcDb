@@ -182,7 +182,7 @@ public sealed class SelectAliasReservedWordTests
             Assert.Equal(SqlParser.SelectSyntaxError, f.Message);
         }
 
-        // r-q25-nz-3141/alias-precedence-forms #5, #14, #17, #26: keep the expression's own failure (not 3141).
+        // r-q25-nz-3141/alias-precedence-forms #5, #14, #17, #26: keep the expression's own 3075 "Extra )" failure (not 3141).
         string[] mustKeepExpressionFailure =
         [
             "SELECT (1 + ) AS x FROM Mx",           // #5
@@ -196,7 +196,8 @@ public sealed class SelectAliasReservedWordTests
             Assert.Null(plan);
             Assert.NotNull(f);
             Assert.Equal(SqlPhase.Parse, f!.Phase);
-            Assert.Equal("NotModelled.ExtraParenthesis", f.NotModelled);
+            Assert.Equal(3075, f.Number);
+            Assert.Equal("Extra ) in query expression '(1 + )'.", f.Message);
         }
 
         // r-q25-nz-3141/alias-precedence-forms #35 (and r-def-expr-sql/expr-nonjet-function-names): parenthesized AS LONG stays 3075.

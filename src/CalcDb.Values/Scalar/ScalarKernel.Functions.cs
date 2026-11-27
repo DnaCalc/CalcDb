@@ -57,6 +57,19 @@ public static unsafe partial class ScalarKernel
         {
             return pattern.IsStarOnly ? Boolean(false) : Null();
         }
+        if (Tag(a) == VarType.Bool)
+        {
+            // r-sql-13b/like-operand-types #85 (yn LIKE '-*' -> True rows), #95 (yn LIKE 'T*' -> empty),
+            // and r-q52-ddl-make-domain/domain-all-scalar-dao-* #74 (False -> "0"):
+            // LIKE converts Yes/No (VT_BOOL) subjects to "-1" or "0".
+            ReadOnlySpan<char> boolUnits = (short)a->Int64 != 0 ? "-1".AsSpan() : "0".AsSpan();
+            bool? boolMatched = pattern.Match(boolUnits, c, out NotModelledCase boolOpen, out bool boolFault);
+            if (boolMatched is { } bm)
+            {
+                return Boolean(bm);
+            }
+            return boolFault ? Fail(d, AceError.InvalidPatternString) : Open(d, boolOpen);
+        }
         NativeVariant text = default;
         try
         {

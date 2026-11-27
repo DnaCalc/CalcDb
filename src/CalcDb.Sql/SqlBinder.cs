@@ -460,7 +460,7 @@ internal sealed class AggregateSpec(AggregateKind kind, SyntaxNode node, BoundEx
 }
 
 /// <summary>An ORDER BY key, bound over the input row or, in a grouped SELECT, over the group's slots.</summary>
-internal sealed record OrderKey(BoundExpression Program, bool Descending, bool MemoPrefix = false);
+internal sealed record OrderKey(BoundExpression Program, bool Descending, bool MemoPrefix = false, bool CoerceToText = false);
 
 /// <summary>The role of an embedded SQL subquery inside an expression (R-SQL-1 SQL-SUB-03/04).</summary>
 internal enum SubqueryKind : byte
@@ -1905,11 +1905,14 @@ public sealed class BoundSelect : IDisposable
                     return SqlFailure.Ace(SqlPhase.Bind, 3062, $"Duplicate output alias '{alias}'.");
                 }
                 if (_scope.Slot(alias) is not null && AllExpressions().Any(f => !ReferenceEquals(f, item.Expression)
+                    && !syntax.OrderBy.Any(o => ReferenceEquals(o.Expression, f))
                     && !(allowDuplicateOutputNames && syntax.Items.Any(other => ReferenceEquals(other.Expression, f) && other.Alias is null && other.Expression?.Syntax.Root is { Kind: SyntaxKind.Name, Text: { } bare } && string.Equals(bare, alias, StringComparison.OrdinalIgnoreCase)))
                     && Walk(f.Syntax.Root!).Any(n => n.Kind == SyntaxKind.Name && string.Equals(n.Text, alias, StringComparison.OrdinalIgnoreCase))))
                 {
                     // r-sql-1/order-nulls-text: in SELECT id AS t, t AS x FROM S the second t is the alias (x is id), where
-                    // a field t exists; which clauses take the alias over the field is not recorded.
+                    // a field t exists; which non-ORDER-BY clauses take the alias over the field is not recorded.
+                    // In ORDER BY, r-sql-13b/order-expression-forms #125/#135 (SELECT id AS g FROM GA ORDER BY g, id / GA.g, id)
+                    // proves a name matching a base column resolves to the table column, not the shadowing alias.
                     // Defer the NotModelled.AliasShadowsColumn refusal until after expression binding and open-time constant
                     // folding (r-expr-1b/info-stored-null-handling #11, r-q-wire/obs-engine-versus-expression-errors #24).
                     bound.ShadowedAlias ??= alias;
@@ -1918,6 +1921,51 @@ public sealed class BoundSelect : IDisposable
                 {
                     // r-expr-1/b-integer-conversion: CByte(D) AS d is 3103.
                     return SqlFailure.Ace(SqlPhase.Bind, 3103, $"Circular reference caused by alias '{alias}' in query definition's SELECT list.");
+                }
+            }
+            // r-sql-13b/order-position-forms #105: SELECT id AS v, v AS id FROM GA ORDER BY 1 -> 3103 for alias 'v'.
+            // Detect multi-step alias reference cycles in SELECT list order.
+            var aliasMap = new Dictionary<string, SyntaxNode>(StringComparer.OrdinalIgnoreCase);
+            foreach (SelectItem item in syntax.Items)
+            {
+                if (item.Alias is { } a && item.Expression?.Syntax.Root is { } r)
+                {
+                    aliasMap[a] = r;
+                }
+            }
+            if (aliasMap.Count >= 2)
+            {
+                foreach (SelectItem item in syntax.Items)
+                {
+                    if (item.Alias is not { } startAlias)
+                    {
+                        continue;
+                    }
+                    var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    var stack = new Stack<string>();
+                    stack.Push(startAlias);
+                    while (stack.Count > 0)
+                    {
+                        string cur = stack.Pop();
+                        if (!aliasMap.TryGetValue(cur, out SyntaxNode? exprRoot))
+                        {
+                            continue;
+                        }
+                        foreach (SyntaxNode n in Walk(exprRoot))
+                        {
+                            if (n.Kind == SyntaxKind.Name && n.Text is { } dep && aliasMap.ContainsKey(dep))
+                            {
+                                if (string.Equals(dep, startAlias, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    return SqlFailure.Ace(SqlPhase.Bind, 3103, $"Circular reference caused by alias '{startAlias}' in query definition's SELECT list.");
+                                }
+                                if (visited.Add(dep))
+                                {
+                                    stack.Push(dep);
+                                }
+                            }
+                        }
+                    }
                 }
             }
             return null;
@@ -1991,9 +2039,29 @@ public sealed class BoundSelect : IDisposable
                 {
                     return Open("NotModelled.DistinctGuid", "DISTINCT over a GUID field");
                 }
+                if (bound.Grouped)
+                {
+                    if (c.FieldType == 12 || (c.Program.BareSlot is int gs && gs < bound.KeyMemoPrefix.Count && bound.KeyMemoPrefix[gs]))
+                    {
+                        return Open("NotModelled.GroupedDistinct", "DISTINCT over a grouped Memo column or aggregate");
+                    }
+                    if (c.FieldType is 9 or 11 || c.SourceColumn?.Column.TypeCode is NativeTypes.Ole or NativeTypes.Binary)
+                    {
+                        return Open("NotModelled.DistinctLongBinary", "DISTINCT over a grouped OLE or Binary column");
+                    }
+                    if (c.FieldType == 15 || c.SourceColumn?.Column.TypeCode == NativeTypes.Guid)
+                    {
+                        return Open("NotModelled.DistinctGuid", "DISTINCT over a grouped GUID column");
+                    }
+                }
             }
             foreach (OrderItem o in syntax.OrderBy)
             {
+                if (TryOrderPosition(o, out int pos, out _) && pos >= 1 && pos <= bound.ColumnList.Count)
+                {
+                    // r-sql-13b/order-position-forms #115: SELECT DISTINCT g FROM GA ORDER BY 1 DESC.
+                    continue;
+                }
                 if (!syntax.Items.Any(i => i.Expression is { } e && SameExpression(e.Syntax.Root!, o.Expression.Syntax.Root!)))
                 {
                     return SqlFailure.Ace(SqlPhase.Bind, 3093, $"ORDER BY clause ({o.Expression.Text(syntax.Source)}) conflicts with DISTINCT.");
@@ -2799,7 +2867,6 @@ public sealed class BoundSelect : IDisposable
 
         private SqlFailure? BindPlain()
         {
-            int unnamed = 0;
             foreach (SelectItem item in syntax.Items)
             {
                 if (item.Star)
@@ -2814,7 +2881,7 @@ public sealed class BoundSelect : IDisposable
                 {
                     return f;
                 }
-                ResultColumn column = Column(item, program!, ref unnamed);
+                ResultColumn column = Column(item, program!);
                 if (program!.BareField is { } field)
                 {
                     Stored(column, field);
@@ -2882,14 +2949,28 @@ public sealed class BoundSelect : IDisposable
             }
             foreach (OrderItem o in syntax.OrderBy)
             {
-                if (OrderPosition(o) is { } pf)
+                BoundExpression? key;
+                SyntaxNode keyRoot;
+                if (TryOrderPosition(o, out int pos, out SqlFailure? pf))
                 {
-                    return pf;
+                    if (pf is not null)
+                    {
+                        return pf;
+                    }
+                    ResultColumn target = bound.ColumnList[pos - 1];
+                    if (BindPlainPositionKey(target, o, out key, out keyRoot) is { } posBindFail)
+                    {
+                        return posBindFail;
+                    }
                 }
-                bool allowBareBinary = Field(o.Expression.Syntax.Root!) is { TypeCode: NativeTypes.Binary };
-                if (Program(o.Expression, _scope, out BoundExpression? key, allowBareBinary) is { } f)
+                else
                 {
-                    return f;
+                    keyRoot = o.Expression.Syntax.Root!;
+                    bool allowBareBinary = Field(keyRoot) is { TypeCode: NativeTypes.Binary };
+                    if (Program(o.Expression, _scope, out key, allowBareBinary) is { } f)
+                    {
+                        return f;
+                    }
                 }
                 bool memoPrefix = false;
                 if (key!.Fields.Any(b => b.Column.TypeCode is NativeTypes.Memo or NativeTypes.Ole or NativeTypes.Binary))
@@ -2903,27 +2984,133 @@ public sealed class BoundSelect : IDisposable
                     {
                         // evidence/r-q51-codecs-props-compact/bin-desc-keys-accdb, bin-desc-keys-mdb: ORDER BY BINARY/VARBINARY compares stored bytes.
                     }
+                    else if (!key.Fields.Any(b => b.Column.TypeCode is NativeTypes.Ole or NativeTypes.Binary)
+                        && IsNonMemoOrderExpression(keyRoot))
+                    {
+                        // r-sql-13b/memo-order-scope #25 (Left(m, 255)), r-sql-13b/memo-distinct-scope #35 (Len(m)):
+                        // expressions over Memo fields whose result is bounded Text (<= 255) or numeric/boolean are not Memo-typed.
+                    }
                     else
                     {
                         key.Dispose();
                         return Open("NotModelled.LongValueOrder", "ORDER BY over a Memo expression, OLE or Binary expression (r-sql-13b/memo-order-scope; R-SORT-3 Length510)");
                     }
                 }
-                bound.Order.Add(new OrderKey(key!, o.Descending, memoPrefix));
+                bool coerceToText = IsMixedTextIIf(keyRoot);
+                bound.Order.Add(new OrderKey(key!, o.Descending, memoPrefix, coerceToText));
             }
             return null;
         }
 
         /// <summary>
-        /// An ORDER BY key that is a bare number, signed or not: by position or a constant, not decided by the records read
-        /// so far (r-sql-13b/order-position-forms: 2 and 1.5 open, 0, 3 and -1 fail 3070).
+        /// An ORDER BY key that is a bare integer literal (signed or unsigned) is a 1-based column position
+        /// (r-cursor-1b/sort-expression-forms #227, r-sql-13b/order-position-forms #5..#155): in-range 1..Count binds
+        /// output column pos - 1; out-of-range (0, -1, &gt; Count) fails 3070; non-integer numbers (1.5) are constants.
         /// </summary>
-        private static SqlFailure? OrderPosition(OrderItem o) => o.Expression.Syntax.Root is { Kind: SyntaxKind.Literal, Literal: LiteralKind.Number }
-            or { Kind: SyntaxKind.Unary, Operation: ScalarOperation.Negate, Left: { Kind: SyntaxKind.Literal, Literal: LiteralKind.Number } }
-            ? Open("NotModelled.OrderByNumber", "ORDER BY a number (position or constant)")
-            : null;
+        private bool TryOrderPosition(OrderItem o, out int position, out SqlFailure? failure)
+        {
+            position = 0;
+            failure = null;
+            SyntaxNode root = o.Expression.Syntax.Root!;
+            int sign = 1;
+            SyntaxNode numNode = root;
+            if (root is { Kind: SyntaxKind.Unary, Operation: ScalarOperation.Negate, Left: { Kind: SyntaxKind.Literal, Literal: LiteralKind.Number } neg })
+            {
+                sign = -1;
+                numNode = neg;
+            }
+            if (numNode is not { Kind: SyntaxKind.Literal, Literal: LiteralKind.Number } || numNode.Value.Vt != (ushort)VarType.I4)
+            {
+                return false;
+            }
+            long raw = sign * numNode.Value.Int64;
+            if (raw >= 1 && raw <= bound.ColumnList.Count)
+            {
+                position = (int)raw;
+                return true;
+            }
+            failure = SqlFailure.Ace(SqlPhase.Bind, 3070, $"The Microsoft Access database engine does not recognize '{o.Expression.Text(syntax.Source).Trim()}' as a valid field name or expression.");
+            return true;
+        }
 
-        private ResultColumn Column(SelectItem item, BoundExpression program, ref int unnamed)
+        private SqlFailure? BindPlainPositionKey(ResultColumn target, OrderItem o, out BoundExpression? key, out SyntaxNode keyRoot)
+        {
+            key = null;
+            if (target.Root is not null)
+            {
+                SelectItem? item = syntax.Items.FirstOrDefault(i => i.Expression is not null && ReferenceEquals(i.Expression.Syntax.Root, target.Root));
+                if (item?.Expression is { } expr)
+                {
+                    keyRoot = expr.Syntax.Root!;
+                    bool allowBareBinary = Field(keyRoot) is { TypeCode: NativeTypes.Binary };
+                    return Program(expr, _scope, out key, allowBareBinary);
+                }
+            }
+            if (target.Program.BareField is { } bf)
+            {
+                keyRoot = new SyntaxNode { Kind = SyntaxKind.Name, Text = bf.Column.Name };
+                var schema = new FixedField(bf);
+                key = BoundExpression.Bind(keyRoot, schema, _context, allowBareBinary: bf.Column.TypeCode == NativeTypes.Binary, out ExpressionFailure? f, allowBareGuid: true);
+                return f is not null ? SqlFailure.Of(f, SqlPhase.Bind, syntax.Source, o.Expression.Start, o.Expression.End) : null;
+            }
+            if (target.Program.BareSlot is int derivedSlot && derivedSlot >= DerivedSlot0 && derivedSlot < ParameterSlot0)
+            {
+                ResultColumn innerCol = bound.SourceList[0].Subquery!.Columns[derivedSlot - DerivedSlot0];
+                keyRoot = new SyntaxNode { Kind = SyntaxKind.Name, Text = target.Name };
+                bool isBool = innerCol.FieldType == 1;
+                var schema = new FixedDerivedSlot(new SlotBinding(derivedSlot, isBool ? VarType.Bool : DeclaredVarTypeOfFieldType(innerCol.FieldType), isBool ? StaticType.Boolean : StaticType.Value, OperandOrigin.Derived, innerCol.FieldType == 26, IsGuid: innerCol.FieldType == 15));
+                key = BoundExpression.Bind(keyRoot, schema, _context, allowBareBinary: true, out ExpressionFailure? f, allowBareGuid: true);
+                return f is not null ? SqlFailure.Of(f, SqlPhase.Bind, syntax.Source, o.Expression.Start, o.Expression.End) : null;
+            }
+            keyRoot = o.Expression.Syntax.Root!;
+            return Open("NotModelled.OrderByNumber", "ORDER BY position referencing an unbindable output column");
+        }
+
+        private static bool IsNonMemoOrderExpression(SyntaxNode root)
+        {
+            if (root is not { Kind: SyntaxKind.Call, Text: { } fn })
+            {
+                return false;
+            }
+            // r-sql-13b/memo-distinct-scope #35: ORDER BY Len(m) over a bare Memo column.
+            if (fn.Equals("Len", StringComparison.OrdinalIgnoreCase)
+                && root.Items.Count == 1
+                && root.Items[0] is { Kind: SyntaxKind.Name })
+            {
+                return true;
+            }
+            // r-sql-13b/memo-order-scope #25: ORDER BY Left(m, 255) over a bare Memo column.
+            if (fn.Equals("Left", StringComparison.OrdinalIgnoreCase)
+                && root.Items.Count == 2
+                && root.Items[0] is { Kind: SyntaxKind.Name }
+                && root.Items[1] is { Kind: SyntaxKind.Literal, Literal: LiteralKind.Number } lenLit
+                && lenLit.Value.Vt == (ushort)VarType.I4
+                && lenLit.Value.Int64 is >= 0 and <= 255)
+            {
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// <c>IIf(cond, a, b)</c> with one Text literal branch and one numeric literal branch has static Text type
+        /// (r-sql-13b/order-expression-forms #85: ORDER BY IIf(id = 1, 'a', 1), id; r-expr-1b/cond-iif-forms #51/#55).
+        /// </summary>
+        private static bool IsMixedTextIIf(SyntaxNode root)
+        {
+            if (root is not { Kind: SyntaxKind.Call, Text: { } fn, Items.Count: 3 }
+                || !fn.Equals("IIf", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+            bool aText = root.Items[1] is { Kind: SyntaxKind.Literal, Literal: LiteralKind.Text };
+            bool bText = root.Items[2] is { Kind: SyntaxKind.Literal, Literal: LiteralKind.Text };
+            bool aNum = root.Items[1] is { Kind: SyntaxKind.Literal, Literal: LiteralKind.Number };
+            bool bNum = root.Items[2] is { Kind: SyntaxKind.Literal, Literal: LiteralKind.Number };
+            return (aText && bNum) || (bText && aNum);
+        }
+
+        private ResultColumn Column(SelectItem item, BoundExpression program)
         {
             string name;
             if (item.Alias is { } alias)
@@ -2946,8 +3133,9 @@ public sealed class BoundSelect : IDisposable
             }
             else
             {
-                // qualified.md R-SQL-1 SQL-B: an unnamed expression is Expr1000, Expr1001, … in select-list order.
-                name = "Expr" + (1000 + unnamed++).ToString(System.Globalization.CultureInfo.InvariantCulture);
+                // qualified.md R-SQL-1 SQL-B, r-sql-1/b-output-names #36, r-sql-13b/order-position-forms #95:
+                // an unnamed expression is Expr1000 + 0-based output column index (SELECT id, v + 1 -> Expr1001).
+                name = "Expr" + (1000 + bound.ColumnList.Count).ToString(System.Globalization.CultureInfo.InvariantCulture);
             }
             return new ResultColumn(name, program, item.Expression!.Syntax.Root);
         }
@@ -4216,10 +4404,6 @@ public sealed class BoundSelect : IDisposable
         private SqlFailure? BindGrouped()
         {
             bound.SetGrouped();
-            if (syntax.Predicate == SelectPredicate.Distinct)
-            {
-                return Open("NotModelled.GroupedDistinct", "DISTINCT over a grouped SELECT (r-sql-13b/agg-distinct-forms)");
-            }
             if (syntax.Items.Any(i => i.Star))
             {
                 return Open("NotModelled.GroupedStar", "* in a grouped SELECT (ACE's answer not recorded)");
@@ -4293,7 +4477,6 @@ public sealed class BoundSelect : IDisposable
                 }
             }
             var output = new GroupScope(keys, bound.KeyReferenced, bound.Aggregates, keyTypes, keyFieldTypes, keyStaticTypes, _scope, BindEmbeddedSubquery);
-            int unnamed = 0;
             foreach (SelectItem item in syntax.Items)
             {
                 // r-def-expr-sql/sql-nonstandard-clauses-select call 196: SELECT G AS k, Count(*) FROM Dm GROUP BY k quotes 'k';
@@ -4305,7 +4488,7 @@ public sealed class BoundSelect : IDisposable
                 {
                     return f;
                 }
-                ResultColumn column = Column(item, program!, ref unnamed);
+                ResultColumn column = Column(item, program!);
                 column.TypeRule = ColumnTypeRule.NotModelled;
                 column.TypeOpen = "NotModelled.ExpressionFieldType";
                 if (program!.BareSlot is int slot)
@@ -4470,25 +4653,35 @@ public sealed class BoundSelect : IDisposable
             }
             foreach (OrderItem o in syntax.OrderBy)
             {
-                if (OrderPosition(o) is { } pf)
+                Fragment orderExpr;
+                if (TryOrderPosition(o, out int pos, out SqlFailure? pf))
                 {
-                    return pf;
+                    if (pf is not null)
+                    {
+                        return pf;
+                    }
+                    orderExpr = syntax.Items[pos - 1].Expression!;
                 }
-                output.Item = o.Expression.Text(syntax.Source);
+                else
+                {
+                    orderExpr = o.Expression;
+                }
+                output.Item = orderExpr.Text(syntax.Source);
                 _scope.TreatAliasesAsParameters = true;
-                SqlFailure? of = Program(o.Expression, output, out BoundExpression? key);
+                SqlFailure? of = Program(orderExpr, output, out BoundExpression? key);
                 _scope.TreatAliasesAsParameters = false;
                 if (of is not null)
                 {
                     return of;
                 }
                 bool memoPrefix = key!.BareSlot is int s && s < keys.Count && bound.KeyMemoPrefix[s];
-                if (!memoPrefix && Walk(o.Expression.Syntax.Root!).Any(n => output.KeyColumn(n)?.TypeCode == NativeTypes.Memo || output.Aggregate(n)?.FieldType == 12))
+                SyntaxNode orderRoot = orderExpr.Syntax.Root!;
+                if (!memoPrefix && Walk(orderRoot).Any(n => output.KeyColumn(n)?.TypeCode == NativeTypes.Memo || output.Aggregate(n)?.FieldType == 12))
                 {
                     key.Dispose();
                     return Open("NotModelled.LongValueOrder", "ORDER BY over a Memo expression or aggregate in a grouped SELECT");
                 }
-                bound.Order.Add(new OrderKey(key!, o.Descending, memoPrefix));
+                bound.Order.Add(new OrderKey(key!, o.Descending, memoPrefix, IsMixedTextIIf(orderRoot)));
             }
             return null;
         }

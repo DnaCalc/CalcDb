@@ -609,10 +609,10 @@ public static class SqlParser
                 {
                     return new SqlFailure(SqlPhase.Parse, 3075, $"Expression too complex{SqlFailure.QueryExpression}{s[start..].TrimEnd()}'.") { ExcerptExact = false };
                 }
-                if (f.Message == ExpressionMessages.CommaSyntax)
+                if (f.Message == ExpressionMessages.CommaSyntax || f.FullClauseExcerpt)
                 {
                     int spanEnd = ScanClauseExpressionEnd(start);
-                    return SqlFailure.Of(f with { ExactExcerpt = true }, SqlPhase.Parse, s, start, spanEnd);
+                    return SqlFailure.Of(f with { Site = spanEnd, ExactExcerpt = true }, SqlPhase.Parse, s, start, spanEnd);
                 }
                 return SqlFailure.Of(f, SqlPhase.Parse, s, start, end);
             }
@@ -1166,9 +1166,16 @@ public static class SqlParser
                 statement.From.Add(source!);
             }
             while (TakeSymbol(','));
-            if (IsWord("SELECT"))
+            if (IsSymbol('.'))
             {
-                // r-sql-13b/union-syntax-forms: INTERSECT, EXCEPT and MINUS are read as an alias, then SELECT is 3131.
+                // r-sql-13b/sub-derived-table-forms #147: Jet bracketed derived table [SELECT ...]. AS d is not modelled.
+                return Open("NotModelled.SqlSyntax", "Jet bracketed derived table '[SELECT ...].' in FROM");
+            }
+            if (!AtEnd() && !IsSymbol(';') && !IsWord("WHERE") && !IsWord("GROUP") && !IsWord("HAVING") && !IsWord("ORDER")
+                && !IsWord("UNION") && !(allowWith && IsWord("WITH")) && !(allowPivot && IsWord("PIVOT")) && !(_armDepth > 0 && IsSymbol(')')))
+            {
+                // r-sql-13b/union-syntax-forms (INTERSECT/EXCEPT/MINUS SELECT), r-sql-13b/join-keyword-forms #5..#45
+                // (FULL OUTER JOIN, FULL JOIN, CROSS JOIN, NATURAL JOIN, bare JOIN): unexpected token after FROM is 3131.
                 return SqlFailure.Ace(SqlPhase.Parse, 3131, FromSyntaxError);
             }
             if (TakeWord("WHERE"))
@@ -1231,6 +1238,11 @@ public static class SqlParser
                     if (!descending)
                     {
                         TakeWord("ASC");
+                    }
+                    if (IsWord("ASC") || IsWord("DESC"))
+                    {
+                        // r-sql-13b/order-expression-forms #155: ORDER BY id ASC DESC -> 3138.
+                        return SqlFailure.Ace(SqlPhase.Parse, 3138, "Syntax error in ORDER BY clause.");
                     }
                     statement.OrderBy.Add(new OrderItem(key!, descending));
                 }
@@ -1544,9 +1556,10 @@ public static class SqlParser
                 {
                     return of;
                 }
-                if (JoinWord(peekOnly: true) is not null)
+                if (JoinWord(peekOnly: true) is not null || IsWord("ON"))
                 {
-                    // r-sql-13b/join-nesting-four-tables: the ON expression reads on into the next JOIN.
+                    // r-sql-13b/join-nesting-four-tables (unparenthesized JOIN), r-sql-13b/join-keyword-forms #95 (duplicate ON):
+                    // the ON expression reads on into the next JOIN or duplicate ON and fails 3075.
                     return MissingOperator(onStart);
                 }
                 source = new JoinSource(kind, source!, right!, on!, at);

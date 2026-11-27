@@ -1701,7 +1701,11 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
             failure = null;
             TableDefinition table = plan.Sources[0].Table;
             IndexDescriptorRules idxRules = FormatDescriptor.Jet4Family.IndexDescriptor;
-            SingleTableWhereOrder whereOrder = plan.SingleWhereOrder ?? new SingleTableWhereOrder(SingleTableWhereKind.None, null);
+            // r-cursor-1b/filter-expression-forms (#24 S Like 'a*', #33 D > #1/1/2020#):
+            // a derived Filter dynaset preserves its base cursor's index/PK order rather than switching to a range index on the filtered column.
+            SingleTableWhereOrder whereOrder = derived
+                ? new SingleTableWhereOrder(SingleTableWhereKind.None, null)
+                : plan.SingleWhereOrder ?? new SingleTableWhereOrder(SingleTableWhereKind.None, null);
 
             switch (whereOrder.Kind)
             {
@@ -2343,18 +2347,22 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                     failure = At(wf);
                     return null;
                 }
-                if (wf.Number == AceError.TypeMismatch
-                    && plan.Tree is null
+                if (plan.Tree is null
                     && plan.Sources.Count == 1
                     && plan.Sources[0].Subquery is null
                     && !plan.Grouped
-                    && (((where.LastFailureWasStoredBooleanComparison || where.LastFailureWasBetweenTypeMismatch) && plan.Order.Count > 0)
-                        || where.LastFailureWasExtendedDateTimeComparison))
+                    && ((wf.Number == AceError.TypeMismatch
+                            && (((where.LastFailureWasStoredBooleanComparison || where.LastFailureWasBetweenTypeMismatch) && plan.Order.Count > 0)
+                                || where.LastFailureWasExtendedDateTimeComparison))
+                        || (wf.Number is AceError.InvalidPatternString or AceError.InvalidUseOfNull && plan.Order.Count > 0)))
                 {
                     // r-q43-schema-lval-index/bool-cmp-origin-accdb (stored YESNO vs text on ordered SELECT),
-                    // r-sql-13b/between-null-mixed-types calls 65, 75, 85, 105 (mixed-type BETWEEN on ordered SELECT), and
-                    // r-q49-dt2-draftprops/dt2-select-compare-accdb, dt2-params-dao-querydef-accdb (DATETIME2 WHERE 3464):
-                    // single-table non-grouped SELECT fails OpenRecordset with 3464.
+                    // r-sql-13b/between-null-mixed-types calls 65, 75, 85, 105 (mixed-type BETWEEN on ordered SELECT),
+                    // r-q49-dt2-draftprops/dt2-select-compare-accdb, dt2-params-dao-querydef-accdb (DATETIME2 WHERE 3464),
+                    // r-sql-13b/like-bracket-classes #75, like-malformed-patterns, like-collation-ranges #165,
+                    // like-null-pattern-edges #65/#75 (93 Invalid pattern string at open), and
+                    // r-sql-13b/like-operand-types #65 (CStr(dt) LIKE: 94 Invalid use of Null at open):
+                    // single-table non-grouped SELECT fails OpenRecordset with ACE's error.
                     failure = At(wf);
                     return null;
                 }
@@ -2892,12 +2900,18 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
             {
                 return null;
             }
-            List<ResultRow>? rows = plan.Grouped ? Groups(roots, out failure)
-                : plan.Predicate == SelectPredicate.Distinct ? Distinct(roots, out failure)
-                : roots;
+            List<ResultRow>? rows = plan.Grouped ? Groups(roots, out failure) : roots;
             if (rows is null)
             {
                 return null;
+            }
+            if (plan.Predicate == SelectPredicate.Distinct)
+            {
+                rows = Distinct(rows, out failure);
+                if (rows is null)
+                {
+                    return null;
+                }
             }
             if (plan.Tree is not null && !_joinOrderIdentified && !plan.Grouped && plan.Predicate != SelectPredicate.Distinct && plan.Order.Count == 0 && rows.Count > 1)
             {
@@ -3127,7 +3141,20 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                         failure = At(key.Program.LastFailure!);
                         return null;
                     }
-                    _keys.Add(Copy(key.Program.Value));
+                    NativeVariant kv = key.Program.Value;
+                    if (key.CoerceToText && kv.Vt is not (ushort)VarType.Null and not (ushort)VarType.Bstr)
+                    {
+                        if (!TryProjectValue(kv, 10, plan.Context, SqlPhase.Open, out NativeVariant asText, out failure))
+                        {
+                            failure ??= SqlFailure.Open(SqlPhase.Open, "NotModelled.MixedOrderTypes", "ORDER BY text coercion failed");
+                            return null;
+                        }
+                        _keys.Add(asText);
+                    }
+                    else
+                    {
+                        _keys.Add(Copy(kv));
+                    }
                 }
             }
             int[] order = [.. Enumerable.Range(0, rows.Count)];
