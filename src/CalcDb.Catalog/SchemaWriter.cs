@@ -1786,6 +1786,10 @@ public sealed class SchemaWriter
             && (hasDefault || preparedFk is not null);
         List<DaoPropertyStep> daoSteps = request.Route == SchemaRoute.Dao ? BuildDaoPropertySteps(request.Fields) : [];
         bool daoWithDraftIndexes = request.Route == SchemaRoute.Dao && request.AllIndexes.Count > 0;
+        if (daoWithDraftIndexes && workspace.IsExclusiveSession(_cache))
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, "DAO TableDefs.Append with draft indexes in an exclusive session is not recorded (evidence/r-q52-ddl-make-domain/dao-idx-empty-accdb, dao-idx-empty-mdb record shared sessions)"), default, _pageCount);
+        }
         CreateTableRequest compileRequest = daoWithDraftIndexes ? request with { Indexes = null } : request;
         ulong extent = _pageCount;
         uint tdefPage = 0;
@@ -2115,6 +2119,10 @@ public sealed class SchemaWriter
         {
             return new SchemaOutcome(new SchemaRefusal(null, $"CREATE INDEX on {request.Route} route (only SQL, ADO, and DAO Indexes.Append are recorded: r-q11, r-q21-ddl-types, r-q34-ddl-sweep, r-q52-ddl-make-domain)"), default, _pageCount);
         }
+        if (request.Route == SchemaRoute.Dao && workspace.IsExclusiveSession(_cache))
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, "DAO Indexes.Append in an exclusive session is not recorded (evidence/r-q52-ddl-make-domain/dao-idx-empty-accdb, dao-idx-populated-accdb record shared sessions)"), default, _pageCount);
+        }
         if (isJet4Mdb && request.Route == SchemaRoute.Ado)
         {
             return new SchemaOutcome(new SchemaRefusal(null, "CREATE INDEX on a Jet 4 MDB via ADO is not recorded (only DAO/SQL is recorded: evidence/r-q34-ddl-sweep/*-mdb-dao)"), default, _pageCount);
@@ -2192,6 +2200,7 @@ public sealed class SchemaWriter
             && TryFindMatchingPhysicalIndex(table, request.Index, out int aliasedPhysicalNumber))
         {
             bool skipAliasCommitCounter = !fromDraftTableCreate
+                && !workspace.IsExclusiveSession(_cache)
                 && workspace.HasGlobalMapAllocationOrReservation(_cache)
                 && workspace.SessionReservedPages(_cache).Count == 0;
             AcceptOutcome aliasAccepted = workspace.AcceptSchemaChange(
@@ -2281,10 +2290,11 @@ public sealed class SchemaWriter
                                 break;
                             }
                         }
-                        if (nextReserved is uint consumed)
+                        if (nextReserved is not uint consumed)
                         {
-                            workspace.SetPendingRolledBackPages(_cache, [.. priorRolledBack, consumed]);
+                            return new SchemaOutcome(null, new AcceptOutcome(false, null, MutationOpen.Publication, $"DAO Indexes.Append {errNum} rollback exhausted the 32-page session extent reservation (not recorded)"), _pageCount);
                         }
+                        workspace.SetPendingRolledBackPages(_cache, [.. priorRolledBack, consumed]);
                         return new SchemaOutcome(new SchemaRefusal(errNum, null), default, _pageCount, PublishedAny: false);
                     }
                 }
@@ -2344,11 +2354,13 @@ public sealed class SchemaWriter
         // session extent on page 1 on first global-map activity.
         bool useSessionExtentReservation =
             workspace.Depth == 0
+            && !workspace.IsExclusiveSession(_cache)
             && (request.Route == SchemaRoute.Dao || request.Index.IgnoreNull || request.Index.DisallowNull || request.Index.PrimaryKey || (request.Index.Unique && !isExtendedKeyType))
             && !workspace.HasGlobalMapAllocationOrReservation(_cache)
             && sessionReserved.Count == 0;
         bool skipDaoCommitCounter = !fromDraftTableCreate
             && request.Route == SchemaRoute.Dao
+            && !workspace.IsExclusiveSession(_cache)
             && workspace.HasGlobalMapAllocationOrReservation(_cache)
             && sessionReserved.Count == 0;
         ulong extent = _pageCount;
@@ -4067,6 +4079,10 @@ public sealed class SchemaWriter
         if (request.Route is not (SchemaRoute.Sql or SchemaRoute.Dao))
         {
             return new SchemaOutcome(new SchemaRefusal(null, $"DropIndex on {request.Route} route is not recorded (only SQL DROP INDEX and DAO Indexes.Delete are recorded: r-q44-ddl-alter-types/dropcon-*, r-q52-ddl-make-domain/dao-idx-delete-*)"), default, _pageCount);
+        }
+        if (request.Route == SchemaRoute.Dao && workspace.IsExclusiveSession(_cache))
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, "DAO Indexes.Delete in an exclusive session is not recorded (evidence/r-q52-ddl-make-domain/dao-idx-delete-accdb, dao-idx-delete-mdb record shared sessions)"), default, _pageCount);
         }
         if (FindTable(request.Table) is not { } entry)
         {
@@ -10331,7 +10347,7 @@ public sealed class SchemaWriter
         var physical = new PhysicalIndexSpec(keyCols, map, leaf, flags, entryCount, uniqueEntryCount);
         var logical = new LogicalIndexSpec(
             index.Name,
-            spec.LogicalIndexes.Count == 0 ? 0u : spec.LogicalIndexes.Max(l => l.LogicalNumber) + 1,
+            (uint)spec.LogicalIndexes.Count,
             (uint)spec.PhysicalIndexes.Count,
             index.PrimaryKey ? _d.IndexDescriptor.PrimaryKeyType : (byte)0);
         List<LogicalIndexSpec> logicals = [.. spec.LogicalIndexes];
@@ -10380,6 +10396,13 @@ public sealed class SchemaWriter
                 | (index.DisallowNull ? DisallowNullIndexFlag : 0));
         for (int p = 0; p < table.PhysicalIndexes.Count; p++)
         {
+            // Restrict alias targets to plain user physical indexes (never PK or FK physical indexes:
+            // evidence/r-q52-ddl-make-domain/dao-idx-delete-accdb, dao-idx-delete-mdb records IX_Alias -> IX_K).
+            if (table.LogicalIndexes.Any(li => li.PhysicalNumber == p
+                && (li.IndexType == _d.IndexDescriptor.PrimaryKeyType || li.IndexType == _d.IndexDescriptor.ForeignKeyType)))
+            {
+                continue;
+            }
             PhysicalIndex existing = table.PhysicalIndexes[p];
             if (existing.Flags != targetFlags || existing.Columns.Count != targetPhysCols.Length)
             {
@@ -10421,8 +10444,7 @@ public sealed class SchemaWriter
         {
             return NotWritten($"{entry.Name}'s TableDef page {table.FirstPage} holds bytes its re-encoding does not reproduce: rewriting it would lose them (R-PRESERVE-1)");
         }
-        uint nextLogical = spec.LogicalIndexes.Count == 0 ? 0u : spec.LogicalIndexes.Max(l => l.LogicalNumber) + 1;
-        var logical = new LogicalIndexSpec(index.Name, nextLogical, physicalNumber, 0);
+        var logical = new LogicalIndexSpec(index.Name, (uint)spec.LogicalIndexes.Count, physicalNumber, 0);
         List<LogicalIndexSpec> logicals = [.. spec.LogicalIndexes];
         SortDescriptor sort = GeneralLegacySort()
             ?? throw new InvalidOperationException($"Unchecked sort order {_sortOrder} when sorting logical indexes.");
@@ -10494,6 +10516,11 @@ public sealed class SchemaWriter
         for (int i = 0; i < count; i++)
         {
             LogicalIndex li = table.LogicalIndexes[i];
+            if (li.Number < 0 || li.Number >= count || seenLogical[li.Number])
+            {
+                return new SchemaRefusal(null, "CREATE INDEX on a table with non-contiguous logical/physical index numbering (e.g. after DROP INDEX) is not recorded");
+            }
+            seenLogical[li.Number] = true;
             if (!isDao)
             {
                 if ((li.IndexType != 0 && li.IndexType != _d.IndexDescriptor.PrimaryKeyType)
@@ -10501,13 +10528,15 @@ public sealed class SchemaWriter
                 {
                     return new SchemaRefusal(null, $"CREATE INDEX on a table with relationship logical index '{li.Name}' (type 0x{li.IndexType:X2}) is not recorded (DDL-SWEEP-2)");
                 }
-                if (li.Number < 0 || li.Number >= count || seenLogical[li.Number]
-                    || li.PhysicalNumber < 0 || li.PhysicalNumber >= count || seenPhysical[li.PhysicalNumber])
+                if (li.PhysicalNumber < 0 || li.PhysicalNumber >= count || seenPhysical[li.PhysicalNumber])
                 {
-                    return new SchemaRefusal(null, $"CREATE INDEX on a table with non-contiguous logical/physical index numbering (e.g. after DROP INDEX) is not recorded");
+                    return new SchemaRefusal(null, "CREATE INDEX on a table with non-contiguous logical/physical index numbering (e.g. after DROP INDEX) is not recorded");
                 }
-                seenLogical[li.Number] = true;
                 seenPhysical[li.PhysicalNumber] = true;
+            }
+            else if (li.PhysicalNumber < 0 || li.PhysicalNumber >= table.PhysicalIndexes.Count)
+            {
+                return new SchemaRefusal(null, "CREATE INDEX on a table with non-contiguous logical/physical index numbering (e.g. after DROP INDEX) is not recorded");
             }
             if (!(isDao && li.IndexType == _d.IndexDescriptor.ForeignKeyType) && !IsAsciiIndexSortName(li.Name))
             {

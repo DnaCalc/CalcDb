@@ -87,6 +87,12 @@ internal sealed unsafe class NewTableDefObject : DaoObject
             : null;
         return new CreateTableRequest(Name, fields, SchemaRoute.Dao, Indexes: indexes);
     }
+
+    protected override void OnFinalRelease()
+    {
+        Fields.Release();
+        Indexes.Release();
+    }
 }
 
 /// <summary>
@@ -193,8 +199,8 @@ internal sealed unsafe class NewFieldObject : DaoObject
         .Get("Attributes", (self, args) => ForwardOrDraft(self, "Attributes", InvokeKind.PropertyGet, args, f => Int32(f._attributes)))
         .Get("OrdinalPosition", (self, args) => ForwardOrDraft(self, "OrdinalPosition", InvokeKind.PropertyGet, args, _ => CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldOrdinalPosition", "Field.OrdinalPosition on an unappended draft Field is not recorded"))))
         .Get("CollectionIndex", (self, args) => ForwardOrDraft(self, "CollectionIndex", InvokeKind.PropertyGet, args, _ => CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldCollectionIndex", "Field.CollectionIndex on an unappended draft Field is not recorded"))))
-        .Get("Required", (self, args) => ForwardOrDraft(self, "Required", InvokeKind.PropertyGet, args, f => Bool(f.RequiredPut ?? false)))
-        .Get("AllowZeroLength", (self, args) => ForwardOrDraft(self, "AllowZeroLength", InvokeKind.PropertyGet, args, f => Bool(f.AllowZeroLengthPut ?? false)))
+        .Get("Required", (self, args) => ForwardOrDraft(self, "Required", InvokeKind.PropertyGet, args, f => f.IsAttachedDecimal ? Bool(f.RequiredPut ?? false) : CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldRequired", "Field.Required get on an unappended non-Decimal draft Field is not recorded"))))
+        .Get("AllowZeroLength", (self, args) => ForwardOrDraft(self, "AllowZeroLength", InvokeKind.PropertyGet, args, f => f.IsAttachedDecimal ? Bool(f.AllowZeroLengthPut ?? false) : CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldAllowZeroLength", "Field.AllowZeroLength get on an unappended non-Decimal draft Field is not recorded"))))
         .Get("CollatingOrder", (self, args) => ForwardOrDraft(self, "CollatingOrder", InvokeKind.PropertyGet, args, _ => CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldCollatingOrder", "Field.CollatingOrder on an unappended draft Field is not recorded"))))
         .Get("SourceTable", (self, args) => ForwardOrDraft(self, "SourceTable", InvokeKind.PropertyGet, args, _ => CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldSourceTable", "Field.SourceTable on an unappended draft Field is not recorded"))))
         .Get("SourceField", (self, args) => ForwardOrDraft(self, "SourceField", InvokeKind.PropertyGet, args, _ => CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldSourceField", "Field.SourceField on an unappended draft Field is not recorded"))))

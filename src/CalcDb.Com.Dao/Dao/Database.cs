@@ -1282,9 +1282,25 @@ internal sealed unsafe class DatabaseObject : DaoObject
         {
             return CallResult.Fail(Failure.NotImplemented("TableDef.Fields.Delete of a non-string name"));
         }
+        if (tableDef.DroppedByPeer)
+        {
+            return CallResult.Fail(Failure.Dao(3078, "DAO.TableDef", SqlMessages.NoInputTable(tableDef.Name)));
+        }
         if (ReadOnly)
         {
-            return fields.Fail(3027, DaoErrors.ReadOnly);
+            return CallResult.Fail(Failure.NotImplemented("TableDef.Fields.Delete on a read-only Database (ACE's refusal is not recorded)"));
+        }
+        if (InheritedWritable)
+        {
+            return InheritedWriteRefusal("TableDef.Fields.Delete");
+        }
+        if (tableDef.IsSystem)
+        {
+            return CallResult.Fail(Failure.NotImplemented("TableDef.Fields.Delete on a system table (not recorded)"));
+        }
+        if (_workspace.Transactions.Depth > 0)
+        {
+            return CallResult.Fail(Failure.NotImplemented("TableDef.Fields.Delete inside a transaction is not recorded"));
         }
         if (tableDef.Definition is { } def)
         {

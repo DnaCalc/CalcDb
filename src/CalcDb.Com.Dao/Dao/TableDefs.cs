@@ -595,6 +595,21 @@ internal sealed unsafe class TableDefObject : DaoObject
                 return ([], static (_, _) => throw new InvalidOperationException(), $"the Indexes of '{_entry.Name}' in a sort order outside the General family, with names whose order depends on it (FMT1-INDEX-ENUM was asked under General)");
             }
             listed = sorted;
+            if (reload && _indexes is not null)
+            {
+                foreach (LogicalIndex li in listed)
+                {
+                    DaoObject? held = _indexes.FindHeld(li.Name);
+                    if (held is IndexObject ix)
+                    {
+                        ix.Rebind(d, li);
+                    }
+                    else if (held is NewIndexObject nix)
+                    {
+                        nix.Rebind(d, li);
+                    }
+                }
+            }
         }
         return ([.. listed.Select(i => i.Name)], (c, i) => new IndexObject(c, d, listed[i]), null);
     }
@@ -740,14 +755,24 @@ internal sealed unsafe class IndexObject : DaoObject
         .Method("CreateField", (self, args) => { nint name = args.Length > 0 ? args[0] : 0; return Live(self, x => NewIndexFieldObject.Create(x.Engine, name)); });
 
     private readonly DefinitionCollection _owner;
-    private readonly TableDefinition _table;
-    private readonly LogicalIndex _logical;
-    private readonly PhysicalIndex _physical;
+    private TableDefinition _table;
+    private LogicalIndex _logical;
+    private PhysicalIndex _physical;
     private DefinitionCollection? _fields;
     private PropertiesObject? _properties;
     private bool _deleted;
 
     public override bool Invalid => _deleted || _owner.Invalid;
+
+    internal void Rebind(TableDefinition table, LogicalIndex logical)
+    {
+        if (table.PhysicalOf(logical) is { } physical)
+        {
+            _table = table;
+            _logical = logical;
+            _physical = physical;
+        }
+    }
 
     internal void InvalidateDeleted()
     {

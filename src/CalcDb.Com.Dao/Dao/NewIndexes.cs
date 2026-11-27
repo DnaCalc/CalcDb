@@ -36,6 +36,7 @@ internal sealed unsafe class NewIndexObject : DaoObject
         .Get("Foreign", (self, args) => ForwardOrDraft(self, "Foreign", InvokeKind.PropertyGet, args, _ => Bool(false)))
         .Get("DistinctCount", (self, args) => ForwardOrDraft(self, "DistinctCount", InvokeKind.PropertyGet, args, _ => Int32(0)))
         .Get("Fields", (self, args) => ForwardOrDraft(self, "Fields", InvokeKind.PropertyGet, args, x => Object(x.Fields)))
+        .Get("Properties", (self, args) => ForwardOrDraft(self, "Properties", InvokeKind.PropertyGet, args, _ => CallResult.Fail(Failure.NotModelled("NotModelled.DraftIndexProperties", "Index.Properties on a draft Index is not recorded"))))
         .Method("CreateField", (self, args) => { nint name = args.Length > 0 ? args[0] : 0; return ForwardOrDraft(self, "CreateField", InvokeKind.Method, args, x => NewIndexFieldObject.Create(x.Engine, name)); });
 
     private DefinitionCollection? _attachedOwner;
@@ -108,6 +109,8 @@ internal sealed unsafe class NewIndexObject : DaoObject
         _attachedIndex = new IndexObject(owner, table, logical);
     }
 
+    public void Rebind(TableDefinition table, LogicalIndex logical) => _attachedIndex?.Rebind(table, logical);
+
     public void InvalidateDeleted() => _attachedIndex?.InvalidateDeleted();
 
     private CallResult SetBool(nint value, Action<bool> assign, string propName)
@@ -132,6 +135,7 @@ internal sealed unsafe class NewIndexObject : DaoObject
 
     protected override void OnFinalRelease()
     {
+        Fields.Release();
         if (_attachedOwner is not null)
         {
             _attachedOwner.Released(this);

@@ -99,7 +99,7 @@ public static unsafe class AssignmentConversion
             case NativeTypes.Guid:
                 return Guid(incoming, allowDaoConversions);
             case NativeTypes.Numeric:
-                return Numeric(incoming, column, lcid, allowDaoConversions);
+                return Numeric(incoming, column, lcid, allowDaoConversions, dt2Mode);
             case NativeTypes.Boolean:
                 return Scalar(incoming, VarType.Bool, lcid, allowDaoConversions);
             case NativeTypes.Byte:
@@ -205,14 +205,17 @@ public static unsafe class AssignmentConversion
     /// verifies the magnitude fits <c>column.NumericPrecision</c>. On DAO puts (<paramref name="allowDaoConversions"/>),
     /// bad text fails 3421, over-scale fails 3759, and over-precision fails 3761.
     /// </summary>
-    private static ConversionResult Numeric(in NativeVariant incoming, ColumnDescriptor column, uint lcid, bool allowDaoConversions)
+    private static ConversionResult Numeric(in NativeVariant incoming, ColumnDescriptor column, uint lcid, bool allowDaoConversions, ExtendedDateTimeWriteMode dt2Mode)
     {
         // Unrecorded precision/scale or non-decimal direct COM puts (BSTR/R8/Currency) on non-DAO routes stay
         // ColumnType so ADO immediate edit preserves 0x80040E21 (AdoImmediateEditTests); SQL INSERT converts literals
         // to VT_DECIMAL first. Draft DAO CreateField(dbDecimal) persists Decimal(38, 0) (evidence/r-q53-conv-abspos-subq-loc/
-        // dao-draft-decimal-accdb, dao-draft-decimal-mdb), which SQL INSERT populates via !allowDaoConversions while
-        // DAO/ADO direct puts remain refused.
-        bool isSqlDraftDecimal38 = !allowDaoConversions && column.NumericPrecision == 38 && column.NumericScale == 0;
+        // dao-draft-decimal-accdb, dao-draft-decimal-mdb), which SQL INSERT populates (dt2Mode == SqlInsert &&
+        // !allowDaoConversions) while DAO, ADO, and DAO SELECT dynaset puts remain refused.
+        bool isSqlDraftDecimal38 = dt2Mode == ExtendedDateTimeWriteMode.SqlInsert
+            && !allowDaoConversions
+            && column.NumericPrecision == 38
+            && column.NumericScale == 0;
         if ((!isSqlDraftDecimal38 && column.NumericPrecision is 0 or > 28)
             || column.NumericScale > column.NumericPrecision
             || incoming.Type == VarType.Currency
