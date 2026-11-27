@@ -297,8 +297,15 @@ public sealed unsafe class DaoCreatePropertyTests : IDisposable
         AssertDaoError(Method(td, "CreateProperty", "ETdNull", 4, DBNull.Value), 3385, "DAO.Property");
         AssertDaoError(Method(f, "CreateProperty", "EFlEmpty", 10, ""), 3385, "DAO.Property");
 
-        // 3386: Append before Value set
-        AssertDaoError(Method(dbp, "Append", As<PropertyObject>(Method(db, "CreateProperty", "ENoValDb", 4))), 3386, "DAO.Property");
+        // 3386: Append before Value set; unappended draft Inherited -> 3219, unvalued draft Value -> VT_NULL, BigInt(16) -> 3035
+        PropertyObject draftNoVal = As<PropertyObject>(Method(db, "CreateProperty", "ENoValDb", 4));
+        AssertDaoError(Get(draftNoVal, "Inherited"), 3219, "DAO.Property");
+        CallResult draftVal = Get(draftNoVal, "Value");
+        Assert.Null(draftVal.Failure);
+        Assert.Equal(VarType.Null, (VarType)(draftVal.OwnsScalar ? draftVal.Scalar.Vt : draftVal.Value!.Pointer->Vt));
+        draftVal.ReleaseUntaken();
+        AssertDaoError(Method(dbp, "Append", draftNoVal), 3386, "DAO.Property");
+        AssertDaoError(Method(db, "CreateProperty", "AP_bigint", 16, 5), 3035, "DAO.Property");
         AssertDaoError(Method(tdp, "Append", As<PropertyObject>(Method(td, "CreateProperty", "ENoValTd", 10))), 3386, "DAO.Property");
         AssertDaoError(Method(fp, "Append", As<PropertyObject>(Method(f, "CreateProperty", "ENoValFl", 1))), 3386, "DAO.Property");
 
@@ -330,7 +337,7 @@ public sealed unsafe class DaoCreatePropertyTests : IDisposable
 
         Assert.Equal(afterSeed, File.ReadAllBytes(path));
 
-        // Held-object invalidation (3420) + second delete (3265)
+        // Held-object invalidation (3420) + second delete (3265) on Database and TableDef (preserving TableDef.Properties identity)
         db = As<DatabaseObject>(Method(engine, "OpenDatabase", path, false, false));
         dbp = As<PropertiesObject>(Get(db, "Properties"));
         PropertyObject heldP = As<PropertyObject>(Get(dbp, "Item", "SeedDb"));
@@ -338,6 +345,12 @@ public sealed unsafe class DaoCreatePropertyTests : IDisposable
         AssertDaoError(Get(heldP, "Name"), 3420, "DAO.Property");
         AssertDaoError(Get(heldP, "Value"), 3420, "DAO.Property");
         AssertDaoError(Method(dbp, "Delete", "SeedDb"), 3265, "DAO.Properties");
+
+        td = As<TableDefObject>(Get(As<DefinitionCollection>(Get(db, "TableDefs")), "Item", "TE"));
+        PropertyObject tdProp = As<PropertyObject>(Method(td, "CreateProperty", "TempTd", 4, 7));
+        Assert.Null(Method(As<PropertiesObject>(Get(td, "Properties")), "Append", tdProp).Failure);
+        Assert.Null(Method(As<PropertiesObject>(Get(td, "Properties")), "Delete", "TempTd").Failure);
+        AssertDaoError(Get(tdProp, "Name"), 3420, "DAO.Property");
         Assert.Null(Method(db, "Close").Failure);
     }
 

@@ -1693,7 +1693,12 @@ public sealed class SchemaWriter
 
         DeferredCatalogCommit? absorbedDeferred = null;
         bool flushedPriorDeferred = false;
+        List<DaoPropertyStep> daoSteps = request.Route == SchemaRoute.Dao ? BuildDaoPropertySteps(request.Fields) : [];
         if (request.Route == SchemaRoute.Sql
+            && !exclusiveSession
+            && !request.IsMakeTable
+            && preparedFk is null
+            && !hasExtendedType
             && workspace.TryPeekDeferredCatalogCommit(_cache, out DeferredCatalogCommit? sqlPriorDeferred)
             && sqlPriorDeferred!.Kind == DeferredCatalogCommitKind.QueryDef)
         {
@@ -1716,10 +1721,16 @@ public sealed class SchemaWriter
                 // DAO TableDefs.Append immediately after CreateQueryDef absorbs the deferred QueryDef commit into
                 // Commit 1 (+1 on 0xE02, writing MSysQueries TableDef counts) and defers MSysObjects/MSysACEs TableDef
                 // counts to the trailing TableDefAppend deferred commit (+2 at Close: deferred counts + extent return).
+                byte[] qdFirstBlob = request.Fields.Count == 1
+                    ? PropertyBlob.Encode([new PropertyMap(PropertySectionKind.ColumnValues, request.Fields[0].Name, [DaoFieldRequired])])
+                    : [];
                 if (exclusiveSession
                     || request.Fields.Count != 1
                     || request.AllIndexes.Count > 0
-                    || request.ForeignKey is not null)
+                    || request.ForeignKey is not null
+                    || hasExtendedType
+                    || daoSteps.Count != 1
+                    || qdFirstBlob.Length > LongValuePlan.InlinePayloadMax)
                 {
                     return new SchemaOutcome(
                         null,
@@ -1727,7 +1738,7 @@ public sealed class SchemaWriter
                             false,
                             null,
                             MutationOpen.Publication,
-                            "a DAO TableDefs.Append (exclusive, multi-field, indexed, or FK) while a QueryDef deferred catalog commit is pending is not recorded (evidence/r-q54-excl-ddl-ix-cmd/qd-deferred-then-ddl-accdb records a 1-field shared TableDefs.Append)"),
+                            "a DAO TableDefs.Append (exclusive, multi-field, indexed, FK, extended-type, AutoNumber/Text/Memo, or LVAL-spilling) while a QueryDef deferred catalog commit is pending is not recorded (evidence/r-q54-excl-ddl-ix-cmd/qd-deferred-then-ddl-accdb records a 1-Long-field inline-LvProp shared TableDefs.Append)"),
                         _pageCount);
                 }
                 absorbedDeferred = priorDeferred;
@@ -1824,7 +1835,6 @@ public sealed class SchemaWriter
             && sessionReserved.Count == 0
             && (((request.Route is SchemaRoute.Sql or SchemaRoute.Ado) && (hasDefault || preparedFk is not null))
                 || deferCatalogCountsAfterQueryDef);
-        List<DaoPropertyStep> daoSteps = request.Route == SchemaRoute.Dao ? BuildDaoPropertySteps(request.Fields) : [];
         bool daoWithDraftIndexes = request.Route == SchemaRoute.Dao && request.AllIndexes.Count > 0;
         if (daoWithDraftIndexes && workspace.IsExclusiveSession(_cache))
         {
@@ -5094,7 +5104,8 @@ public sealed class SchemaWriter
             return new SchemaOutcome(new SchemaRefusal(null, $"DROP TABLE of '{entry.Name}' with external MSysObjects.LvProp LVAL pages or non-ColumnValues LvProp sections (e.g. CheckConstraints) is not recorded"), default, _pageCount);
         }
         bool flushedPriorDeferred = false;
-        if (workspace.TryPeekDeferredCatalogCommit(_cache, out DeferredCatalogCommit? priorDeferred)
+        if (!workspace.IsExclusiveSession(_cache)
+            && workspace.TryPeekDeferredCatalogCommit(_cache, out DeferredCatalogCommit? priorDeferred)
             && priorDeferred!.Kind == DeferredCatalogCommitKind.QueryDef)
         {
             // evidence/r-q54-excl-ddl-ix-cmd/qd-deferred-then-ddl-accdb, qd-deferred-then-ddl-mdb (after-qd3-then-drop):
@@ -5931,6 +5942,10 @@ public sealed class SchemaWriter
         if (workspace.Depth > 0)
         {
             return new SchemaOutcome(new SchemaRefusal(null, $"mutating user property '{propertyName}' on {objectLabel} inside BeginTrans is not recorded (evidence/r-q51-codecs-props-compact/prop-db-lifecycle-accdb)"), default, _pageCount);
+        }
+        if (workspace.IsExclusiveSession(_cache))
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, $"mutating user property '{propertyName}' on {objectLabel} in an exclusive session is not recorded (evidence/r-q51-codecs-props-compact/prop-db-lifecycle-accdb)"), default, _pageCount);
         }
 
         TableDefinition objects = _catalog.ObjectTable;

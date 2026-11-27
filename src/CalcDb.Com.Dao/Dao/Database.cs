@@ -2421,7 +2421,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
     {
         if (ReadOnly)
         {
-            return Fail(3027, DaoErrors.ReadOnly);
+            return CallResult.Fail(Failure.NotModelled("NotModelled.UserPropertyReadOnly", $"mutating user property '{propertyName}' on read-only {objectLabel} is not recorded (evidence/r-q51-codecs-props-compact)"));
         }
         if (InheritedWritable)
         {
@@ -2443,7 +2443,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
             {
                 return CallResult.Fail(Failure.NotImplemented(stale));
             }
-            tableDef?.Refresh();
+            tableDef?.Refresh(preserveProperties: true);
         }
         if (outcome.Refused is { } refused)
         {

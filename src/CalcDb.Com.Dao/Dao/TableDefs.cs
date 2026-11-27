@@ -438,7 +438,7 @@ internal sealed unsafe class TableDefObject : DaoObject
     /// published a new catalog image, keeping held <see cref="DefinitionFieldObject"/> wrappers live against the
     /// updated blob (W-08, r-q37; W-07, r-q46).
     /// </summary>
-    internal void Refresh()
+    internal void Refresh(bool preserveProperties = false)
     {
         CatalogEntry? updated = _owner.Database.Catalog.LocalTables(_owner.Database.Format)
             .FirstOrDefault(e => e.Id == _entry.Id);
@@ -448,8 +448,11 @@ internal sealed unsafe class TableDefObject : DaoObject
         }
         Definition = _owner.Database.Definition(_entry, out _definitionFailure);
         Blob = _owner.Database.Blob(_entry, out _blobFailure);
-        _properties?.Release();
-        _properties = null;
+        if (!preserveProperties)
+        {
+            _properties?.Release();
+            _properties = null;
+        }
     }
 
     private static CallResult Live(ComObject self, Func<TableDefObject, CallResult> op)
@@ -513,10 +516,12 @@ internal sealed unsafe class TableDefObject : DaoObject
         }
         if (_properties is null)
         {
-            var host = new PropertyMutationHost(
-                Append: prop => _owner.Database.MutateUserProperty(_entry.Root, $"TableDef '{_entry.Name}'", PropertySectionKind.ObjectValues, "", prop.Name, prop, isAppend: true, tableDef: this),
-                Update: prop => _owner.Database.MutateUserProperty(_entry.Root, $"TableDef '{_entry.Name}'", PropertySectionKind.ObjectValues, "", prop.Name, prop, isAppend: false, tableDef: this),
-                Delete: name => _owner.Database.MutateUserProperty(_entry.Root, $"TableDef '{_entry.Name}'", PropertySectionKind.ObjectValues, "", name, propertyValue: null, isAppend: false, tableDef: this));
+            PropertyMutationHost? host = IsSystem
+                ? null
+                : new PropertyMutationHost(
+                    Append: prop => _owner.Database.MutateUserProperty(_entry.Root, $"TableDef '{_entry.Name}'", PropertySectionKind.ObjectValues, "", prop.Name, prop, isAppend: true, tableDef: this),
+                    Update: prop => _owner.Database.MutateUserProperty(_entry.Root, $"TableDef '{_entry.Name}'", PropertySectionKind.ObjectValues, "", prop.Name, prop, isAppend: false, tableDef: this),
+                    Delete: name => _owner.Database.MutateUserProperty(_entry.Root, $"TableDef '{_entry.Name}'", PropertySectionKind.ObjectValues, "", name, propertyValue: null, isAppend: false, tableDef: this));
             _properties = new PropertiesObject(this, BuiltInProperties.With(BuiltInProperties.TableDef, Blob?.ObjectMap), host);
         }
         return Object(_properties);
@@ -1078,10 +1083,12 @@ internal sealed unsafe class DefinitionFieldObject : DaoObject
         }
         if (_properties is null)
         {
-            var host = new PropertyMutationHost(
-                Append: prop => _owner.Database.MutateUserProperty(t.Entry.Root, $"Field '{t.Name}.{_column.Name}'", PropertySectionKind.ColumnValues, _column.Name, prop.Name, prop, isAppend: true, tableDef: t),
-                Update: prop => _owner.Database.MutateUserProperty(t.Entry.Root, $"Field '{t.Name}.{_column.Name}'", PropertySectionKind.ColumnValues, _column.Name, prop.Name, prop, isAppend: false, tableDef: t),
-                Delete: name => _owner.Database.MutateUserProperty(t.Entry.Root, $"Field '{t.Name}.{_column.Name}'", PropertySectionKind.ColumnValues, _column.Name, name, propertyValue: null, isAppend: false, tableDef: t));
+            PropertyMutationHost? host = t.IsSystem
+                ? null
+                : new PropertyMutationHost(
+                    Append: prop => _owner.Database.MutateUserProperty(t.Entry.Root, $"Field '{t.Name}.{_column.Name}'", PropertySectionKind.ColumnValues, _column.Name, prop.Name, prop, isAppend: true, tableDef: t),
+                    Update: prop => _owner.Database.MutateUserProperty(t.Entry.Root, $"Field '{t.Name}.{_column.Name}'", PropertySectionKind.ColumnValues, _column.Name, prop.Name, prop, isAppend: false, tableDef: t),
+                    Delete: name => _owner.Database.MutateUserProperty(t.Entry.Root, $"Field '{t.Name}.{_column.Name}'", PropertySectionKind.ColumnValues, _column.Name, name, propertyValue: null, isAppend: false, tableDef: t));
             _properties = new PropertiesObject(this, BuiltInProperties.With(BuiltInProperties.TableDefField((short)type), ColumnMap(t)), host);
         }
         return Object(_properties);

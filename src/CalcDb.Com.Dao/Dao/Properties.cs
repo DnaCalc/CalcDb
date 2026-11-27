@@ -291,7 +291,7 @@ internal sealed unsafe class PropertiesObject : DaoObject
         }
         if (string.IsNullOrEmpty(prop.PropertyName))
         {
-            return CallResult.Fail(Failure.Dao(3386, "DAO.Property", "Property 'Name' must be set before using this method."));
+            return CallResult.Fail(Failure.NotModelled("NotModelled.PropertiesAppendEmptyName", "Properties.Append with empty Property.Name is not recorded (evidence/r-q51-codecs-props-compact/prop-errors-accdb)"));
         }
         if (_names.Find(prop.PropertyName) is not null)
         {
@@ -323,7 +323,7 @@ internal sealed unsafe class PropertiesObject : DaoObject
         string? name = Args.Text(nameArg);
         if (name is null)
         {
-            return Fail(3265, DaoErrors.ItemNotFound);
+            return CallResult.Fail(Failure.NotModelled("NotModelled.PropertiesDeleteNonString", "Properties.Delete with null or non-string name is not recorded (evidence/r-q51-codecs-props-compact/prop-errors-accdb)"));
         }
         int? ordinal = _names.Find(name);
         if (ordinal is not int i)
@@ -413,7 +413,8 @@ internal sealed unsafe class PropertyObject : DaoObject
         .Put("Name", (self, args) => { nint v = args[^1]; return Live(self, p => p.PutName(v)); })
         .Get("Type", (self, args) => Live(self, p => Int16(p.PropertyType)))
         .Put("Type", (self, args) => { nint v = args[^1]; return Live(self, p => p.PutType(v)); })
-        .Get("Inherited", (self, args) => Live(self, p => Bool(false)))
+        // evidence/r-dao-1b/property-append-all-types calls 6, 17, 28, ...: Inherited on an unappended draft Property fails 3219 from DAO.Property.
+        .Get("Inherited", (self, args) => Live(self, p => p.IsAttached ? Bool(false) : p.Fail(3219, DaoErrors.InvalidOperation)))
         .Get("Value", (self, args) => Live(self, p => p.GetValue()))
         .Put("Value", (self, args) => { nint v = args[^1]; return Live(self, p => p.PutValue(v)); });
 
@@ -472,10 +473,13 @@ internal sealed unsafe class PropertyObject : DaoObject
     internal StoredProperty ToStoredProperty() =>
         new(_draftName, Flags: 0x00, NativeType: (byte)_draftType, Payload: _draftPayload ?? []);
 
-    private static bool IsArgOmitted(nint arg) =>
+    private static bool IsArgMissing(nint arg) =>
         arg == 0
-        || Args.TypeOf(arg) == VarType.Empty
         || (Args.TypeOf(arg) == VarType.Error && (int)Args.Cell(arg)->Int64 == unchecked((int)0x80020004));
+
+    private static bool IsArgOmitted(nint arg) =>
+        IsArgMissing(arg)
+        || Args.TypeOf(arg) == VarType.Empty;
 
     private static bool IsArgNull(nint arg) => arg != 0 && Args.TypeOf(arg) == VarType.Null;
 
@@ -510,9 +514,14 @@ internal sealed unsafe class PropertyObject : DaoObject
             {
                 return CallResult.Fail(Failure.Dao(3421, "DAO.Property", DaoErrors.ConversionError));
             }
+            if (rawType == 16)
+            {
+                // evidence/r-dao-1b/property-append-all-types call 148: CreateProperty(..., 16 (dbBigInt), ...) fails 3035 from DAO.Property.
+                return CallResult.Fail(Failure.Dao(3035, "DAO.Property", "System resource exceeded."));
+            }
             if (!IsSupportedUserPropertyType(rawType))
             {
-                return CallResult.Fail(Failure.Dao(3259, "DAO.Property", DaoErrors.InvalidFieldType));
+                return CallResult.Fail(Failure.NotModelled("NotModelled.CreatePropertyType", $"CreateProperty with Type={rawType} is not recorded (evidence/r-dao-1b/property-append-all-types)"));
             }
             type = (short)rawType;
         }
@@ -526,7 +535,7 @@ internal sealed unsafe class PropertyObject : DaoObject
         }
 
         byte[]? payload = null;
-        if (!IsArgOmitted(valueArg))
+        if (!IsArgMissing(valueArg))
         {
             if (type == 0)
             {
@@ -582,9 +591,14 @@ internal sealed unsafe class PropertyObject : DaoObject
         {
             return Fail(3421, DaoErrors.ConversionError);
         }
+        if (rawType == 16)
+        {
+            // evidence/r-dao-1b/property-append-all-types call 148: dbBigInt (16) fails 3035 from DAO.Property.
+            return Fail(3035, "System resource exceeded.");
+        }
         if (!IsSupportedUserPropertyType(rawType))
         {
-            return Fail(3259, DaoErrors.InvalidFieldType);
+            return CallResult.Fail(Failure.NotModelled("NotModelled.CreatePropertyType", $"Property.Type put = {rawType} is not recorded (evidence/r-dao-1b/property-append-all-types)"));
         }
         _draftType = (short)rawType;
         return CallResult.Nothing;
@@ -625,7 +639,8 @@ internal sealed unsafe class PropertyObject : DaoObject
         {
             if (_draftPayload is null)
             {
-                return CallResult.Nothing;
+                // evidence/r-dao-1-err-1/prop-user-lifecycle calls 11, 16: Value on an unvalued draft Property returns VT_NULL.
+                return CallResult.Of(OwnedVariant.Null());
             }
             return StoredValue(ToStoredProperty());
         }
