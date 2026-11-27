@@ -62,13 +62,20 @@ public sealed unsafe class SqlConvGuidTests
             Assert.Equal(VarType.Null, ReadVal(gCur, 1).Type);
         }
 
+        // Bare GUID in ORDER BY is admitted (evidence/r-sort-3/keys-order-sql-accdb call 43,
+        // evidence/r-q-fmt-sort/guid-order-accdb call 128).
+        using (BoundSelect? guidOrder = BoundSelect.Prepare("SELECT ID FROM T ORDER BY G", db, out SqlFailure? orderFail))
+        {
+            Assert.Null(orderFail);
+            Assert.NotNull(guidOrder);
+        }
+
         // Unrecorded GUID shapes stay refused by name.
         (string Sql, string Expected)[] refused =
         [
             ("SELECT G & 'x' FROM T", "NotModelled.FieldType"),
             ("SELECT G = '{guid {00000000-0000-0000-0000-000000000000}}' FROM T", "NotModelled.FieldType"),
             ("SELECT G Is Null FROM T", "NotModelled.FieldType"),
-            ("SELECT ID FROM T ORDER BY G", "NotModelled.FieldType"),
             ("SELECT DISTINCT G FROM T", "NotModelled.DistinctGuid"),
             ("SELECT G FROM T GROUP BY G", "NotModelled.FieldType"),
             ("SELECT G FROM T UNION SELECT G FROM T", "NotModelled.UnionType"),

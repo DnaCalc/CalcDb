@@ -460,7 +460,7 @@ internal sealed class AggregateSpec(AggregateKind kind, SyntaxNode node, BoundEx
 }
 
 /// <summary>An ORDER BY key, bound over the input row or, in a grouped SELECT, over the group's slots.</summary>
-internal sealed record OrderKey(BoundExpression Program, bool Descending, bool MemoPrefix = false, bool CoerceToText = false);
+internal sealed record OrderKey(BoundExpression Program, bool Descending, bool MemoPrefix = false, bool CoerceToText = false, bool IsGuid = false);
 
 /// <summary>The role of an embedded SQL subquery inside an expression (R-SQL-1 SQL-SUB-03/04).</summary>
 internal enum SubqueryKind : byte
@@ -2967,12 +2967,20 @@ public sealed class BoundSelect : IDisposable
                 {
                     keyRoot = o.Expression.Syntax.Root!;
                     bool allowBareBinary = Field(keyRoot) is { TypeCode: NativeTypes.Binary };
-                    if (Program(o.Expression, _scope, out key, allowBareBinary) is { } f)
+                    bool allowBareGuid = Field(keyRoot) is { TypeCode: NativeTypes.Guid };
+                    if (Program(o.Expression, _scope, out key, allowBareBinary, allowBareGuid) is { } f)
                     {
                         return f;
                     }
                 }
-                bool memoPrefix = false;
+                int? derivedFieldType = key!.BareSlot is int ds
+                    && ds >= DerivedSlot0
+                    && ds < ParameterSlot0
+                    && bound.SourceList.Count > 0
+                    && bound.SourceList[0].Subquery is { } sub
+                    ? sub.Columns[ds - DerivedSlot0].FieldType
+                    : null;
+                bool memoPrefix = derivedFieldType == 12;
                 if (key!.Fields.Any(b => b.Column.TypeCode is NativeTypes.Memo or NativeTypes.Ole or NativeTypes.Binary))
                 {
                     if (key.BareField is { Column.TypeCode: NativeTypes.Memo })
@@ -2997,7 +3005,8 @@ public sealed class BoundSelect : IDisposable
                     }
                 }
                 bool coerceToText = IsMixedTextIIf(keyRoot);
-                bound.Order.Add(new OrderKey(key!, o.Descending, memoPrefix, coerceToText));
+                bool isGuid = key.BareField?.Column.TypeCode == NativeTypes.Guid || derivedFieldType == 15;
+                bound.Order.Add(new OrderKey(key!, o.Descending, memoPrefix, coerceToText, isGuid));
             }
             return null;
         }
@@ -3043,7 +3052,8 @@ public sealed class BoundSelect : IDisposable
                 {
                     keyRoot = expr.Syntax.Root!;
                     bool allowBareBinary = Field(keyRoot) is { TypeCode: NativeTypes.Binary };
-                    return Program(expr, _scope, out key, allowBareBinary);
+                    bool allowBareGuid = Field(keyRoot) is { TypeCode: NativeTypes.Guid };
+                    return Program(expr, _scope, out key, allowBareBinary, allowBareGuid);
                 }
             }
             if (target.Program.BareField is { } bf)

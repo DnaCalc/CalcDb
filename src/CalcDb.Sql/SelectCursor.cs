@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Runtime.InteropServices;
 
 using CalcDb.Expressions;
@@ -3159,6 +3160,7 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
             }
             int[] order = [.. Enumerable.Range(0, rows.Count)];
             bool refused = false;
+            TryBuildCompositeOrderKeys(rows.Count, k);
             (int ties, string? tieOpen) = TieRule(rows.Count);
             Array.Sort(order, (x, y) =>
             {
@@ -3167,6 +3169,8 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
             });
             if (refused)
             {
+                _compositeSlab = null;
+                _compositeOffsets = null;
                 failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.MixedOrderTypes", "ORDER BY over values of types the relational order does not rank against each other (text and number, Decimal)");
                 return null;
             }
@@ -3177,6 +3181,235 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                 Runs(order, k, $"{tieOpen} (qualified.md R-SORT-3 tie order)");
             }
             return sorted;
+        }
+
+        private byte[]? _compositeSlab;
+        private int[]? _compositeOffsets;
+
+        /// <summary>
+        /// Build ACE's 510-byte composite sort key (<see cref="IndexKeys"/> + <see cref="IndexKeys.FinishComposite"/>)
+        /// for every row when each ORDER BY key has a uniform <see cref="IndexKeys"/> type, so multi-key and long-text
+        /// ORDER BYs share ACE's exact digest order (<c>evidence/r-sort-3/keys-order-sql-accdb</c>,
+        /// <c>evidence/r-q2-fmt-sort/collide-*</c>). Falls back to per-key <see cref="RelationalOrder"/> otherwise.
+        /// </summary>
+        private unsafe void TryBuildCompositeOrderKeys(int rowCount, int k)
+        {
+            _compositeSlab = null;
+            _compositeOffsets = null;
+            if (rowCount <= 1)
+            {
+                return;
+            }
+            SortDescriptor? sortDescriptor = (Collation as DatabaseCollation)?.Sort;
+            var codecs = new (byte NativeType, TextKeyExtent Extent, int MaxBytes)[k];
+            int maxRowBytes = 0;
+            for (int j = 0; j < k; j++)
+            {
+                VarType common = VarType.Empty;
+                int maxUnits = 0;
+                bool isGuidCol = plan.Order[j].IsGuid || plan.Order[j].Program.BareField?.Column.TypeCode == NativeTypes.Guid;
+                byte? bareType = plan.Order[j].Program.BareField?.Column.TypeCode;
+                TextKeyExtent textExtent = (plan.Order[j].MemoPrefix || bareType is NativeTypes.Text or NativeTypes.Memo)
+                    ? TextKeyExtent.IndexedPrefix
+                    : TextKeyExtent.WholeSeekArgument;
+
+                for (int r = 0; r < rowCount; r++)
+                {
+                    NativeVariant kv = _keys[(r * k) + j];
+                    var vt = (VarType)kv.Vt;
+                    if (vt == VarType.Null)
+                    {
+                        continue;
+                    }
+                    if (common == VarType.Empty)
+                    {
+                        common = vt;
+                    }
+                    else if (common != vt)
+                    {
+                        return;
+                    }
+                    if (vt == VarType.Bstr)
+                    {
+                        ReadOnlySpan<char> chars = Bstrs.Chars(kv.Pointer);
+                        if (isGuidCol)
+                        {
+                            if (chars.Length < 8 || !chars.StartsWith("{guid ", StringComparison.OrdinalIgnoreCase) || !chars.EndsWith("}") || !Guid.TryParse(chars[6..^1], out _))
+                            {
+                                return;
+                            }
+                        }
+                        else
+                        {
+                            int u = textExtent == TextKeyExtent.IndexedPrefix ? Math.Min(chars.Length, 255) : chars.Length;
+                            if (u > maxUnits)
+                            {
+                                maxUnits = u;
+                            }
+                        }
+                    }
+                    else if (vt == (VarType.Array | VarType.UI1))
+                    {
+                        if (kv.Pointer == 0 || bareType is not (NativeTypes.Binary or NativeTypes.ExtendedDateTime))
+                        {
+                            return;
+                        }
+                        (int Lower, int Count)[] shape = SafeArrays.Shape(kv.Pointer);
+                        if (shape.Length != 1 || (bareType == NativeTypes.ExtendedDateTime && shape[0].Count != 42))
+                        {
+                            return;
+                        }
+                        if (shape[0].Count > maxUnits)
+                        {
+                            maxUnits = shape[0].Count;
+                        }
+                    }
+                }
+
+                byte nativeType;
+                int fieldMaxBytes;
+                switch (common)
+                {
+                    case VarType.Empty:
+                        nativeType = NativeTypes.Byte;
+                        fieldMaxBytes = 1;
+                        break;
+                    case VarType.Bstr when isGuidCol:
+                        nativeType = NativeTypes.Guid;
+                        fieldMaxBytes = IndexKeys.ChunkedFieldBytes(16);
+                        break;
+                    case VarType.Bstr:
+                        if (sortDescriptor is null)
+                        {
+                            return;
+                        }
+                        nativeType = NativeTypes.Text;
+                        fieldMaxBytes = new FieldKeyCodec(NativeTypes.Text, sortDescriptor).MaxFieldBytesFor(maxUnits);
+                        break;
+                    case VarType.Bool:
+                        nativeType = NativeTypes.Boolean;
+                        fieldMaxBytes = IndexKeys.MaxFieldBytes;
+                        break;
+                    case VarType.UI1:
+                        nativeType = NativeTypes.Byte;
+                        fieldMaxBytes = IndexKeys.MaxFieldBytes;
+                        break;
+                    case VarType.I2:
+                        nativeType = NativeTypes.Integer;
+                        fieldMaxBytes = IndexKeys.MaxFieldBytes;
+                        break;
+                    case VarType.I4:
+                        nativeType = NativeTypes.Long;
+                        fieldMaxBytes = IndexKeys.MaxFieldBytes;
+                        break;
+                    case VarType.I8:
+                        nativeType = NativeTypes.BigInt;
+                        fieldMaxBytes = IndexKeys.MaxFieldBytes;
+                        break;
+                    case VarType.Currency:
+                        nativeType = NativeTypes.Currency;
+                        fieldMaxBytes = IndexKeys.MaxFieldBytes;
+                        break;
+                    case VarType.R4:
+                        nativeType = NativeTypes.Single;
+                        fieldMaxBytes = IndexKeys.MaxFieldBytes;
+                        break;
+                    case VarType.R8:
+                        nativeType = NativeTypes.Double;
+                        fieldMaxBytes = IndexKeys.MaxFieldBytes;
+                        break;
+                    case VarType.Date:
+                        nativeType = NativeTypes.DateTime;
+                        fieldMaxBytes = IndexKeys.MaxFieldBytes;
+                        break;
+                    case VarType.Array | VarType.UI1:
+                        nativeType = bareType!.Value;
+                        fieldMaxBytes = IndexKeys.ChunkedFieldBytes(Math.Max(maxUnits, 1));
+                        break;
+                    default:
+                        return;
+                }
+                codecs[j] = (nativeType, textExtent, fieldMaxBytes);
+                maxRowBytes += fieldMaxBytes;
+            }
+
+            byte[] scratch = ArrayPool<byte>.Shared.Rent(Math.Max(IndexKeys.MaxUnshortenedKey, maxRowBytes));
+            int initCap = (int)Math.Max(256L, Math.Min((long)rowCount * 64L, (long)rowCount * IndexKeys.MaxUnshortenedKey));
+            byte[] slab = new byte[initCap];
+            int[] offsets = new int[rowCount + 1];
+            int slabPos = 0;
+            byte[] guidBuf = new byte[16];
+            try
+            {
+                for (int r = 0; r < rowCount; r++)
+                {
+                    int pos = 0;
+                    for (int j = 0; j < k; j++)
+                    {
+                        bool asc = !plan.Order[j].Descending;
+                        NativeVariant kv = _keys[(r * k) + j];
+                        (byte nt, TextKeyExtent ext, int mb) = codecs[j];
+                        FieldKeyCodec codec = nt == NativeTypes.Text
+                            ? new FieldKeyCodec(nt, sortDescriptor)
+                            : new FieldKeyCodec(nt, null, mb);
+                        KeyValue val;
+                        if (kv.Vt == (ushort)VarType.Null)
+                        {
+                            val = KeyValue.Null;
+                        }
+                        else if (nt == NativeTypes.Guid)
+                        {
+                            ReadOnlySpan<char> chars = Bstrs.Chars(kv.Pointer);
+                            _ = Guid.Parse(chars[6..^1]).TryWriteBytes(guidBuf);
+                            val = KeyValue.OfBytes(guidBuf);
+                        }
+                        else if (nt == NativeTypes.Text)
+                        {
+                            val = KeyValue.OfText(Bstrs.Chars(kv.Pointer).ToString().AsMemory());
+                        }
+                        else if (nt is NativeTypes.Binary or NativeTypes.ExtendedDateTime)
+                        {
+                            (int lower, int count) = SafeArrays.Shape(kv.Pointer)[0];
+                            byte[] bytes = count == 0 ? [] : new ReadOnlySpan<byte>(SafeArrays.ElementPointer(kv.Pointer, lower), count).ToArray();
+                            val = KeyValue.OfBytes(bytes);
+                        }
+                        else
+                        {
+                            val = nt switch
+                            {
+                                NativeTypes.Boolean => new KeyValue(KeyValueKind.Boolean, Boolean: (short)kv.Int64 != 0),
+                                NativeTypes.Byte => new KeyValue(KeyValueKind.Integer, Integer: (byte)kv.Int64),
+                                NativeTypes.Integer => new KeyValue(KeyValueKind.Integer, Integer: (short)kv.Int64),
+                                NativeTypes.Long => new KeyValue(KeyValueKind.Integer, Integer: (int)kv.Int64),
+                                NativeTypes.BigInt => new KeyValue(KeyValueKind.Integer, Integer: kv.Int64),
+                                NativeTypes.Currency => new KeyValue(KeyValueKind.ScaledCurrency, Integer: kv.Int64),
+                                NativeTypes.Single => new KeyValue(KeyValueKind.FloatBits, Bits: (uint)kv.Int64),
+                                NativeTypes.Double or NativeTypes.DateTime => new KeyValue(KeyValueKind.FloatBits, Bits: (ulong)kv.Int64),
+                                _ => KeyValue.Null,
+                            };
+                        }
+                        if (!IndexKeys.TryWriteField(scratch.AsSpan(pos), codec, asc, val, out int written, ext))
+                        {
+                            return;
+                        }
+                        pos += written;
+                    }
+                    int finalLen = IndexKeys.FinishComposite(scratch, pos);
+                    if (slabPos + finalLen > slab.Length)
+                    {
+                        Array.Resize(ref slab, Math.Max(slab.Length * 2, slabPos + finalLen));
+                    }
+                    scratch.AsSpan(0, finalLen).CopyTo(slab.AsSpan(slabPos));
+                    slabPos += finalLen;
+                    offsets[r + 1] = slabPos;
+                }
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(scratch);
+            }
+            _compositeSlab = slab;
+            _compositeOffsets = offsets;
         }
 
         /// <summary>Record each run of two or more rows with equal ORDER BY keys as a run whose order is not identified.</summary>
@@ -3270,11 +3503,21 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
 
         private int CompareKeys(int x, int y, int k, ref bool refused)
         {
+            if (_compositeSlab is not null && _compositeOffsets is not null)
+            {
+                ReadOnlySpan<byte> kx = _compositeSlab.AsSpan(_compositeOffsets[x], _compositeOffsets[x + 1] - _compositeOffsets[x]);
+                ReadOnlySpan<byte> ky = _compositeSlab.AsSpan(_compositeOffsets[y], _compositeOffsets[y + 1] - _compositeOffsets[y]);
+                return kx.SequenceCompareTo(ky);
+            }
             for (int j = 0; j < k; j++)
             {
-                bool ok = plan.Order[j].MemoPrefix
-                    ? RelationalOrder.TryComparePrefix(_keys[(x * k) + j], _keys[(y * k) + j], Collation, 255, out int c)
-                    : RelationalOrder.TryCompare(_keys[(x * k) + j], _keys[(y * k) + j], Collation, out c);
+                OrderKey ord = plan.Order[j];
+                bool isGuid = ord.IsGuid || ord.Program.BareField?.Column.TypeCode == NativeTypes.Guid;
+                bool ok = isGuid
+                    ? RelationalOrder.TryCompareGuid(_keys[(x * k) + j], _keys[(y * k) + j], out int c)
+                    : ord.MemoPrefix
+                        ? RelationalOrder.TryComparePrefix(_keys[(x * k) + j], _keys[(y * k) + j], Collation, 255, out c)
+                        : RelationalOrder.TryCompare(_keys[(x * k) + j], _keys[(y * k) + j], Collation, out c);
                 if (!ok)
                 {
                     refused = true;
@@ -3282,7 +3525,7 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                 }
                 if (c != 0)
                 {
-                    return plan.Order[j].Descending ? -c : c;
+                    return ord.Descending ? -c : c;
                 }
             }
             return 0;

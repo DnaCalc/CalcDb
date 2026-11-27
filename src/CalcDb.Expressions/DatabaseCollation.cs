@@ -27,7 +27,7 @@ public sealed class DatabaseCollation : TextCollation
     public static DatabaseCollation? For(TextSortOrder order) =>
         SortDescriptors.For(order, out _) is { } sort ? new DatabaseCollation(sort, order.ToString()) : null;
 
-    internal SortDescriptor Sort => _sort;
+    public SortDescriptor Sort => _sort;
 
     public override string Identity { get; }
 
