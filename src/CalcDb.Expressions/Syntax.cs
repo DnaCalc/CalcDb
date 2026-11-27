@@ -321,11 +321,13 @@ public sealed unsafe class ExpressionSyntax : IDisposable
         return taken;
     }
 
-    internal sealed class SyntaxError(string message, int? site = null, bool exactExcerpt = false) : Exception(message)
+    internal sealed class SyntaxError(string message, int? site = null, bool exactExcerpt = false, bool fullClauseExcerpt = false) : Exception(message)
     {
         public int? Site { get; } = site;
 
         public bool ExactExcerpt { get; } = exactExcerpt;
+
+        public bool FullClauseExcerpt { get; } = fullClauseExcerpt;
     }
 
     /// <summary>A form of the grammar CalcDb does not parse yet (a subquery, ALIKE, a parameter marker): named, never guessed.</summary>
@@ -403,7 +405,7 @@ public sealed unsafe class ExpressionSyntax : IDisposable
         public ExpressionSyntax Failed(SyntaxError e)
         {
             FreeTexts();
-            return new ExpressionSyntax(null, ExpressionFailure.Ace(ExpressionPhase.Parse, 3077, e.Message) with { Site = e.Site ?? ErrorPosition, ExactExcerpt = e.ExactExcerpt }, []);
+            return new ExpressionSyntax(null, ExpressionFailure.Ace(ExpressionPhase.Parse, 3077, e.Message) with { Site = e.Site ?? ErrorPosition, ExactExcerpt = e.ExactExcerpt, FullClauseExcerpt = e.FullClauseExcerpt }, []);
         }
 
         public ExpressionSyntax Failed(NotModelledSyntax e)
@@ -919,8 +921,11 @@ public sealed unsafe class ExpressionSyntax : IDisposable
             if (!IsSymbol(")"))
             {
                 Token t = Peek();
-                throw new SyntaxError(t.Kind == TokenKind.End ? ExpressionMessages.MissingParenthesis
-                    : t.Kind == TokenKind.Symbol && t.Text == "," ? ExpressionMessages.CommaSyntax : ExpressionMessages.MissingOperator);
+                throw t.Kind == TokenKind.End ? new SyntaxError(ExpressionMessages.MissingParenthesis)
+                    : t.Kind == TokenKind.Symbol && t.Text == "," ? new SyntaxError(ExpressionMessages.CommaSyntax)
+                    // r-sql-13b/agg-distinct-forms #5..#55/#75/#115 (Sum(DISTINCT v), Count(ALL v), Count(DISTINCT g, h)),
+                    // r-q25-nz-3141/alias-precedence-forms #35 (CAST(1 AS LONG)): quote the full clause expression.
+                    : new SyntaxError(ExpressionMessages.MissingOperator, exactExcerpt: true, fullClauseExcerpt: true);
             }
             closeOffset = Next().Start;
         }
@@ -1074,8 +1079,8 @@ public sealed unsafe class ExpressionSyntax : IDisposable
                 case TokenKind.Symbol when t.Text == ";":
                     throw new SyntaxError(ExpressionMessages.SyntaxError);
                 case TokenKind.Symbol when t.Text == ")":
-                    // r-sql-13b/agg-distinct-forms: Count(DISTINCT *) is "Extra )"; the rule for a ) where an operand is due is not identified.
-                    throw new NotModelledSyntax("NotModelled.ExtraParenthesis", "a ) where an operand is due");
+                    // r-sql-13b/agg-distinct-forms #65 (Count(DISTINCT *)), r-q25-nz-3141/alias-precedence-forms #5/#14/#17/#26 ((1 + )).
+                    throw new SyntaxError(ExpressionMessages.ExtraParenthesis, exactExcerpt: true, fullClauseExcerpt: true);
                 default:
                     throw new SyntaxError(ExpressionMessages.MissingOperator);
             }

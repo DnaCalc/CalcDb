@@ -25,6 +25,9 @@ public sealed record ExpressionFailure(ExpressionPhase Phase, int Number, string
     /// <summary>Whether <see cref="Site"/> gives ACE's exact query-expression excerpt boundary.</summary>
     public bool ExactExcerpt { get; init; }
 
+    /// <summary>Whether the SQL parser should quote the full clause expression up to the clause boundary.</summary>
+    public bool FullClauseExcerpt { get; init; }
+
     /// <summary>The name a failure is about (an unknown function, an unresolved name), when it has one.</summary>
     public string? Subject { get; init; }
 
@@ -65,6 +68,9 @@ public static class ExpressionMessages
 
     /// <summary>A comma where a closing parenthesis is due (r-sql-13b/sub-in-list-null-forms, a query).</summary>
     public const string CommaSyntax = "Syntax error (comma) in expression.";
+
+    /// <summary>A closing parenthesis where an operand is due (r-sql-13b/agg-distinct-forms #65 Count(DISTINCT *), r-q25-nz-3141/alias-precedence-forms #5/#14/#17/#26 (1 + )).</summary>
+    public const string ExtraParenthesis = "Extra ) in expression.";
 
     /// <summary>A call applied again, <c>f(x)(1)</c> (r-expr-1b/route-mdb-battery, a query).</summary>
     public const string InvalidQualifier = "Invalid use of '.', '!', or '()'. in expression.";

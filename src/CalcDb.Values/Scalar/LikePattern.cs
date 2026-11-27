@@ -40,7 +40,7 @@ public sealed class LikePattern
         Fault,
     }
 
-    private readonly record struct Instruction(Kind Kind, char Unit = '\0', int First = 0, int Count = 0, bool Negated = false, bool Caret = false, bool FaultFollows = false);
+    private readonly record struct Instruction(Kind Kind, char Unit = '\0', int First = 0, int Count = 0, bool Negated = false, bool Caret = false, bool CaretRange = false, bool FaultFollows = false);
 
     private readonly record struct ClassMember(char Low, char High);
 
@@ -113,25 +113,31 @@ public sealed class LikePattern
             return end;
         }
         bool negated = body[0] == '!' && body.Length > 1;
-        bool caret = body[0] == '^';
-        if (negated)
+        // PAT-02 (r-expr-1/pat-02-bracket-classes #37, r-sql-13b/like-bracket-classes #25): [^] is literal "^";
+        // [^a-c] matches [a-c] for all non-"^" units, while "^" membership and [^-x] ranges are unrecorded.
+        bool caret = body[0] == '^' && body.Length > 1;
+        bool caretRange = caret && body[1] == '-';
+        if (negated || caret)
         {
             body = body[1..];
         }
         int first = members.Count;
-        for (int j = 0; j < body.Length; j++)
+        if (!caretRange)
         {
-            if (j + 2 < body.Length && body[j + 1] == '-')
+            for (int j = 0; j < body.Length; j++)
             {
-                members.Add(new ClassMember(body[j], body[j + 2]));
-                j += 2;
-            }
-            else
-            {
-                members.Add(new ClassMember(body[j], body[j]));
+                if (j + 2 < body.Length && body[j + 1] == '-')
+                {
+                    members.Add(new ClassMember(body[j], body[j + 2]));
+                    j += 2;
+                }
+                else
+                {
+                    members.Add(new ClassMember(body[j], body[j]));
+                }
             }
         }
-        program.Add(new Instruction(Kind.Class, First: first, Count: members.Count - first, Negated: negated, Caret: caret));
+        program.Add(new Instruction(Kind.Class, First: first, Count: members.Count - first, Negated: negated, Caret: caret, CaretRange: caretRange));
         return end;
     }
 
@@ -215,7 +221,7 @@ public sealed class LikePattern
                 return UnitEquals(instruction.Unit, u, context, out open);
             default:
                 {
-                    if (instruction.Caret)
+                    if (instruction.CaretRange || (instruction.Caret && u == '^'))
                     {
                         open = NotModelledCase.PatternCaretClass;
                         return null;
