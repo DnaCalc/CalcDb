@@ -460,6 +460,26 @@ internal sealed unsafe class KeysetRowSource : IAdoRowSource
             // r-ado-1b/fields-assign-conversion #44-45: VT_EMPTY into Long stores Null.
             effective = new NativeVariant { Vt = (ushort)VarType.Null };
         }
+        else if (col.TypeCode == NativeTypes.ExtendedDateTime && incoming.Type == VarType.Bstr)
+        {
+            // r-q49-dt2-draftprops/dt2-ado-addnew-edit-accdb #42/#71/#80/#89/#120/#134/#148:
+            // ACE OLE DB coerces BSTR puts on DATETIME2 (adDBTimeStamp=135) via VariantChangeTypeEx(..., VT_DATE),
+            // failing Provider 0x80020005 "Type mismatch." for fractional seconds / out-of-range / non-dates while
+            // accepting OLE-parseable strings like "0000-01-01 00:00:00".
+            NativeVariant copy = incoming;
+            tempConverted = OwnedVariant.ChangeType(&copy, VarType.Date, SessionLocale.Lcid, flags: 0, out _);
+            if (tempConverted is null)
+            {
+                if (startedImplicitEdit)
+                {
+                    _frame.Discard();
+                    DisposeOriginalSnapshot();
+                }
+                providerError = AdoSqlErrors.TypeMismatchOn(errorIid);
+                return false;
+            }
+            effective = *tempConverted.Pointer;
+        }
         else if (col.TypeCode is NativeTypes.Text or NativeTypes.Memo && incoming.Type != VarType.Bstr && incoming.Type != VarType.Null)
         {
             if (TryCoerceToTextVariant(col.TypeCode, in incoming, out tempConverted))
@@ -531,6 +551,8 @@ internal sealed unsafe class KeysetRowSource : IAdoRowSource
         NativeTypes.Binary or NativeTypes.Ole => vt is (VarType.Array | VarType.UI1) or VarType.Bstr or VarType.Null,
         NativeTypes.Guid => vt is VarType.Bstr or VarType.Null,
         NativeTypes.Numeric => vt is VarType.Bstr or VarType.R8 or VarType.Currency,
+        // r-q49-dt2-draftprops/dt2-ado-addnew-edit-accdb: DATETIME2 server keyset Field.Value puts (VT_DATE, VT_BSTR, VT_NULL).
+        NativeTypes.ExtendedDateTime => vt is VarType.Date or VarType.Bstr or VarType.Null,
         _ => false,
     };
 

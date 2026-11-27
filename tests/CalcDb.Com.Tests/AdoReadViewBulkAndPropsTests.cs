@@ -1103,10 +1103,12 @@ public sealed unsafe class AdoReadViewBulkAndPropsTests
             Release(rc2);
 
             // Empty Parameters on an open adCmdStoredProc Command: Count returns 0 (r-q-ado-misc/param-saved-declared-order #17);
-            // Parameters.Refresh still refuses by name (r-ado-1b/param-refresh-after-text-change).
+            // Parameters.Refresh() succeeds and leaves Count == 0 (evidence/r-q47-bigint-expr-edges/bi-params-ado-cmd-accdb #43,
+            // evidence/r-q49-dt2-draftprops/dt2-params-ado-cmd-accdb #41).
             nint prs = (nint)Get(cmd, "Parameters")!;
             Assert.Equal(0, Get(prs, "Count"));
-            Assert.Equal(HResults.E_NOTIMPL, Call(prs, "Refresh").Failure!.Value.Scode);
+            Assert.Null(Call(prs, "Refresh").Failure);
+            Assert.Equal(0, Get(prs, "Count"));
 
             // Append a Parameter on an open connection:
             // - Parameters.Refresh() succeeds and keeps Count == 1 (evidence/r-ado-1b/cmd-before-connection #37-38).

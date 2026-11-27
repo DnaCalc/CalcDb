@@ -71,6 +71,10 @@ internal sealed record AdoFieldDescriptor(
                 col,
                 sourceIndex,
                 DecimalActualSize19OnServer: true),
+            // r-q47-bigint-expr-edges/bi-params-ado-cmd-accdb #86[1]: BIGINT base column -> adBigInt(20), DefinedSize=8, Prec=255, Scale=255, Attr=106.
+            NativeTypes.BigInt => new(name, 20, 8, 255, 255, AttrBaseVarNullable, true, col, sourceIndex),
+            // r-q49-dt2-draftprops/dt2-ado-addnew-edit-accdb #38-41/#208[1], dt2-params-ado-cmd-accdb #104[1]: DATETIME2 base column -> adDBTimeStamp(135), DefinedSize=42, Prec=255, Scale=255, Attr=106.
+            NativeTypes.ExtendedDateTime => new(name, 135, 42, 255, 255, AttrBaseVarNullable, true, col, sourceIndex),
             _ => Refused(name, "NotModelled.AdoFieldType", $"ADO Field metadata for native column type code {typeCode} ('{name}') is not recorded"),
         };
     }
@@ -153,6 +157,8 @@ internal sealed record AdoFieldDescriptor(
             10 or 12 => new(col.Name, 203, 536870910, 255, 255, AttrExprLong, false, null, -1),
             11 => new(col.Name, 205, 1073741823, 255, 255, AttrExprLong, false, null, -1),
             15 => new(col.Name, 72, 16, 255, 255, AttrExprFixed, false, null, -1),
+            // r-q47-bigint-expr-edges/bi-select-arith-dao-ado-accdb #154[1]: BIGINT expression -> adBigInt(20), DefinedSize=8, Prec=255, Scale=255, Attr=98.
+            16 => new(col.Name, 20, 8, 255, 255, AttrExprVar, false, null, -1),
             _ => Refused(col.Name, "NotModelled.AdoFieldType", $"ADO Field metadata for DAO Field.Type {daoType} ('{col.Name}') is not recorded"),
         };
     }
@@ -191,6 +197,12 @@ internal sealed record AdoFieldDescriptor(
                 new(col.Name, 202, 255, 255, 255, AttrBaseVarNullable, false, null, -1),
             (ResultAggregateKind.Min or ResultAggregateKind.Max, 8) =>
                 new(col.Name, 7, 8, 255, 255, AttrBaseFixedNullable, false, null, -1),
+            // r-q47-bigint-expr-edges/bi-select-aggregates-dao-ado-accdb #123[0..1], #134[1..2]: MIN/MAX(BIGINT) -> adBigInt(20), DefinedSize=8, Attr=106.
+            (ResultAggregateKind.Min or ResultAggregateKind.Max, 16) =>
+                new(col.Name, 20, 8, 255, 255, AttrBaseVarNullable, false, null, -1),
+            // r-q49-dt2-draftprops/dt2-select-aggregates-dao-ado-accdb #96[1..2], #109[0..1]: MIN/MAX(DATETIME2) -> adDBTimeStamp(135), DefinedSize=42, Attr=106.
+            (ResultAggregateKind.Min or ResultAggregateKind.Max, 26) =>
+                new(col.Name, 135, 42, 255, 255, AttrBaseVarNullable, false, null, -1),
             (ResultAggregateKind.Min or ResultAggregateKind.Max or ResultAggregateKind.First or ResultAggregateKind.Last, 20)
                 when col.DecimalPrecision is byte mp && col.DecimalScale is byte ms =>
                 new(col.Name, 131, 19, mp, ms, AttrBaseFixedNullable, false, null, -1, DecimalActualSize19OnServer: true),
@@ -323,10 +335,28 @@ internal static unsafe class AdoFieldValues
                 return OwnedVariant.FromText(new Guid(v.Bytes!).ToString("B").ToUpperInvariant());
             case NativeKind.Decimal:
                 return FromNativeDecimal(v.Decimal, desc, out refusal);
+            case NativeKind.BigInt:
+                // r-q47-bigint-expr-edges/bi-params-ado-cmd-accdb, bi-select-aggregates-dao-ado-accdb, bi-select-arith-dao-ado-accdb:
+                // ACE OLE DB surfaces adBigInt (20) Field.Value as scale-0 VT_DECIMAL.
+                return FromInt64AsDecimal(v.Integer);
+            case NativeKind.ExtendedDateTime:
+                // r-q49-dt2-draftprops/dt2-ado-addnew-edit-accdb #210[0].1[1].1, dt2-params-ado-cmd-accdb, dt2-select-aggregates-dao-ado-accdb:
+                // ACE OLE DB fails 0x80040E21 on IID_IRowset when reading any non-Null DATETIME2 value through ADO Field.Value.
+                refusal = AdoSqlErrors.DateTime2ReadFailure().ComFailure;
+                return null;
             default:
                 refusal = Failure.NotImplemented($"ADO Field.Value of native kind {v.Kind}");
                 return null;
         }
+    }
+
+    private static OwnedVariant FromInt64AsDecimal(long value)
+    {
+        bool negative = value < 0;
+        ulong magnitude = negative
+            ? unchecked((ulong)(-(value + 1)) + 1UL)
+            : (ulong)value;
+        return OwnedVariant.FromDecimal(new DecimalValue(0, negative, 0, magnitude));
     }
 
     private static OwnedVariant? FromNativeDecimal(NativeDecimal d, AdoFieldDescriptor desc, out Failure? refusal)
@@ -385,6 +415,17 @@ internal static unsafe class AdoFieldValues
                 return OwnedVariant.FromInt16((short)v.Int64);
             case VarType.I4:
                 return OwnedVariant.FromInt32((int)v.Int64);
+            case VarType.I8:
+                // r-q47-bigint-expr-edges/bi-select-aggregates-dao-ado-accdb #125, bi-select-arith-dao-ado-accdb #156, bi-params-ado-cmd-accdb #88:
+                // ACE OLE DB surfaces adBigInt (20) Field.Value as scale-0 VT_DECIMAL.
+                if (desc.AdoType == 20)
+                {
+                    return FromInt64AsDecimal(v.Int64);
+                }
+                refusal = Failure.NotModelled(
+                    "NotModelled.AdoSqlInt64FieldType",
+                    $"ADO Field.Value of SQL VT_I8 for ADO field type {desc.AdoType} ('{desc.Name}') is not recorded");
+                return null;
             case VarType.Currency:
                 return OwnedVariant.FromCurrency(v.Int64);
             case VarType.R4:
@@ -394,6 +435,13 @@ internal static unsafe class AdoFieldValues
             case VarType.Date:
                 return OwnedVariant.FromDate(v.Double);
             case VarType.Bstr:
+                if (desc.AdoType == 135)
+                {
+                    // r-q49-dt2-draftprops/dt2-ado-addnew-edit-accdb #210[0].1[1].1, dt2-params-ado-cmd-accdb, dt2-select-aggregates-dao-ado-accdb:
+                    // ACE OLE DB fails 0x80040E21 on IID_IRowset when reading any non-Null DATETIME2 value through ADO Field.Value.
+                    refusal = AdoSqlErrors.DateTime2ReadFailure().ComFailure;
+                    return null;
+                }
                 return v.Pointer == 0 ? OwnedVariant.FromText("") : OwnedVariant.FromText(Bstrs.Chars(v.Pointer));
             case VarType.Decimal:
                 return OwnedVariant.Adopt(v);
@@ -510,6 +558,7 @@ internal static unsafe class AdoFieldValues
             5 => 8,   // adDouble
             6 => 8,   // adCurrency
             7 => 8,   // adDate
+            20 => 8,  // adBigInt
             72 => 16, // adGUID
             131 => (isClientCursor || desc.DecimalActualSize19OnServer) ? 19 : 16, // adNumeric (fields-meta-expressions, fields-meta-decimal-expressions)
             202 or 203 => vt == VarType.Bstr && value.Pointer->Pointer != 0 ? checked((int)OleAut.SysStringByteLen(value.Pointer->Pointer)) : 0,

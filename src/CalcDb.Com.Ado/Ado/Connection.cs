@@ -596,7 +596,125 @@ internal sealed unsafe class ConnectionObject : AdoObject
     public const string AdoVersion = "10.0";
 
     private static readonly InterfaceDecl Decl = AdoTypes.Connection;
-    private static readonly nint Vtable = DualEntries.Build(Decl);
+    private const int DynamicRollbackDispId = 1000;
+    private static delegate* unmanaged<nint, Guid*, char**, uint, uint, int*, int> _baseGetIDsOfNames;
+    private static delegate* unmanaged<nint, int, Guid*, uint, ushort, DispParams*, NativeVariant*, ExcepInfo*, uint*, int> _baseInvoke;
+    private static readonly nint Vtable = BuildVtable();
+
+    private static nint BuildVtable()
+    {
+        nint* table = (nint*)DualEntries.Build(Decl);
+        _baseGetIDsOfNames = (delegate* unmanaged<nint, Guid*, char**, uint, uint, int*, int>)table[5];
+        _baseInvoke = (delegate* unmanaged<nint, int, Guid*, uint, ushort, DispParams*, NativeVariant*, ExcepInfo*, uint*, int>)table[6];
+        table[5] = (nint)(delegate* unmanaged<nint, Guid*, char**, uint, uint, int*, int>)&GetIDsOfNamesConnection;
+        table[6] = (nint)(delegate* unmanaged<nint, int, Guid*, uint, ushort, DispParams*, NativeVariant*, ExcepInfo*, uint*, int>)&InvokeConnection;
+        return (nint)table;
+    }
+
+    [System.Runtime.InteropServices.UnmanagedCallersOnly]
+    private static int GetIDsOfNamesConnection(nint self, Guid* iid, char** names, uint count, uint lcid, int* ids)
+    {
+        int hr = _baseGetIDsOfNames(self, iid, names, count, lcid, ids);
+        if (hr == HResults.DISP_E_UNKNOWNNAME && count == 1 && names is not null && names[0] is not null && ids is not null)
+        {
+            ConnectionObject cn = Recover<ConnectionObject>(self);
+            if (cn.IsOpen && !cn.IsPersistenceOpen && cn.OpenSession is not null)
+            {
+                string name = System.Runtime.InteropServices.Marshal.PtrToStringUni((nint)names[0]) ?? "";
+                if (string.Equals(name, "Rollback", StringComparison.OrdinalIgnoreCase))
+                {
+                    // r-q2-cat-txn-lock/txn-local-two-ado-connections-events #28,
+                    // txn-support-ado-rollback-control-events #18/#19/#20/#37/#40/#41:
+                    // ADODB.Connection dynamic-command dispatch resolves "Rollback" on an open ACE Connection.
+                    ids[0] = DynamicRollbackDispId;
+                    return HResults.S_OK;
+                }
+            }
+        }
+        return hr;
+    }
+
+    [System.Runtime.InteropServices.UnmanagedCallersOnly]
+    private static int InvokeConnection(
+        nint self,
+        int dispId,
+        Guid* iid,
+        uint lcid,
+        ushort flags,
+        DispParams* parameters,
+        NativeVariant* result,
+        ExcepInfo* info,
+        uint* argError)
+    {
+        if (dispId == DynamicRollbackDispId && (flags & 1) != 0)
+        {
+            ConnectionObject cn = Recover<ConnectionObject>(self);
+            if (cn.IsOpen && !cn.IsPersistenceOpen && cn.OpenSession is not null
+                && (parameters is null || parameters->ArgCount == 0))
+            {
+                return cn.InvokeDynamicRollback(info);
+            }
+        }
+        return _baseInvoke(self, dispId, iid, lcid, flags, parameters, result, info, argError);
+    }
+
+    private int InvokeDynamicRollback(ExcepInfo* info)
+    {
+        // r-q2-cat-txn-lock/txn-local-two-ado-connections-events #28,
+        // txn-support-ado-rollback-control-events #18/#19/#20/#37/#40/#41:
+        // calling cn.Rollback() (instead of RollbackTrans) emits WillExecute("Rollback", -1, -1, -1, adStatusOK, syntheticCmd, null, cn)
+        // and fails 0x800A0BB9 (ADODB.Connection) without emitting ExecuteComplete or altering transaction depth.
+        CommandObject synthetic = CommandObject.CreateSynthetic();
+        try
+        {
+            AdoEvents.WillExecute(_events, "Rollback", -1, -1, -1, synthetic, null, this);
+        }
+        finally
+        {
+            synthetic.Release();
+        }
+        Failure f = AdoFailure(AdoErrors.ArgumentsWrongType, Source, Declaration.Iid, publishesErrorInfo: true);
+        if (OleAut.CreateErrorInfo(out nint create) >= 0 && create != 0)
+        {
+            nint** vt = (nint**)create;
+            Guid g = f.ErrorInfoIid;
+            ((delegate* unmanaged<nint, Guid*, int>)(*vt)[3])(create, &g);
+            fixed (char* s = f.Source)
+            {
+                ((delegate* unmanaged<nint, char*, int>)(*vt)[4])(create, s);
+            }
+            fixed (char* d = f.Description)
+            {
+                ((delegate* unmanaged<nint, char*, int>)(*vt)[5])(create, d);
+            }
+            if (f.HelpFile is { } file)
+            {
+                fixed (char* h = file)
+                {
+                    ((delegate* unmanaged<nint, char*, int>)(*vt)[6])(create, h);
+                }
+            }
+            ((delegate* unmanaged<nint, uint, int>)(*vt)[7])(create, (uint)f.HelpContext);
+            Guid errorInfoIid = ComIids.IErrorInfo;
+            nint errInfo = 0;
+            if (((delegate* unmanaged<nint, Guid*, nint*, int>)(*vt)[0])(create, &errorInfoIid, &errInfo) >= 0 && errInfo != 0)
+            {
+                _ = OleAut.SetErrorInfo(0, errInfo);
+                ((delegate* unmanaged<nint, uint>)(*(nint**)errInfo)[2])(errInfo);
+            }
+            ((delegate* unmanaged<nint, uint>)(*vt)[2])(create);
+        }
+        if (info is not null)
+        {
+            *info = default;
+            info->Source = OwnedVariant.FromText(f.Source).TransferBstr();
+            info->Description = OwnedVariant.FromText(f.Description).TransferBstr();
+            info->HelpFile = f.HelpFile is null ? 0 : OwnedVariant.FromText(f.HelpFile).TransferBstr();
+            info->HelpContext = (uint)f.HelpContext;
+            info->Scode = f.Scode;
+        }
+        return HResults.DISP_E_EXCEPTION;
+    }
 
     /// <summary>Mode values accepted on a closed Connection in the records (prop-modes, error-open-failures, r-q41-create-session-counter/excl-open-ado-*); 99 is refused 0x800A0C93.</summary>
     private static readonly int[] AskedModes = [1, 2, 3, 5, 11, 12, 15, 19];
@@ -2945,6 +3063,7 @@ internal static class AdoValues
         17 => VarType.UI1, // adUnsignedTinyInt
         20 => VarType.I8, // adBigInt
         72 => VarType.Bstr, // adGUID
+        135 => VarType.Date, // adDBTimeStamp (r-q49-dt2-draftprops/dt2-params-ado-cmd-accdb #189/#209/#215)
         202 or 203 => VarType.Bstr, // adVarWChar, adLongVarWChar
         _ => null,
     };

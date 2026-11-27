@@ -849,10 +849,13 @@ internal sealed unsafe class ClientRowBuffer
         }
         pending.Sort(static (a, b) => a.StagingOrder.CompareTo(b.StagingOrder));
 
-        // Reset conflicting-group membership for the rows being attempted in this batch.
+        // Reset conflicting-group membership for the rows being attempted in this batch, and post any unposted
+        // Field.Value puts (r-q2-ado-misc/ado-events-recordset-batch #43/#53/#60/#67: a row whose UpdateBatch
+        // fails with 0x80040E38 is subsequently refreshed by Resync(3, 1) rather than skipped as an unposted put).
         foreach (ClientRow row in pending)
         {
             row.InConflictingGroup = false;
+            row.HasUnpostedPut = false;
         }
 
         // r-q2-ado-misc/ado-events-recordset-batch: WillChangeRecord fires for all rows in batch before RecordChangeComplete.

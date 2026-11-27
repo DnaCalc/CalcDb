@@ -487,7 +487,14 @@ internal sealed unsafe class SelectRowSource : IAdoRowSource
         }
         if (_cursor.FetchFailure is { } fetch)
         {
-            MappedProviderError? mapped = AdoSqlErrors.TryMap(fetch, _isSavedQuery, out Failure? unmodelled, isSelect: true);
+            MappedProviderError? mapped = fetch.Number == 11 && !_isSavedQuery
+                ? AdoSqlErrors.DivisionByZeroOnRowset()
+                : AdoSqlErrors.TryMap(fetch, _isSavedQuery, out _, isSelect: true);
+            Failure? unmodelled = null;
+            if (mapped is null)
+            {
+                mapped = AdoSqlErrors.TryMap(fetch, _isSavedQuery, out unmodelled, isSelect: true);
+            }
             LastSeekProviderError = mapped;
             failure = mapped?.ComFailure ?? unmodelled;
             return false;
@@ -573,14 +580,23 @@ internal sealed unsafe class SelectRowSource : IAdoRowSource
                 failure = Failure.NotModelled(sqlFail.NotModelled!, sqlFail.Message);
                 return null;
             }
-            // r-q47-bigint-expr-edges/meta-dollar-str-dao-ado-accdb (#340: SELECT Left$(Mm, 5) AS v FROM Lg WHERE ID = 2
-            // where Mm is Null): row-level expression 3464 on ad-hoc SELECT returns VT_EMPTY on ADO Field.Value (DAO Field.Value fails 3464).
-            if (!_isSavedQuery && !desc.IsBaseTableColumn && sqlFail.Number == 3464)
+            // r-q47-bigint-expr-edges/meta-dollar-str-dao-ado-accdb (#340), bi-select-conversions-dao-ado-accdb (#226/#292),
+            // r-q49-dt2-draftprops/dt2-select-funcs-convert-dao-ado-accdb (#465/#478), r-q2-expr-sql/demand-ado-events-failing-row (ar0/ar1/ar4):
+            // row-level expression errors on ad-hoc SELECT return VT_EMPTY on ADO Field.Value (DAO Field.Value fails).
+            if (!_isSavedQuery && !desc.IsBaseTableColumn && sqlFail.Number is 3464 or 11 or 6 or 94 or 5 or 3071)
             {
                 return OwnedVariant.Empty();
             }
             MappedProviderError? mapped = AdoSqlErrors.TryMap(sqlFail, _isSavedQuery, out Failure? unmodelled, isSelect: true);
             failure = mapped?.ComFailure ?? unmodelled;
+            return null;
+        }
+
+        if (desc.AdoType == 135 && (VarType)sqlVal.Vt is not (VarType.Null or VarType.Empty))
+        {
+            // r-q49-dt2-draftprops/dt2-ado-addnew-edit-accdb #210[0].1[1].1, dt2-params-ado-cmd-accdb, dt2-select-aggregates-dao-ado-accdb #98:
+            // ACE OLE DB fails 0x80040E21 on IID_IRowset when reading any non-Null DATETIME2 value (base column or MIN/MAX aggregate).
+            failure = AdoSqlErrors.DateTime2ReadFailure().ComFailure;
             return null;
         }
 
@@ -1815,6 +1831,10 @@ internal sealed unsafe class RecordsetObject : AdoObject
             if (readFail is { Scode: HResultDeletedRecord })
             {
                 providerError = DeletedRowError();
+            }
+            else if (readFail is { Scode: HResultErrorsOccurred } && _rows.Columns[ordinal].AdoType == 135)
+            {
+                providerError = AdoSqlErrors.DateTime2ReadFailure();
             }
             failure = readFail;
             return null;
@@ -3153,9 +3173,15 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return NotImplemented($"Recordset.Requery(Options={options}) (only omitted/-1/0 is recorded)");
         }
-        if (_rows is not ClientBatchRowSource || _openedOriginalSource is null || _openedEffectiveSource is null)
+        bool isClientBatch = _rows is ClientBatchRowSource;
+        bool isServerKeyset = _rows is KeysetRowSource
+            && _openedCommandType == AdoSqlText.AdCmdText
+            && _effectiveCursorLocation == 2
+            && _effectiveCursorType == 1
+            && _effectiveLockType == 3;
+        if ((!isClientBatch && !isServerKeyset) || _openedOriginalSource is null || _openedEffectiveSource is null)
         {
-            return NotImplemented("Recordset.Requery on this cursor (only client batch/optimistic cursors are implemented in this slice)");
+            return NotImplemented("Recordset.Requery on this cursor (only client batch/optimistic and server keyset (2,1,3) cursors are recorded)");
         }
         if (IsEditing)
         {
@@ -3191,11 +3217,11 @@ internal sealed unsafe class RecordsetObject : AdoObject
             out MappedProviderError? providerError,
             out Failure? refusal,
             out _,
-            preferKeyset: false,
-            updatableKeyset: false,
+            preferKeyset: isServerKeyset,
+            updatableKeyset: isServerKeyset,
             lockPessimistic: false,
-            preferClientBatch: true,
-            clientBatchOptimistic: _effectiveLockType == 4);
+            preferClientBatch: isClientBatch,
+            clientBatchOptimistic: isClientBatch && _effectiveLockType == 4);
 
         if (fresh is null)
         {
@@ -3209,7 +3235,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
 
         AdoEvents.RecordsetChangeComplete(_events, AdoEventReason.Close, null, AdoEventStatus.Ok, this);
 
-        _rows.Dispose();
+        _rows!.Dispose();
         _rows = fresh;
         _filterGroup = 0;
         _filterText = null;
@@ -3231,6 +3257,9 @@ internal sealed unsafe class RecordsetObject : AdoObject
             _position = 0;
             fresh.TrySeek(0, out _);
         }
+        // r-q2-ado-misc/ado-events-recordset-moves #30-#31: server keyset Requery re-arms lazy initial position realization
+        // so a subsequent Close() emits WillMove(10)/MoveComplete(10) before RecordsetChangeComplete(9).
+        _initialPositionPending = isServerKeyset;
         // Invalidates previously held Field wrappers with 0x800A0D5C (r-q48-ado-batch-edits/txn-updatebatch-rollback-accdb, r-q48-ado-batch-edits/txn-updatebatch-rollback-mdb).
         FieldsCollection.Bind(fresh.Columns);
         ClearConnectionErrors();
@@ -5788,7 +5817,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
             return;
         }
         _activeConnection?.OpenSession?.UnregisterRecordset(this);
-        _rows.Dispose();
+        _rows!.Dispose();
         _rows = null;
         _closedAfterOpen = true;
         _openedCommandType = AdoSqlText.AdCmdUnspecified;
