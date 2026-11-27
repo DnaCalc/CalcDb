@@ -8,7 +8,7 @@ $tokens = $null; $parseErrors = $null
 $ast = [System.Management.Automation.Language.Parser]::ParseFile($scriptPath, [ref]$tokens, [ref]$parseErrors)
 if ($parseErrors.Count -gt 0) { throw "Parse errors in $scriptPath`: $($parseErrors -join '; ')" }
 
-$loaded = @('Get-BranchWorktree', 'Test-WriterSlot', 'Invoke-LandMerge', 'Read-CompareResult', 'Invoke-FinishLanding')
+$loaded = @('Get-BranchWorktree', 'Test-WriterSlot', 'Remove-SlotOracleRuns', 'Cleanup-BranchSlot', 'Invoke-LandMerge', 'Read-CompareResult', 'Invoke-FinishLanding')
 foreach ($fn in $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] }, $true)) {
     if ($fn.Name -in $loaded) { Invoke-Expression $fn.Extent.Text }
 }
@@ -92,6 +92,7 @@ try {
     Git-Ok $repo @('push', '-q', '-u', 'origin', 'master') | Out-Null
 
     Assert (Test-WriterSlot $repo $slot) "Test-WriterSlot matches CalcDb-w1"
+    Assert (Test-WriterSlot "C:\Work\CalcDb" "C:\Work\CalcDb-probe") "Test-WriterSlot matches CalcDb-probe"
     Assert (-not (Test-WriterSlot $repo $wt)) "Test-WriterSlot rejects joyful-probe-1234"
     Assert (-not (Test-WriterSlot $repo (Join-Path $root "CalcDb-check"))) "Test-WriterSlot rejects CalcDb-check"
     Assert (-not (Test-WriterSlot $repo (Join-Path $root "other\CalcDb-w1"))) "Test-WriterSlot rejects CalcDb-w1 under a different parent"
