@@ -1010,6 +1010,7 @@ is summarised in [qualification-report.md](qualification-report.md).
 - **Conditions**: ACCDB, one 30-row table whose only changing factor is the index (none, IX_K, none, IX_KD descending, none, IX_K), the same ten patterns after each step.
 - **Records**: `evidence/r-q-fmt-sort/like-index-accdb/` (re-read); `evidence/r-sort-3b/lg-like-vs-range/`, `lu-like-vs-range/`, `lg-ado-like/`; `evidence/r-sort-3/like-prefix-accdb/`. Discriminators: the index added and dropped on one table, descending versus ascending, a repeat of the state.
 - **Open**: unique indexes and compound indexes with K first; plan views are T.
+- **Built (`w17-sql-like-range`, `6170f9e3`, 2026-11-27):** `CollationLikePrefix` (`GeneralLegacy` `1033/0` single-column non-unique ascending Text index for `<prefix>*` across primary, unstripped secondary, level-3 small-kana flags, and level-4 `firstOffset == 0`), with descending-only and non-prefix patterns unit-by-unit (`r-q-fmt-sort/like-index-accdb`, `r-sort-3/like-prefix-accdb`, `r-sort-3b/lg-like-vs-range`, `r-cursor-1b/filter-expression-forms`); unique, compound, `IgnoreNulls`, Memo, `General` (`1033/1`), and unrecorded pattern shapes stay refused (`NotModelled.IndexedLike`).
 
 ## R-CAT-1, R-TXN-1, R-LOCK-1 to R-LOCK-4 and R-CRASH-1
 
