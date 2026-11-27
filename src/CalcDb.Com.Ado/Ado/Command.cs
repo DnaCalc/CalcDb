@@ -191,8 +191,10 @@ internal sealed unsafe class CommandObject : AdoObject
 
     /// <summary>
     /// Called by <see cref="AdoOpenSession.CloseSession"/> when the bound <c>Connection</c> closes:
-    /// clears <c>Parameters</c> (evidence/r-ado-1b/param-connection-change #48-49) and invalidates held
-    /// <c>Properties</c>/<c>Property</c> wrappers (evidence/r-q-ado-misc/props-lookup-refresh #40-43).
+    /// clears <c>Parameters</c> (evidence/r-ado-1b/param-connection-change #48-49), invalidates held
+    /// <c>Properties</c>/<c>Property</c> wrappers (evidence/r-q-ado-misc/props-lookup-refresh #40-43),
+    /// and detaches <c>ActiveConnection</c> so reading it returns a null interface pointer
+    /// (evidence/r-str-ado-act/ado-session #50, evidence/r-fix-wire-ado/ado-session-writable #51).
     /// </summary>
     internal void OnConnectionClosed()
     {
@@ -202,6 +204,8 @@ internal sealed unsafe class CommandObject : AdoObject
         _properties?.Invalidate();
         _properties?.Release();
         _properties = null;
+        _activeConnection?.Release();
+        _activeConnection = null;
     }
 
     /// <summary>

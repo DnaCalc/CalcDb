@@ -57,6 +57,15 @@ internal static class AdoSqlErrors
         0,
         AdoObject.IidRowset);
 
+    /// <summary>Invalid bookmark on a server keyset or server static cursor (3159; r-ado-1b/book-raw-forms #210/#258, r-q2-ado-misc/book-static-exchange #116).</summary>
+    public static MappedProviderError InvalidBookmark() => Make(
+        AdoObject.HResultBadBookmark,
+        "Not a valid bookmark.",
+        5003159,
+        "3159",
+        -68420629,
+        AdoObject.IidRowset);
+
     /// <summary>Reading Field.Value on a server ForwardOnly cursor after non-null GetChunk on the same row (r-oledb-odbc/stream-getchunk #24, #47, #48, #53-61).</summary>
     public static MappedProviderError CatastrophicFailure() => Make(
         AdoObject.HResultUnexpected,

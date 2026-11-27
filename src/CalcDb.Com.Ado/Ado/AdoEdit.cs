@@ -44,6 +44,7 @@ internal sealed unsafe class KeysetRowSource : IAdoRowSource
     private bool _failedAddPutRead;
     private bool _failedDelete;
     private bool _hasPendingDateTime2BstrPut;
+    private bool _hasKeysetShapeMutated;
     private int _recordStatus;
     private OwnedVariant[]? _originalSnapshot;
 
@@ -324,6 +325,7 @@ internal sealed unsafe class KeysetRowSource : IAdoRowSource
         {
             _rowIds.RemoveAt(_currentIndex);
             _rowDepths.RemoveAt(_currentIndex);
+            _hasKeysetShapeMutated = true;
         }
         _deletedCurrent = false;
         _deletedAtDepth = -1;
@@ -333,6 +335,10 @@ internal sealed unsafe class KeysetRowSource : IAdoRowSource
         _currentIndex = -1;
         return true;
     }
+
+    public int KeysetCount => _rowIds.Count;
+
+    public bool HasKeysetShapeMutated => _hasKeysetShapeMutated || _deletedCurrent;
 
     public bool TrySeek(int index, out Failure? failure)
     {
@@ -729,6 +735,7 @@ internal sealed unsafe class KeysetRowSource : IAdoRowSource
                 // Inside an explicit transaction, EditFrame does not invoke OnRowInserted; record with current depth.
                 _rowIds.Add(insertedRow);
                 _rowDepths.Add(_session.Transactions.Depth);
+                _hasKeysetShapeMutated = true;
                 _currentIndex = _rowIds.Count - 1;
                 newPosition = _currentIndex;
             }
@@ -1019,6 +1026,7 @@ internal sealed unsafe class KeysetRowSource : IAdoRowSource
         {
             owner._rowIds.Add(row);
             owner._rowDepths.Add(0);
+            owner._hasKeysetShapeMutated = true;
             return owner._rowIds.Count - 1;
         }
 
