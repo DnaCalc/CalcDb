@@ -59,6 +59,8 @@ public enum BoundDdlKind : byte
     DropIndex,
     DropForeignKey,
     DropCheckConstraint,
+    CreateQuery,
+    DropQuery,
 }
 
 /// <summary>
@@ -80,7 +82,9 @@ public sealed record BoundDdl(
     AlterDropColumnRequest? AlterDropColumn = null,
     DropIndexRequest? DropIndex = null,
     DeleteRelationRequest? DropForeignKey = null,
-    DropCheckConstraintRequest? DropCheckConstraint = null);
+    DropCheckConstraintRequest? DropCheckConstraint = null,
+    CreateQueryDefRequest? CreateQuery = null,
+    string? DropQueryName = null);
 
 /// <summary>
 /// Access SQL DDL binder (W-07/native-metadata-write stretch 2; II-11 §28): validates ACE's recorded bind rules and
@@ -179,6 +183,10 @@ public static class DdlBinder
             DropTableStatement dt => BindDropTable(dt, database, out failure),
             DropIndexStatement di => BindDropIndex(di, database, out failure, route),
             AlterTableStatement at => BindAlterTable(at, database, out failure, route),
+            CreateViewStatement cv => BindCreateView(cv, out failure, route),
+            DropViewStatement dv => BindDropQuery(dv, dv.ViewName, out failure, route),
+            CreateProcedureStatement cp => BindCreateProcedure(cp, out failure, route),
+            DropProcedureStatement dp => BindDropQuery(dp, dp.ProcedureName, out failure, route),
             _ => Fail(SqlFailure.Open(SqlPhase.Bind, "NotModelled.DdlKind", statement.Kind.ToString()), out failure),
         };
 
@@ -227,7 +235,8 @@ public static class DdlBinder
         var primaryKeys = new List<(string? Name, IReadOnlyList<string> Columns)>();
         var uniqueConstraints = new List<(string? Name, IReadOnlyList<string> Columns)>();
         var uniqueIsInline = new List<bool>();
-        var foreignKeys = new List<(string? Name, IReadOnlyList<string> Columns, string RefTable, IReadOnlyList<string>? RefColumns, bool OnDeleteCascade)>();
+        var foreignKeys = new List<(string? Name, IReadOnlyList<string> Columns, string RefTable, IReadOnlyList<string>? RefColumns, bool OnDeleteCascade, bool OnUpdateCascade)>();
+        var checkConstraints = new List<(string? Name, string Expression)>();
 
         TextSortOrder? sortOrder = ParseGeneralSortOrder(database.Context.SortOrderIdentity);
         foreach (DdlColumnDef col in stmt.Columns)
@@ -278,7 +287,7 @@ public static class DdlBinder
                 else if (cc.Kind == DdlConstraintKind.ForeignKey)
                 {
                     deferredInlineFks.Add((col, cc));
-                    foreignKeys.Add((cc.Name, [col.Name], cc.RefTable!, cc.RefColumns, cc.OnDeleteCascade));
+                    foreignKeys.Add((cc.Name, [col.Name], cc.RefTable!, cc.RefColumns, cc.OnDeleteCascade, cc.OnUpdateCascade));
                     totalIndexes++;
                 }
             }
@@ -289,6 +298,11 @@ public static class DdlBinder
             if (tc.Name is not null && !IsValidObjectName(tc.Name))
             {
                 return Fail(BindAce(3125, SqlMessages.InvalidObjectName(tc.Name)), out failure);
+            }
+            if (tc.Kind == DdlConstraintKind.Check)
+            {
+                checkConstraints.Add((tc.Name, tc.CheckExpression ?? ""));
+                continue;
             }
             if (tc.Kind == DdlConstraintKind.PrimaryKey)
             {
@@ -334,7 +348,7 @@ public static class DdlBinder
             }
             else if (tc.Kind == DdlConstraintKind.ForeignKey)
             {
-                foreignKeys.Add((tc.Name, tc.Columns, tc.RefTable!, tc.RefColumns, tc.OnDeleteCascade));
+                foreignKeys.Add((tc.Name, tc.Columns, tc.RefTable!, tc.RefColumns, tc.OnDeleteCascade, tc.OnUpdateCascade));
             }
             totalIndexes++;
         }
@@ -572,9 +586,9 @@ public static class DdlBinder
                 {
                     return Fail(BindOpen("NotModelled.DdlPrimaryKeyShape", $"PRIMARY KEY on {pkCol.DataType.Kind} column '{pkCol.Name}' is not modelled in SchemaWriter"), out failure);
                 }
-                if (pkCol.Nullability == DdlNullability.NotNull)
+                if (pkCol.Nullability == DdlNullability.NotNull && route != SchemaRoute.Ado)
                 {
-                    return Fail(BindOpen("NotModelled.DdlColumnNotNull", $"NOT NULL on PRIMARY KEY column '{pkCol.Name}' is not recorded (evidence/r-q34-ddl-sweep)"), out failure);
+                    return Fail(BindOpen("NotModelled.DdlColumnNotNull", $"NOT NULL on PRIMARY KEY column '{pkCol.Name}' on {route} route is not recorded (evidence/r-q50-jk44-ddl-vis/ddl-multi-constraint-table-* records ADO)"), out failure);
                 }
                 pkBoundCols.Add(pkCol.Name);
                 if (firstPkIdx < 0)
@@ -618,9 +632,9 @@ public static class DdlBinder
                     {
                         return Fail(BindOpen("NotModelled.DdlUniqueConstraint", $"UNIQUE on {uqCol.DataType.Kind} column '{uqCol.Name}' is not recorded (evidence/r-q34-ddl-sweep/uq-* and lval-pk-uq-alltypes-* record Long/Text columns after PRIMARY KEY)"), out failure);
                     }
-                    if (uqCol.Nullability == DdlNullability.NotNull)
+                    if (uqCol.Nullability == DdlNullability.NotNull && route != SchemaRoute.Ado)
                     {
-                        return Fail(BindOpen("NotModelled.DdlColumnNotNull", $"NOT NULL on UNIQUE column '{uqCol.Name}' is not recorded (evidence/r-q34-ddl-sweep)"), out failure);
+                        return Fail(BindOpen("NotModelled.DdlColumnNotNull", $"NOT NULL on UNIQUE column '{uqCol.Name}' on {route} route is not recorded (evidence/r-q50-jk44-ddl-vis/ddl-multi-constraint-table-* records ADO)"), out failure);
                     }
                     if (uqCol.WithCompression)
                     {
@@ -674,27 +688,27 @@ public static class DdlBinder
             {
                 return Fail(BindOpen("NotModelled.DdlForeignKey", "CREATE TABLE with FOREIGN KEY requires one single-column PRIMARY KEY (evidence/r-q34-ddl-sweep/fk-*)"), out failure);
             }
-            if (uniqueConstraints.Count > 0)
+            if (uniqueConstraints.Count > 0 && route != SchemaRoute.Ado)
             {
-                return Fail(BindOpen("NotModelled.DdlForeignKey", "CREATE TABLE combining FOREIGN KEY with UNIQUE is not recorded (evidence/r-q34-ddl-sweep/fk-*)"), out failure);
+                return Fail(BindOpen("NotModelled.DdlForeignKey", "CREATE TABLE combining FOREIGN KEY with UNIQUE on non-ADO route is not recorded (evidence/r-q50-jk44-ddl-vis/ddl-multi-constraint-table-* records ADO)"), out failure);
             }
             if (firstLvalIdx >= 0)
             {
                 return Fail(BindOpen("NotModelled.DdlForeignKey", "CREATE TABLE combining FOREIGN KEY with Memo/LongBinary columns is not recorded (evidence/r-q34-ddl-sweep/fk-*)"), out failure);
             }
-            if (stmt.Columns.Any(c => c.Nullability == DdlNullability.NotNull))
+            if (stmt.Columns.Any(c => c.Nullability == DdlNullability.NotNull) && route != SchemaRoute.Ado)
             {
-                return Fail(BindOpen("NotModelled.DdlForeignKey", "CREATE TABLE combining FOREIGN KEY with NOT NULL columns is not recorded (evidence/r-q34-ddl-sweep/fk-*)"), out failure);
+                return Fail(BindOpen("NotModelled.DdlForeignKey", "CREATE TABLE combining FOREIGN KEY with NOT NULL columns on non-ADO route is not recorded (evidence/r-q50-jk44-ddl-vis/ddl-multi-constraint-table-* records ADO)"), out failure);
             }
 
-            (string? fkName, IReadOnlyList<string> fkCols, string refTableName, IReadOnlyList<string>? refCols, bool onDeleteCascade) = foreignKeys[0];
+            (string? fkName, IReadOnlyList<string> fkCols, string refTableName, IReadOnlyList<string>? refCols, bool onDeleteCascade, bool onUpdateCascade) = foreignKeys[0];
             if (fkName is null)
             {
                 return Fail(BindOpen("NotModelled.DdlForeignKey", "unnamed FOREIGN KEY constraint is not modelled in SchemaWriter"), out failure);
             }
-            if (onDeleteCascade && route != SchemaRoute.Ado)
+            if ((onDeleteCascade || onUpdateCascade) && route != SchemaRoute.Ado)
             {
-                return Fail(BindOpen("NotModelled.DdlForeignKeyAction", "ON DELETE CASCADE is recorded only on the ADO route (evidence/r-q34-ddl-sweep/fk-cascade-*-ado)"), out failure);
+                return Fail(BindOpen("NotModelled.DdlForeignKeyAction", "ON DELETE/UPDATE CASCADE is recorded only on the ADO route (evidence/r-q34-ddl-sweep/fk-cascade-*-ado, r-q50-jk44-ddl-vis/ddl-multi-constraint-table-*)"), out failure);
             }
             if (NamesEqual(stmt.TableName, refTableName))
             {
@@ -743,11 +757,177 @@ public static class DdlBinder
             {
                 return Fail(BindOpen("NotModelled.DdlTableInUsePrecedence", $"held referenced parent table '{refTableName}' in CREATE TABLE FOREIGN KEY"), out failure);
             }
-            foreignKey = new NewForeignKey(fkName, fkBoundCols, refTableName, refBoundCols!, onDeleteCascade);
+            foreignKey = new NewForeignKey(fkName, fkBoundCols, refTableName, refBoundCols!, onDeleteCascade, onUpdateCascade);
+        }
+
+        NewCheckConstraint? checkConstraint = null;
+        if (checkConstraints.Count > 0)
+        {
+            if (route != SchemaRoute.Ado)
+            {
+                return Fail(BindAce(3289, SqlMessages.ConstraintSyntaxError), out failure);
+            }
+            if (checkConstraints.Count > 1)
+            {
+                return Fail(BindOpen("NotModelled.DdlCreateTableCheck", "multiple CHECK constraints in one CREATE TABLE are not recorded (evidence/r-q50-jk44-ddl-vis/ddl-multi-constraint-table-* records one)"), out failure);
+            }
+            (string? chkName, string chkExpr) = checkConstraints[0];
+            if (chkName is null)
+            {
+                return Fail(BindOpen("NotModelled.DdlCreateTableCheck", "unnamed CHECK constraint in CREATE TABLE is not recorded"), out failure);
+            }
+            if (!TryBindCreateTableCheckColumn(chkExpr, columns, colNames, sortOrder, out string? chkColName, out SqlFailure? chkFail))
+            {
+                return Fail(chkFail!, out failure);
+            }
+            checkConstraint = new NewCheckConstraint(chkName, chkColName!, chkExpr.Trim());
         }
 
         failure = null;
-        return new BoundDdl(stmt, BoundDdlKind.CreateTable, CreateTable: new CreateTableRequest(stmt.TableName, fields, route, indexes, foreignKey));
+        return new BoundDdl(stmt, BoundDdlKind.CreateTable, CreateTable: new CreateTableRequest(stmt.TableName, fields, route, indexes, foreignKey, CheckConstraint: checkConstraint));
+    }
+
+    private static bool TryBindCreateTableCheckColumn(
+        string expression,
+        IReadOnlyList<DdlColumnDef> columns,
+        IReadOnlyList<string> colNames,
+        TextSortOrder? sortOrder,
+        out string? columnName,
+        out SqlFailure? failure)
+    {
+        columnName = null;
+        failure = null;
+        string trimmed = expression.Trim();
+        if (CheckConstraintExpression.TryParse(trimmed, out CheckConstraintExpression? single, out _))
+        {
+            if (!TryResolveFieldName(single!.ColumnName, colNames, sortOrder, out int idx, out SqlFailure? undecided))
+            {
+                failure = undecided;
+                return false;
+            }
+            if (idx < 0)
+            {
+                failure = BindOpen("NotModelled.DdlCheckUnknownColumn", $"CHECK constraint references unknown column '{single.ColumnName}'");
+                return false;
+            }
+            columnName = columns[idx].Name;
+            return true;
+        }
+        // r-q50-jk44-ddl-vis/ddl-multi-constraint-table-{accdb,mdb}: "Score >= 0 AND Score <= 100"
+        int andIdx = trimmed.IndexOf(" AND ", StringComparison.OrdinalIgnoreCase);
+        if (andIdx > 0 && trimmed.IndexOf(" AND ", andIdx + 5, StringComparison.OrdinalIgnoreCase) < 0)
+        {
+            string left = trimmed[..andIdx].Trim();
+            string right = trimmed[(andIdx + 5)..].Trim();
+            if (CheckConstraintExpression.TryParse(left, out CheckConstraintExpression? leftParsed, out _)
+                && CheckConstraintExpression.TryParse(right, out CheckConstraintExpression? rightParsed, out _)
+                && leftParsed!.LiteralKind == CheckLiteralKind.Long
+                && rightParsed!.LiteralKind == CheckLiteralKind.Long)
+            {
+                if (!TryResolveFieldName(leftParsed.ColumnName, colNames, sortOrder, out int lIdx, out SqlFailure? lUndecided))
+                {
+                    failure = lUndecided;
+                    return false;
+                }
+                if (!TryResolveFieldName(rightParsed.ColumnName, colNames, sortOrder, out int rIdx, out SqlFailure? rUndecided))
+                {
+                    failure = rUndecided;
+                    return false;
+                }
+                if (lIdx >= 0 && lIdx == rIdx && columns[lIdx].DataType.Kind == DdlTypeKind.Long)
+                {
+                    columnName = columns[lIdx].Name;
+                    return true;
+                }
+            }
+        }
+        failure = BindOpen("NotModelled.DdlCheckExpression", $"CHECK expression '{trimmed}' in CREATE TABLE is outside the recorded single-column comparison / Long AND-range subset");
+        return false;
+    }
+
+    // ---- CREATE/DROP VIEW & PROCEDURE (ADO) ------------------------------------------------------------------------
+
+    private static BoundDdl? BindCreateView(CreateViewStatement stmt, out SqlFailure? failure, SchemaRoute route)
+    {
+        if (route != SchemaRoute.Ado)
+        {
+            return Fail(BindAce(3290, SqlMessages.CreateTableSyntaxError), out failure);
+        }
+        if (!IsValidObjectName(stmt.ViewName))
+        {
+            return Fail(BindAce(3125, SqlMessages.InvalidObjectName(stmt.ViewName)), out failure);
+        }
+        QueryDefinitionCompilation compiled = QueryDefinitionCompiler.Compile(stmt.SelectSql, isAdoDdl: true);
+        if (!compiled.Succeeded)
+        {
+            return Fail(compiled.Failure!, out failure);
+        }
+        if (compiled.Family != QueryFamily.Select)
+        {
+            return Fail(BindOpen("NotModelled.DdlCreateViewBody", $"CREATE VIEW '{stmt.ViewName}' with non-SELECT body ({compiled.Family}) is not recorded"), out failure);
+        }
+        failure = null;
+        return new BoundDdl(stmt, BoundDdlKind.CreateQuery, CreateQuery: new CreateQueryDefRequest(stmt.ViewName, compiled.Family, compiled.Rows!, IsAdoDdl: true));
+    }
+
+    private static BoundDdl? BindCreateProcedure(CreateProcedureStatement stmt, out SqlFailure? failure, SchemaRoute route)
+    {
+        if (route != SchemaRoute.Ado)
+        {
+            return Fail(BindAce(3290, SqlMessages.CreateTableSyntaxError), out failure);
+        }
+        if (!IsValidObjectName(stmt.ProcedureName))
+        {
+            return Fail(BindAce(3125, SqlMessages.InvalidObjectName(stmt.ProcedureName)), out failure);
+        }
+        string effectiveSql = stmt.BodySql;
+        if (stmt.Parameters.Count > 0)
+        {
+            var sb = new StringBuilder("PARAMETERS ");
+            for (int i = 0; i < stmt.Parameters.Count; i++)
+            {
+                DdlProcedureParameter p = stmt.Parameters[i];
+                if (i > 0)
+                {
+                    sb.Append(", ");
+                }
+                sb.Append(p.Name).Append(' ');
+                switch (p.DataType.Kind)
+                {
+                    case DdlTypeKind.Long:
+                        sb.Append("Long");
+                        break;
+                    case DdlTypeKind.Text when p.DataType.Size is > 0 and int sz:
+                        sb.Append("Text(").Append(sz).Append(')');
+                        break;
+                    default:
+                        return Fail(BindOpen("NotModelled.DdlProcedureParameterType", $"CREATE PROCEDURE parameter '{p.Name}' of type {p.DataType.Kind} (size {p.DataType.Size?.ToString() ?? "none"}) is not recorded (r-q50-jk44-ddl-vis/ddl-proc-create-exec-drop-* records LONG and TEXT(n))"), out failure);
+                }
+            }
+            sb.Append("; ").Append(stmt.BodySql);
+            effectiveSql = sb.ToString();
+        }
+        QueryDefinitionCompilation compiled = QueryDefinitionCompiler.Compile(effectiveSql, isAdoDdl: true);
+        if (!compiled.Succeeded)
+        {
+            return Fail(compiled.Failure!, out failure);
+        }
+        if (compiled.Family is not (QueryFamily.Select or QueryFamily.Update))
+        {
+            return Fail(BindOpen("NotModelled.DdlCreateProcedureBody", $"CREATE PROCEDURE '{stmt.ProcedureName}' with body family {compiled.Family} is not recorded (r-q50-jk44-ddl-vis/ddl-proc-create-exec-drop-* records SELECT and UPDATE)"), out failure);
+        }
+        failure = null;
+        return new BoundDdl(stmt, BoundDdlKind.CreateQuery, CreateQuery: new CreateQueryDefRequest(stmt.ProcedureName, compiled.Family, compiled.Rows!, IsAdoDdl: true));
+    }
+
+    private static BoundDdl? BindDropQuery(DdlStatement stmt, string name, out SqlFailure? failure, SchemaRoute route)
+    {
+        if (route != SchemaRoute.Ado)
+        {
+            return Fail(BindAce(3295, SqlMessages.DropSyntaxError), out failure);
+        }
+        failure = null;
+        return new BoundDdl(stmt, BoundDdlKind.DropQuery, DropQueryName: name);
     }
 
     private static bool TryResolveReferencedColumns(
@@ -2172,6 +2352,8 @@ public static class DdlExecutor
             BoundDdlKind.DropIndex => writer.DropIndex(database.Workspace, plan.DropIndex!, schemaDb.NowDateBits()),
             BoundDdlKind.DropForeignKey => writer.DeleteRelation(database.Workspace, plan.DropForeignKey!, schemaDb.NowDateBits()),
             BoundDdlKind.DropCheckConstraint => writer.DropCheckConstraint(database.Workspace, plan.DropCheckConstraint!, schemaDb.NowDateBits()),
+            BoundDdlKind.CreateQuery => writer.CreateQueryDef(database.Workspace, plan.CreateQuery!, schemaDb.NowDateBits(), schemaDb.NowDateBits(), out _),
+            BoundDdlKind.DropQuery => writer.DeleteQueryDef(database.Workspace, plan.DropQueryName!, out _, isAdoDdl: true),
             _ => new SchemaOutcome(new SchemaRefusal(null, plan.Kind.ToString()), default, 0),
         };
 
@@ -2211,6 +2393,7 @@ public static class DdlExecutor
         3001 => SqlMessages.InvalidArgument,
         3010 => SqlMessages.TableAlreadyExists(plan.CreateTable?.Name ?? ""),
         3022 => SqlMessages.DuplicateIndexValue,
+        3058 => SqlMessages.NullInIndex,
         3125 => SqlMessages.InvalidObjectName(plan.CreateTable?.Name ?? plan.CreateIndex?.Index.Name ?? plan.AddCheckConstraint?.ConstraintName ?? plan.AddForeignKey?.ForeignKey.Name ?? ""),
         3280 => SqlMessages.CannotDeleteIndexedField,
         3355 => FormatUnrecognizedDefaultMessage(plan),

@@ -34,6 +34,7 @@ public static class QueryDefinitionCompiler
     private const short TypeUnion = 9;
 
     private const short OptionStar = 0x0001;
+    private const short OptionOwnerAccess = 0x0004;
     private const short OptionUnionDistinct = 0x0003;
     private const short OptionUnionAll = 0x0001;
 
@@ -43,8 +44,11 @@ public static class QueryDefinitionCompiler
 
     /// <summary>
     /// Compile <paramref name="sql"/> (and optional pass-through <paramref name="connect"/>) into <c>MSysQueries</c> rows.
+    /// When <paramref name="isAdoDdl"/> is true (ADO <c>CREATE VIEW</c> / <c>CREATE PROCEDURE</c>,
+    /// <c>r-q50-jk44-ddl-vis/ddl-view-create-drop-*</c>, <c>ddl-proc-create-exec-drop-*</c>), the <c>Start (0x00)</c> row
+    /// carries <c>Flag = 1</c> instead of DAO's <c>Flag = 0</c>.
     /// </summary>
-    public static QueryDefinitionCompilation Compile(string sql, string? connect = null)
+    public static QueryDefinitionCompilation Compile(string sql, string? connect = null, bool isAdoDdl = false)
     {
         if (!string.IsNullOrEmpty(connect))
         {
@@ -56,16 +60,17 @@ public static class QueryDefinitionCompiler
             return QueryDefinitionCompilation.Fail(SqlFailure.Ace(SqlPhase.Parse, 3129, SqlParser.InvalidStatement));
         }
 
+        short startFlag = isAdoDdl ? (short)1 : (short)0;
         string lead = LeadKeyword(sql);
         if (lead.Equals("SELECT", StringComparison.OrdinalIgnoreCase) || lead == "(")
         {
-            return CompileSelectOrUnion(sql);
+            return CompileSelectOrUnion(sql, startFlag);
         }
         if (lead.Equals("UPDATE", StringComparison.OrdinalIgnoreCase)
             || lead.Equals("DELETE", StringComparison.OrdinalIgnoreCase)
             || lead.Equals("INSERT", StringComparison.OrdinalIgnoreCase))
         {
-            return CompileAction(sql);
+            return CompileAction(sql, startFlag);
         }
         if (lead.Equals("TRANSFORM", StringComparison.OrdinalIgnoreCase))
         {
@@ -156,16 +161,16 @@ public static class QueryDefinitionCompiler
         return QueryDefinitionCompilation.Ok(QueryFamily.PassThrough, b.Build());
     }
 
-    private static QueryDefinitionCompilation CompileSelectOrUnion(string sql)
+    private static QueryDefinitionCompilation CompileSelectOrUnion(string sql, short startFlag = 0)
     {
         using SelectSyntax? select = SqlParser.ParseForDefinition(sql, out SqlFailure? failure);
         if (select is null)
         {
             return QueryDefinitionCompilation.Fail(failure!);
         }
-        if (select.WithOwnerAccess)
+        if (select.WithOwnerAccess && (startFlag == 0 || select.IsUnion || select.IntoTarget is not null))
         {
-            return Open("NotModelled.QueryDefOwnerAccess", "CreateQueryDef with WITH OWNERACCESS OPTION (undecided in r-q39)");
+            return Open("NotModelled.QueryDefOwnerAccess", "CreateQueryDef with WITH OWNERACCESS OPTION (only ADO CREATE VIEW plain SELECT is recorded in r-q50-jk44-ddl-vis/ddl-view-create-drop-*)");
         }
         if (select.IsUnion)
         {
@@ -175,10 +180,10 @@ public static class QueryDefinitionCompiler
         {
             return CompileSelectInto(select);
         }
-        return CompileSelect(select);
+        return CompileSelect(select, startFlag);
     }
 
-    private static QueryDefinitionCompilation CompileSelect(SelectSyntax select)
+    private static QueryDefinitionCompilation CompileSelect(SelectSyntax select, short startFlag = 0)
     {
         if (select.Predicate != SelectPredicate.All)
         {
@@ -206,15 +211,15 @@ public static class QueryDefinitionCompiler
         }
 
         string src = select.Source;
-        var b = new RowBuilder();
+        var b = new RowBuilder(startFlag);
         EmitParameters(b, select.Parameters);
 
         bool isBareStar = select.Items is [{ Star: true, StarSource: null }];
         if (isBareStar)
         {
-            if (select.Parameters.Count > 0 || select.Where is not null || select.OrderBy.Count > 0)
+            if (select.Parameters.Count > 0 || select.Where is not null || select.OrderBy.Count > 0 || select.WithOwnerAccess)
             {
-                return Open("NotModelled.QueryDefStarWithClauses", "CreateQueryDef of SELECT * with PARAMETERS/WHERE/ORDER BY (only bare SELECT * FROM T is recorded in r-q39/select-star-*)");
+                return Open("NotModelled.QueryDefStarWithClauses", "CreateQueryDef of SELECT * with PARAMETERS/WHERE/ORDER BY/WITH OWNERACCESS OPTION (only bare SELECT * FROM T is recorded in r-q39/select-star-*)");
             }
             // r-q39-querydef-bytes/select-star-accdb and select-star-mdb: [0x00, 0xFF, 0x05(Name1=T), 0x03(Flag=1)].
             b.Add(QueryAttributes.Source, name1: tableName);
@@ -236,6 +241,11 @@ public static class QueryDefinitionCompiler
                 b.Add(QueryAttributes.Output, flag: 0, name1: item.Alias, expression: item.Expression!.Text(src));
             }
             b.Add(QueryAttributes.Source, name1: tableName);
+            if (select.WithOwnerAccess)
+            {
+                // r-q50-jk44-ddl-vis/ddl-view-create-drop-{accdb,mdb} V2: Options(0x03, Flag=0x0004).
+                b.Add(QueryAttributes.Options, flag: OptionOwnerAccess);
+            }
         }
 
         if (select.Where is { } where)
@@ -346,7 +356,7 @@ public static class QueryDefinitionCompiler
         return ValidateSingleSource(arm, out _);
     }
 
-    private static QueryDefinitionCompilation CompileAction(string sql)
+    private static QueryDefinitionCompilation CompileAction(string sql, short startFlag = 0)
     {
         using ActionSyntax? action = ActionParser.Parse(sql, out SqlFailure? failure);
         if (action is null)
@@ -355,7 +365,14 @@ public static class QueryDefinitionCompiler
         }
         if (action.Parameters.Count > 0)
         {
-            return Open("NotModelled.QueryDefActionParameters", $"CreateQueryDef of {action.Kind} with PARAMETERS (undecided in r-q39)");
+            if (startFlag == 0 || action.Kind != ActionKind.Update)
+            {
+                return Open("NotModelled.QueryDefActionParameters", $"CreateQueryDef of {action.Kind} with PARAMETERS (only ADO CREATE PROCEDURE UPDATE is recorded in r-q50-jk44-ddl-vis/ddl-proc-create-exec-drop-*)");
+            }
+            if (ValidateParameters(action.Parameters) is { } actionParamRefusal)
+            {
+                return actionParamRefusal;
+            }
         }
         if (action.WithOwnerAccess)
         {
@@ -371,7 +388,8 @@ public static class QueryDefinitionCompiler
         }
 
         string src = action.Source;
-        var b = new RowBuilder();
+        var b = new RowBuilder(startFlag);
+        EmitParameters(b, action.Parameters);
         switch (action.Kind)
         {
             case ActionKind.Update:
@@ -481,7 +499,7 @@ public static class QueryDefinitionCompiler
         }
         if (select.WithOwnerAccess)
         {
-            return Open("NotModelled.QueryDefOwnerAccess", "CreateQueryDef with WITH OWNERACCESS OPTION (undecided in r-q39)");
+            return Open("NotModelled.QueryDefOwnerAccess", "CreateQueryDef of a crosstab with WITH OWNERACCESS OPTION (undecided in r-q39)");
         }
         if (select.Predicate != SelectPredicate.All || select.Top is not null || select.Having is not null || select.OrderBy.Count > 0 || select.GroupBy.Count != 1)
         {
@@ -696,10 +714,10 @@ public static class QueryDefinitionCompiler
         private readonly Dictionary<byte, int> _ordinals = [];
         private bool _lvExtraStickyZero;
 
-        public RowBuilder()
+        public RowBuilder(short startFlag = 0)
         {
-            // Every saved query begins with Start (0x00, Flag=0) followed by End (0xFF, Flag=null) (r-q39).
-            Add(QueryAttributes.Start, flag: 0);
+            // Every saved query begins with Start (0x00, Flag=0 for DAO / Flag=1 for ADO VIEW/PROCEDURE) followed by End (0xFF, Flag=null).
+            Add(QueryAttributes.Start, flag: startFlag);
             Add(QueryAttributes.End);
         }
 

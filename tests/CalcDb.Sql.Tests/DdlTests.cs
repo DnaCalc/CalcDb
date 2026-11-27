@@ -1168,7 +1168,6 @@ public sealed class DdlTests
         AssertAceError(db, "CREATE TABLE Ck (n LONG CHECK (n > 0))", 3292, ActionErrorSource.Ado);
         AssertAceError(db, "CREATE TABLE TC (ID INTEGER, W INTEGER CHECK (W > 0))", 3292, ActionErrorSource.Ado);
         AssertNotModelled(db, "CREATE TABLE Ck (n LONG CONSTRAINT CK_N CHECK (n > 0))", "NotModelled.DdlCreateTableCheck", ActionErrorSource.Ado);
-        AssertNotModelled(db, "CREATE TABLE Ck (n LONG, CONSTRAINT CK_N CHECK (n > 0))", "NotModelled.DdlCreateTableCheck", ActionErrorSource.Ado);
         AssertNotModelled(db, "CREATE TABLE Ck (n LONG, CHECK (n > 0))", "NotModelled.DdlCreateTableCheck", ActionErrorSource.Ado);
         AssertNotModelled(db, "CREATE TABLE Fk (n LONG, CONSTRAINT FK_N FOREIGN KEY (n) REFERENCES T (id))", "NotModelled.DdlForeignKey");
         Assert.Equal(before, db.Image.Snapshot());
@@ -1375,13 +1374,13 @@ public sealed class DdlTests
         AssertAceError(db, "CREATE TABLE TC (ID INTEGER, W INTEGER CHECK (W > 0))", 3290, ActionErrorSource.Database);
 
         // Unrecorded FK actions: DAO fails 3289; ADO refuses by name (NotModelled.DdlForeignKeyAction).
+        // ON DELETE CASCADE ON UPDATE CASCADE is now recorded in r-q50-jk44-ddl-vis/ddl-multi-constraint-table-*.
         foreach (string action in new[] { "ON UPDATE CASCADE", "ON DELETE SET NULL", "ON DELETE NO ACTION", "ON DELETE SET DEFAULT", "ON DELETE RESTRICT" })
         {
             string sql = $"CREATE TABLE BadAct (ID LONG CONSTRAINT PKB PRIMARY KEY, K LONG, CONSTRAINT FK_B FOREIGN KEY (K) REFERENCES P(ID) {action})";
             AssertAceError(db, sql, 3289, ActionErrorSource.Database);
             AssertNotModelled(db, sql, "NotModelled.DdlForeignKeyAction", ActionErrorSource.Ado);
         }
-        AssertNotModelled(db, "CREATE TABLE BadBoth (ID LONG CONSTRAINT PKB PRIMARY KEY, K LONG, CONSTRAINT FK_B FOREIGN KEY (K) REFERENCES P(ID) ON DELETE CASCADE ON UPDATE CASCADE)", "NotModelled.DdlForeignKeyAction", ActionErrorSource.Ado);
         Assert.Equal(beforeErrors, db.Image.Snapshot());
 
         // ALTER TABLE ADD CONSTRAINT FOREIGN KEY ... ON DELETE CASCADE, second FK to same/other parent, self-ref,
