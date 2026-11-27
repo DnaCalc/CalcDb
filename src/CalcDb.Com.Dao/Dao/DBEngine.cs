@@ -1721,6 +1721,7 @@ internal sealed unsafe class WorkspacesObject : DaoObject
         .Get("Count", (self, args) => Int16(1 + ((WorkspacesObject)self).Engine.Appended.Count))
         .Get("Item", (self, args) => ((WorkspacesObject)self).Item(args))
         .Method("Append", (self, args) => ((WorkspacesObject)self).Append(args[0]))
+        .Method("Delete", (self, args) => ((WorkspacesObject)self).Fail(3273, DaoErrors.MethodNotApplicable))
         .Method("Refresh", (self, args) => CallResult.Nothing);
 
     public WorkspacesObject(EngineState engine) : base(Decl, Vtable, engine, "DAO.Workspaces")
@@ -1747,6 +1748,11 @@ internal sealed unsafe class WorkspacesObject : DaoObject
     {
         if (Args.ObjectOf<WorkspaceObject>(arg) is not { } workspace)
         {
+            if (Args.ObjectOf<DatabaseObject>(arg) is not null)
+            {
+                // r-dao-1b/coll-append-delete-unsupported call 32: wss.Append(db) -> 3219 from DAO.Workspaces.
+                return Fail(3219, DaoErrors.InvalidOperation);
+            }
             return CallResult.Fail(Failure.NotImplemented("Workspaces.Append of an argument that is not a CalcDb Workspace"));
         }
         if (workspace.Name.Length == 0)

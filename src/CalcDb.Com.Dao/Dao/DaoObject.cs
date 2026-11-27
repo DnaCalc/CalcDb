@@ -178,6 +178,15 @@ internal static class DaoErrors
 
     /// <summary>3386 (r-q51-codecs-props-compact/prop-errors-*: Properties.Append of a draft Property before Value is set).</summary>
     public const string PropertyValueRequired = "Property 'Value' must be set before using this method.";
+
+    /// <summary>3273 (r-dao-1b/coll-append-delete-unsupported: Workspaces.Delete, Recordset.Fields.Append/Delete, QueryDef.Fields.Delete).</summary>
+    public const string MethodNotApplicable = "Method not applicable for this object.";
+
+    /// <summary>3303 (r-dao-1b/coll-delete-field-indexed: TableDef.Fields.Delete of a field participating in a relationship).</summary>
+    public const string CannotDeleteFieldInRelation = "Cannot delete this field. It is part of one or more relationships.";
+
+    /// <summary>3151 (r-cat-1b/qd-passthrough-saved-run: OpenRecordset on a saved PassThrough QueryDef with an unavailable ODBC DSN).</summary>
+    public static string OdbcConnectionFailed(string dsn) => $"ODBC--connection to '{dsn}' failed.";
 }
 
 /// <summary>

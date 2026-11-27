@@ -34,13 +34,32 @@ internal sealed unsafe class NewIndexObject : DaoObject
         .Put("IgnoreNulls", (self, args) => { nint v = args[^1]; return ForwardOrDraft(self, "IgnoreNulls", InvokeKind.PropertyPut, args, x => x.SetBool(v, b => x.IgnoreNulls = b, "IgnoreNulls")); })
         .Get("Clustered", (self, args) => ForwardOrDraft(self, "Clustered", InvokeKind.PropertyGet, args, _ => Bool(false)))
         .Get("Foreign", (self, args) => ForwardOrDraft(self, "Foreign", InvokeKind.PropertyGet, args, _ => Bool(false)))
-        .Get("DistinctCount", (self, args) => ForwardOrDraft(self, "DistinctCount", InvokeKind.PropertyGet, args, _ => Int32(0)))
-        .Get("Fields", (self, args) => ForwardOrDraft(self, "Fields", InvokeKind.PropertyGet, args, x => Object(x.Fields)))
+        // r-dao-1b/index-create-readback calls 18, 27, 36-38: a newly appended Index reads DistinctCount 0 until Indexes.Refresh rebinds it.
+        .Get("DistinctCount", (self, args) =>
+        {
+            var x = (NewIndexObject)self;
+            if (x.Invalid)
+            {
+                return x.Fail(3420, DaoErrors.ObjectInvalid);
+            }
+            if (x._attachedIndex is { } attached && x._refreshedAfterAttach)
+            {
+                return attached.Run(Decl.Member("DistinctCount", InvokeKind.PropertyGet), args);
+            }
+            return Int32(0);
+        })
+        // r-dao-1b/index-create-readback calls 11, 34-35: Fields keeps its COM identity across Indexes.Append and yields the same held Field wrappers.
+        .Get("Fields", (self, args) =>
+        {
+            var x = (NewIndexObject)self;
+            return x.Invalid ? x.Fail(3420, DaoErrors.ObjectInvalid) : Object(x.Fields);
+        })
         .Get("Properties", (self, args) => ForwardOrDraft(self, "Properties", InvokeKind.PropertyGet, args, _ => CallResult.Fail(Failure.NotModelled("NotModelled.DraftIndexProperties", "Index.Properties on a draft Index is not recorded"))))
         .Method("CreateField", (self, args) => { nint name = args.Length > 0 ? args[0] : 0; return ForwardOrDraft(self, "CreateField", InvokeKind.Method, args, x => NewIndexFieldObject.Create(x.Engine, name)); });
 
     private DefinitionCollection? _attachedOwner;
     private IndexObject? _attachedIndex;
+    private bool _refreshedAfterAttach;
 
     public NewIndexObject(EngineState engine, string name) : base(Decl, Vtable, engine, "DAO.Index")
     {
@@ -107,9 +126,13 @@ internal sealed unsafe class NewIndexObject : DaoObject
     {
         _attachedOwner = owner;
         _attachedIndex = new IndexObject(owner, table, logical);
+        _refreshedAfterAttach = false;
     }
 
     public void Rebind(TableDefinition table, LogicalIndex logical) => _attachedIndex?.Rebind(table, logical);
+
+    /// <summary>Called only on an explicit <c>TableDef.Indexes.Refresh</c> (<c>r-dao-1b/index-create-readback</c> call 36).</summary>
+    public void MarkRefreshed() => _refreshedAfterAttach = true;
 
     public void InvalidateDeleted() => _attachedIndex?.InvalidateDeleted();
 
@@ -209,7 +232,11 @@ internal sealed unsafe class NewIndexFieldsObject : DaoObject
     private static readonly nint Vtable = DualEntries.Build(Decl);
     private static readonly OperationTable Operations = new OperationTable(Decl)
         .Get("Count", (self, args) => Live(self, c => Int16(c._members.Count)))
+        .Get("Item", (self, args) => { nint index = args[0]; return Live(self, c => c.Item(index)); })
         .Method("Append", (self, args) => { nint field = args[0]; return Live(self, c => c.Append(field)); })
+        .Method("Delete", (self, args) => Live(self, c => c._index.IsAttached
+            ? c.Fail(3219, DaoErrors.InvalidOperation)
+            : CallResult.Fail(Failure.NotModelled("NotModelled.DraftIndexFieldsDelete", "Delete on a draft Index.Fields collection is not recorded"))))
         .Method("Refresh", (self, args) => Live(self, c => CallResult.Nothing));
 
     private readonly NewIndexObject _index;
@@ -219,6 +246,8 @@ internal sealed unsafe class NewIndexFieldsObject : DaoObject
 
     public IReadOnlyList<NewIndexFieldObject> Members => _members;
 
+    public bool IsAttached => _index.IsAttached;
+
     public override bool Invalid => _index.Invalid;
 
     protected override OperationTable Table => Operations;
@@ -227,6 +256,16 @@ internal sealed unsafe class NewIndexFieldsObject : DaoObject
     {
         var c = (NewIndexFieldsObject)self;
         return c.Invalid ? CallResult.Fail(Failure.Dao(3420, "DAO.Index", DaoErrors.ObjectInvalid)) : op(c);
+    }
+
+    private CallResult Item(nint index)
+    {
+        int? ordinal = CollectionLookup.Find(index, new CollectionNames([.. _members.Select(m => m.Name)]), out bool objectIndex);
+        if (objectIndex)
+        {
+            return CallResult.Fail(Failure.NotImplemented("IndexFields.Item with an object index"));
+        }
+        return ordinal is int i ? Object(_members[i]) : Fail(3265, DaoErrors.ItemNotFound);
     }
 
     private CallResult Append(nint arg)
@@ -265,10 +304,14 @@ internal sealed unsafe class NewIndexFieldObject : DaoObject
     private static readonly InterfaceDecl Decl = DaoTypes.Field3;
     private static readonly nint Vtable = DualEntries.Build(Decl);
     private static readonly OperationTable Operations = new OperationTable(Decl)
-        .Get("Name", (self, args) => Text(((NewIndexFieldObject)self).Name))
-        .Put("Name", (self, args) => { ((NewIndexFieldObject)self).Name = Args.Text(args[^1]) ?? ""; return CallResult.Nothing; })
-        .Get("Attributes", (self, args) => Int32(((NewIndexFieldObject)self).Attributes))
-        .Put("Attributes", (self, args) => ((NewIndexFieldObject)self).SetAttributes(args[^1]));
+        .Get("Name", (self, args) => Live(self, f => Text(f.Name)))
+        .Put("Name", (self, args) => { nint v = args[^1]; return Live(self, f => f.AppendedTo is { IsAttached: true }
+            ? CallResult.Fail(Failure.NotModelled("NotModelled.AttachedIndexFieldPut", "Index Field.Name put after Indexes.Append is not recorded"))
+            : f.SetName(v)); })
+        .Get("Attributes", (self, args) => Live(self, f => Int32(f.Attributes)))
+        .Put("Attributes", (self, args) => { nint v = args[^1]; return Live(self, f => f.AppendedTo is { IsAttached: true }
+            ? CallResult.Fail(Failure.NotModelled("NotModelled.AttachedIndexFieldPut", "Index Field.Attributes put after Indexes.Append is not recorded"))
+            : f.SetAttributes(v)); });
 
     public NewIndexFieldObject(EngineState engine, string name) : base(Decl, Vtable, engine, "DAO.Field") => Name = name;
 
@@ -279,7 +322,21 @@ internal sealed unsafe class NewIndexFieldObject : DaoObject
 
     public NewIndexFieldsObject? AppendedTo { get; set; }
 
+    public override bool Invalid => AppendedTo is { Invalid: true };
+
     protected override OperationTable Table => Operations;
+
+    private static CallResult Live(ComObject self, Func<NewIndexFieldObject, CallResult> op)
+    {
+        var f = (NewIndexFieldObject)self;
+        return f.Invalid ? f.Fail(3420, DaoErrors.ObjectInvalid) : op(f);
+    }
+
+    private CallResult SetName(nint value)
+    {
+        Name = Args.Text(value) ?? "";
+        return CallResult.Nothing;
+    }
 
     public static CallResult Create(EngineState engine, nint nameArg)
     {

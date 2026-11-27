@@ -439,6 +439,8 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
     /// <summary>RecordsetTypeEnum: 1 table, 2 dynaset, 4 snapshot, 8 forward-only.</summary>
     public int RecordsetType { get; }
 
+    public string RecordsetName => _entry.Name;
+
     public bool Closed { get; private set; }
 
     protected override OperationTable Table => Operations;
@@ -2419,6 +2421,8 @@ internal sealed unsafe class FieldsObject : DaoObject
     private static readonly OperationTable Operations = new OperationTable(Decl)
         .Get("Count", (self, args) => LiveRead(self, f => Int16(f.Recordset.Cursor.Table.Columns.Count)))
         .Get("Item", static (self, args) => (FieldsObject)self is { Recordset.Closed: true } closed ? closed.Recordset.Fail(3420, DaoErrors.ObjectInvalid) : ((FieldsObject)self).Item(args[0]))
+        .Method("Append", (self, args) => Live(self, f => f.Fail(3273, DaoErrors.MethodNotApplicable))) // r-dao-1b/coll-append-delete-unsupported call 34
+        .Method("Delete", (self, args) => Live(self, f => f.Fail(3273, DaoErrors.MethodNotApplicable))) // r-dao-1b/coll-append-delete-unsupported call 35
         .Method("Refresh", (self, args) => Live(self, f => CallResult.Nothing));
 
     private readonly Dictionary<int, FieldObject> _held = [];
