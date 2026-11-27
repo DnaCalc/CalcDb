@@ -558,7 +558,6 @@ internal static unsafe class AdoFieldValues
             5 => 8,   // adDouble
             6 => 8,   // adCurrency
             7 => 8,   // adDate
-            20 => 8,  // adBigInt
             72 => 16, // adGUID
             131 => (isClientCursor || desc.DecimalActualSize19OnServer) ? 19 : 16, // adNumeric (fields-meta-expressions, fields-meta-decimal-expressions)
             202 or 203 => vt == VarType.Bstr && value.Pointer->Pointer != 0 ? checked((int)OleAut.SysStringByteLen(value.Pointer->Pointer)) : 0,

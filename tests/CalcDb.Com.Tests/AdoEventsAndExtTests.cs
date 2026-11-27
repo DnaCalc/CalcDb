@@ -512,7 +512,16 @@ public sealed unsafe class AdoEventsAndExtTests
                 AssertConnectionError0(cn, unchecked((int)0x80020005), expectedSqlState: "", expectedNativeError: unchecked((int)0x80020005), expectedSource: "Provider");
 
                 Assert.Null(Put(fD, "Value", "0000-01-01 00:00:00").Failure);
+                // Committing a non-Null BSTR put on DATETIME2 has no retained ACE commit-byte record -> refused by name.
+                Outcome commitDt2 = Call(rsEdit, "Update");
+                Assert.NotNull(commitDt2.Failure);
+                Assert.Contains("NotModelled.AdoDateTime2Commit", commitDt2.Failure!.Value.Description);
                 Assert.Null(Call(rsEdit, "CancelUpdate").Failure);
+
+                // Field.ActualSize on DATETIME2 (135) has no retained ACE record -> refused by name.
+                Outcome actSize = TryGet(fD, "ActualSize");
+                Assert.NotNull(actSize.Failure);
+                Assert.Contains("NotModelled.AdoFieldActualSizeExtendedType", actSize.Failure!.Value.Description);
 
                 Release(fD);
                 Release(flds);

@@ -487,11 +487,22 @@ internal sealed unsafe class SelectRowSource : IAdoRowSource
         }
         if (_cursor.FetchFailure is { } fetch)
         {
-            MappedProviderError? mapped = fetch.Number == 11 && !_isSavedQuery
-                ? AdoSqlErrors.DivisionByZeroOnRowset()
-                : AdoSqlErrors.TryMap(fetch, _isSavedQuery, out _, isSelect: true);
+            MappedProviderError? mapped = null;
             Failure? unmodelled = null;
-            if (mapped is null)
+            if (fetch.Number == 11 && !_isSavedQuery)
+            {
+                if (_context.CursorLocation == 2)
+                {
+                    mapped = AdoSqlErrors.DivisionByZeroOnRowset();
+                }
+                else
+                {
+                    unmodelled = Failure.NotModelled(
+                        "NotModelled.AdoClientCursorFetchDivZero",
+                        "Division by zero during client-cursor SQL SELECT materialization has no retained ACE record");
+                }
+            }
+            else
             {
                 mapped = AdoSqlErrors.TryMap(fetch, _isSavedQuery, out unmodelled, isSelect: true);
             }
@@ -583,7 +594,7 @@ internal sealed unsafe class SelectRowSource : IAdoRowSource
             // r-q47-bigint-expr-edges/meta-dollar-str-dao-ado-accdb (#340), bi-select-conversions-dao-ado-accdb (#226/#292),
             // r-q49-dt2-draftprops/dt2-select-funcs-convert-dao-ado-accdb (#465/#478), r-q2-expr-sql/demand-ado-events-failing-row (ar0/ar1/ar4):
             // row-level expression errors on ad-hoc SELECT return VT_EMPTY on ADO Field.Value (DAO Field.Value fails).
-            if (!_isSavedQuery && !desc.IsBaseTableColumn && sqlFail.Number is 3464 or 11 or 6 or 94 or 5 or 3071)
+            if (!_isSavedQuery && !desc.IsBaseTableColumn && sqlFail.Number is 3464 or 11 or 6 or 94 or 3071)
             {
                 return OwnedVariant.Empty();
             }
@@ -890,6 +901,19 @@ internal sealed class MemoryRowSource : IAdoRowSource
         var rows = new List<MemoryCell[]>();
         AdoFieldDescriptor[] columns = inner.Columns;
         int cols = columns.Length;
+        if (isClientCursor)
+        {
+            for (int c = 0; c < cols; c++)
+            {
+                if (columns[c].AdoType == 135)
+                {
+                    failure = Failure.NotModelled(
+                        "NotModelled.AdoClientCursorDateTime2",
+                        $"Opening a client-cursor ADO Recordset over DATETIME2 column '{columns[c].Name}' has no retained ACE record");
+                    return null;
+                }
+            }
+        }
         try
         {
             for (int rowIndex = 0; ; rowIndex++)
@@ -6879,6 +6903,12 @@ internal sealed unsafe class RecordsetObject : AdoObject
             return CallResult.Fail(Failure.NotModelled(
                 "NotModelled.AdoActualSizeBinaryCursor",
                 $"Field.ActualSize of field type {desc.AdoType} on live client batch SELECT is not recorded"));
+        }
+        if (desc.AdoType is 20 or 135)
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.AdoFieldActualSizeExtendedType",
+                $"Field.ActualSize for ADO type {desc.AdoType} has no retained ACE record"));
         }
         if (!IsEditingNew && !TrySeekView(_position, out Failure? seekFail))
         {

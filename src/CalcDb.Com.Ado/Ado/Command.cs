@@ -479,7 +479,7 @@ internal sealed class ParametersObject : AdoObject
         // evidence/r-ado-1b/cmd-before-connection #37-38: Refresh on an open connection with an appended parameter succeeds and preserves Count.
         // evidence/r-q47-bigint-expr-edges/bi-params-ado-cmd-accdb #43, r-q49-dt2-draftprops/dt2-params-ado-cmd-accdb #41:
         // Refresh on an open adCmdStoredProc Command with empty Parameters succeeds and leaves Count == 0.
-        if (_items.Count > 0 || _owner.CommandTypeValue == AdoSqlText.AdCmdStoredProc)
+        if (_items.Count > 0 || (_owner.CommandTypeValue == AdoSqlText.AdCmdStoredProc && _owner.CommandTextValue.Length > 0))
         {
             return CallResult.Nothing;
         }

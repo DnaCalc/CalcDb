@@ -618,14 +618,14 @@ internal sealed unsafe class ConnectionObject : AdoObject
         if (hr == HResults.DISP_E_UNKNOWNNAME && count == 1 && names is not null && names[0] is not null && ids is not null)
         {
             ConnectionObject cn = Recover<ConnectionObject>(self);
-            if (cn.IsOpen && !cn.IsPersistenceOpen && cn.OpenSession is not null)
+            if (cn.IsOpen && !cn.IsPersistenceOpen && cn.OpenSession is { } open && open.Profile.Format != FileFormat.Jet4)
             {
                 string name = System.Runtime.InteropServices.Marshal.PtrToStringUni((nint)names[0]) ?? "";
                 if (string.Equals(name, "Rollback", StringComparison.OrdinalIgnoreCase))
                 {
                     // r-q2-cat-txn-lock/txn-local-two-ado-connections-events #28,
                     // txn-support-ado-rollback-control-events #18/#19/#20/#37/#40/#41:
-                    // ADODB.Connection dynamic-command dispatch resolves "Rollback" on an open ACE Connection.
+                    // ADODB.Connection dynamic-command dispatch resolves "Rollback" on an open ACCDB Connection.
                     ids[0] = DynamicRollbackDispId;
                     return HResults.S_OK;
                 }
@@ -648,8 +648,16 @@ internal sealed unsafe class ConnectionObject : AdoObject
     {
         if (dispId == DynamicRollbackDispId && (flags & 1) != 0)
         {
+            if (iid is not null && *iid != Guid.Empty)
+            {
+                return HResults.DISP_E_UNKNOWNINTERFACE;
+            }
+            if (parameters is not null && parameters->NamedArgCount != 0)
+            {
+                return unchecked((int)0x80020007); // DISP_E_NONAMEDARGS
+            }
             ConnectionObject cn = Recover<ConnectionObject>(self);
-            if (cn.IsOpen && !cn.IsPersistenceOpen && cn.OpenSession is not null
+            if (cn.IsOpen && !cn.IsPersistenceOpen && cn.OpenSession is { } open && open.Profile.Format != FileFormat.Jet4
                 && (parameters is null || parameters->ArgCount == 0))
             {
                 return cn.InvokeDynamicRollback(info);
