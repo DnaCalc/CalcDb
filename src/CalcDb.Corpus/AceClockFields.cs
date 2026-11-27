@@ -45,17 +45,33 @@ public enum ClockFieldKind
     /// word (<c>jet4.data.stamp</c>) of the first LVAL page it names, which hold the same value. It is a millisecond tick
     /// count: in r-q13-new-file-interop ace-created a2/a3 it differs by 42,875 where the table's MSysObjects DateCreate
     /// differs by 42,876 ms, its value is the machine's uptime in ms, and a compaction 15 or 31 ms later rewrites it
-    /// in steps of the 15.6 ms system tick. Set aside only where the two copies agree within the file and are not zero;
-    /// the continuation pages' stamps (zero in the record) and a single-row value's word (no record) are compared.
+    /// in steps of the 15.6 ms system tick. Set aside only where the two copies agree within the file and are not zero
+    /// (including freed data/LVAL page pairs left after <c>DROP TABLE</c>: r-q54-excl-ddl-ix-cmd/drop-populated-indexed-lval-accdb,
+    /// drop-populated-indexed-lval-mdb); the continuation pages' stamps (zero in the record) and a single-row value's
+    /// word (no record) are compared.
     /// </summary>
     LongValueStamp,
+
+    /// <summary>
+    /// ACE's compiled query execution plan in <c>MSysObjects.Lv</c> on a Type 5 (QueryDef/View/Procedure) row — live
+    /// or deleted — and its compiled-plan LVAL page(s) (identified by the 10-byte compiled-plan header
+    /// <c>FF FF FF FF 2A D7 7D 5F 06 01</c>): the 3-byte length word (and chained stamp word, when non-zero and agreeing
+    /// with the target LVAL page in whole-file comparison) of the <c>Lv</c> LVAL descriptor, and the compiled-plan LVAL
+    /// page's variable-length layout words (<c>free</c>, <c>stamp</c> when non-zero, <c>slot 0</c> offset) and payload
+    /// region <c>[0x10, 0x1000)</c> (r-q47-bigint-expr-edges/bi-params-dao-querydef-accdb,
+    /// r-q49-dt2-draftprops/dt2-params-dao-querydef-accdb, r-q50-jk44-ddl-vis/ddl-proc-create-exec-drop-accdb,
+    /// ddl-proc-create-exec-drop-mdb, r-q54-excl-ddl-ix-cmd/ado-cmd-exec-noparam-accdb, ado-cmd-exec-noparam-mdb).
+    /// The descriptor's flags byte and <c>(slot, page)</c> pointer, and the LVAL page's page-kind, <c>"LVAL"</c>
+    /// marker, and <c>rowCount</c> remain strictly compared.
+    /// </summary>
+    CompiledPlanLval,
 }
 
 /// <summary>One clock field of a file: its kind, where it is in the stored file, and where in the structure it was found.</summary>
 public sealed record ClockField(ClockFieldKind Kind, long Offset, int Length, string Where)
 {
     /// <summary>Set aside: the clock value itself. The other kinds are compared with the clock's contribution removed.</summary>
-    public bool SetAside => Kind is ClockFieldKind.CreationDate or ClockFieldKind.CatalogDate or ClockFieldKind.LongValueStamp;
+    public bool SetAside => Kind is ClockFieldKind.CreationDate or ClockFieldKind.CatalogDate or ClockFieldKind.LongValueStamp or ClockFieldKind.CompiledPlanLval;
 
     public string Location(int pageSize) => string.Create(CultureInfo.InvariantCulture, $"page {Offset / pageSize} offset 0x{Offset % pageSize:X}");
 }
@@ -87,29 +103,54 @@ public static class AceClockFields
     /// <summary>MSysObjects' TableDef is page 2 of every Jet 4 / ACE file (II-06 §1; the catalog's own row names Id 2).</summary>
     private const uint MSysObjectsPage = 2;
 
+    /// <summary>10-byte header signature of ACE's compiled query execution plan stored in <c>MSysObjects.Lv</c> LVAL pages.</summary>
+    private static ReadOnlySpan<byte> CompiledPlanMagic => [0xFF, 0xFF, 0xFF, 0xFF, 0x2A, 0xD7, 0x7D, 0x5F, 0x06, 0x01];
+
     /// <summary>Profiles whose recorded ACE repeats decide their clock fields (ACE 2007: c4rv/4t24; Jet 4, ACE 2010, ACE 2016, ACE 2019: 6qw5).</summary>
     private static bool HasRecordedRepeats(FileFormat format) =>
         format is FileFormat.Jet4 or FileFormat.Ace2007 or FileFormat.Ace2010 or FileFormat.Ace2016 or FileFormat.Ace2019;
 
     /// <summary>
-    /// Profiles whose recorded ACE repeats show an intact deleted MSysObjects row
-    /// (ACE 2007: r-q28-schema-write-open/pair-dao-Aa-aA, r-q39-querydef-bytes/delete-querydef-accdb;
-    /// Jet 4: r-q39-querydef-bytes/delete-querydef-mdb).
+    /// Profiles whose recorded ACE repeats show deleted MSysObjects rows (intact or truncated)
+    /// (ACE 2007: r-q28-schema-write-open/pair-dao-Aa-aA, r-q39-querydef-bytes/delete-querydef-accdb,
+    /// r-q44-ddl-alter-types/dropcon-check-accdb-ado, r-q49-dt2-draftprops/draft-props-errors-accdb;
+    /// Jet 4: r-q39-querydef-bytes/delete-querydef-mdb, r-q44-ddl-alter-types/dropcon-check-mdb-ado,
+    /// r-q49-dt2-draftprops/draft-props-errors-mdb; ACE 2016: r-q47-bigint-expr-edges/bi-select-into-accdb;
+    /// ACE 2019: r-q49-dt2-draftprops/dt2-select-into-accdb).
     /// </summary>
     private static bool AllowsDeletedMSysObjectsRows(FileFormat format) =>
+        format is FileFormat.Ace2007 or FileFormat.Jet4 or FileFormat.Ace2016 or FileFormat.Ace2019;
+
+    /// <summary>
+    /// Profiles whose recorded ACE repeats show a vacated MSysObjects prefix copy below a later commit
+    /// (ACE 2007: r-q28-schema-write-open/dao-fields-7, r-q39-querydef-bytes/action-update-accdb,
+    /// r-q45-querydef-stream-rollback/qd-put-name-accdb, r-q51-codecs-props-compact/prop-errors-accdb,
+    /// r-q54-excl-ddl-ix-cmd/qd-deferred-then-ddl-accdb; Jet 4: r-q34-ddl-sweep/nn-two-cols-mdb-dao,
+    /// r-q39-querydef-bytes/delete-querydef-mdb, r-q45-querydef-stream-rollback/qd-put-name-mdb,
+    /// r-q51-codecs-props-compact/prop-errors-mdb, r-q54-excl-ddl-ix-cmd/qd-deferred-then-ddl-mdb;
+    /// ACE 2010: r-fmt-1/create-accdb-calculated; ACE 2016: r-q47-bigint-expr-edges/bi-dao-createfield-addnew-accdb,
+    /// bi-params-ado-cmd-accdb, bi-params-dao-querydef-accdb; ACE 2019: r-q49-dt2-draftprops/dt2-dao-createfield-addnew-accdb,
+    /// dt2-params-ado-cmd-accdb).
+    /// </summary>
+    private static bool AllowsVacatedMSysObjectsCopies(FileFormat format) =>
+        format is FileFormat.Ace2007 or FileFormat.Jet4 or FileFormat.Ace2010 or FileFormat.Ace2016 or FileFormat.Ace2019;
+
+    /// <summary>
+    /// Profiles whose recorded ACE repeats show a chained long-value tick stamp (ACE 2007: r-q13-new-file-interop/ace-created a2/a3,
+    /// r-q54-excl-ddl-ix-cmd/drop-populated-indexed-lval-accdb; Jet 4: r-q54-excl-ddl-ix-cmd/drop-populated-indexed-lval-mdb).
+    /// </summary>
+    private static bool AllowsLongValueStamp(FileFormat format) =>
         format is FileFormat.Ace2007 or FileFormat.Jet4;
 
     /// <summary>
-    /// Profiles whose recorded ACE repeats show a vacated MSysObjects prefix copy below the lowest row
-    /// (ACE 2007: r-q28-schema-write-open/dao-fields-7, r-q39-querydef-bytes/action-update-accdb, pause-open-accdb,
-    /// union-accdb, sql-put-type-change-accdb; Jet 4: r-q34-ddl-sweep/nn-two-cols-mdb-dao,
-    /// r-q39-querydef-bytes/delete-querydef-mdb; ACE 2010: r-fmt-1/create-accdb-calculated).
+    /// Profiles whose recorded ACE repeats show compiled query plans in <c>MSysObjects.Lv</c>
+    /// (ACE 2007: r-q50-jk44-ddl-vis/ddl-proc-create-exec-drop-accdb, r-q54-excl-ddl-ix-cmd/ado-cmd-exec-noparam-accdb;
+    /// Jet 4: r-q50-jk44-ddl-vis/ddl-proc-create-exec-drop-mdb, r-q54-excl-ddl-ix-cmd/ado-cmd-exec-noparam-mdb;
+    /// ACE 2016: r-q47-bigint-expr-edges/bi-params-dao-querydef-accdb;
+    /// ACE 2019: r-q49-dt2-draftprops/dt2-params-dao-querydef-accdb).
     /// </summary>
-    private static bool AllowsVacatedMSysObjectsCopies(FileFormat format) =>
-        format is FileFormat.Ace2007 or FileFormat.Jet4 or FileFormat.Ace2010;
-
-    /// <summary>Profiles whose recorded ACE repeats show a chained long-value tick stamp (ACE 2007: r-q13-new-file-interop/ace-created a2/a3).</summary>
-    private static bool AllowsLongValueStamp(FileFormat format) => format == FileFormat.Ace2007;
+    private static bool AllowsCompiledPlanLval(FileFormat format) =>
+        format is FileFormat.Ace2007 or FileFormat.Jet4 or FileFormat.Ace2016 or FileFormat.Ace2019;
 
     private readonly record struct MSysObjectsColumns(
         ColumnDescriptor DateCreate,
@@ -118,7 +159,11 @@ public static class AceClockFields
         ColumnDescriptor Owner,
         ColumnDescriptor Name,
         ColumnDescriptor Type,
-        ColumnDescriptor Id);
+        ColumnDescriptor Id,
+        ColumnDescriptor ParentId,
+        ColumnDescriptor? Lv);
+
+    private readonly record struct KnownMSysObjectsRow(int Start, int Length, int ColumnCount, FieldRead NameField, FieldRead OwnerField);
 
     public static ClockFieldMap? Find(ReadOnlyMemory<byte> file, out string? refusal)
     {
@@ -165,12 +210,29 @@ public static class AceClockFields
 
         bool allowDeletedRows = AllowsDeletedMSysObjectsRows(profile.Format);
         bool allowVacatedCopies = AllowsVacatedMSysObjectsCopies(profile.Format);
+        bool allowCompiledPlan = AllowsCompiledPlanLval(profile.Format);
+
+        // Compiled query plans in LVAL pages (live 0x01 or freed 0x09, identified by CompiledPlanMagic).
+        // Discovered before MSysObjects so whole-file MSysObjects.Lv descriptors verify target page and stamp agreement.
+        Dictionary<uint, uint>? compiledPlanPageStamps = null;
+        if (allowCompiledPlan)
+        {
+            for (uint p = 1; p < report.PageCount; p++)
+            {
+                int pageOffset = (int)(p * (long)pageSize);
+                if (TryNormalizeCompiledPlanLvalPage(p, pageOffset, bytes.Slice(pageOffset, pageSize), normalized.AsSpan(pageOffset, pageSize), d, fields, out uint pageStamp))
+                {
+                    (compiledPlanPageStamps ??= [])[p] = pageStamp;
+                }
+            }
+        }
+
         uint? acesPage = null;
         foreach (DataPageSummary dataPage in report.DataPages.Where(p => !p.IsLval && p.Owner == MSysObjectsPage))
         {
             int pageOffset = (int)(dataPage.Page * (long)pageSize);
             if (!NormalizeMSysObjectsDataPage(dataPage.Page, pageOffset, bytes.Slice(pageOffset, pageSize), normalized.AsSpan(pageOffset, pageSize),
-                objects, cols, sidKeystream, allowDeletedRows, allowVacatedCopies, d, fields, ref acesPage, out refusal))
+                objects, cols, sidKeystream, allowDeletedRows, allowVacatedCopies, allowCompiledPlan, compiledPlanPageStamps, d, fields, ref acesPage, out refusal))
             {
                 return null;
             }
@@ -193,13 +255,16 @@ public static class AceClockFields
         }
 
         // Chained long values: the definition's stamp word and the first LVAL page's stamp, where the two agree.
-        // Recorded by ACE 2007 repeats (r-q13-new-file-interop/ace-created a2/a3); no Jet 4, ACE 2010, ACE 2016, or
-        // ACE 2019 repeat writes a chained long value, so those profiles leave LongValueStamp strict.
+        // Recorded by ACE 2007 (r-q13-new-file-interop/ace-created a2/a3, r-q54-excl-ddl-ix-cmd/drop-populated-indexed-lval-accdb)
+        // and Jet 4 (r-q54-excl-ddl-ix-cmd/drop-populated-indexed-lval-mdb); ACE 2010/2016/2019 leave LongValueStamp strict.
         if (AllowsLongValueStamp(profile.Format))
         {
             int stamp = d.DataPage.Stamp.Offset;
+            var liveTablePages = new HashSet<uint>();
+            var maskedStampOffsets = new HashSet<long>();
             foreach (TableDefinition table in report.TableDefs)
             {
+                liveTablePages.Add(table.FirstPage);
                 ColumnDescriptor[] longColumns = [.. table.Columns.Where(c => c.TypeCode is NativeTypes.Memo or NativeTypes.Ole)];
                 if (longColumns.Length == 0)
                 {
@@ -216,7 +281,8 @@ public static class AceClockFields
                     {
                         if (row.ReadField(c, fixedEnd) is not { Outcome: FieldOutcome.Bytes } f
                             || LongValuePlan.Inspect(bytes.Slice(bodyStart + f.Start, f.End - f.Start), out _) is not { Form: LongValueForm.Chain } plan
-                            || plan.First.Page == 0 || plan.First.Page >= report.PageCount)
+                            || plan.First.Page == 0 || plan.First.Page >= report.PageCount
+                            || (compiledPlanPageStamps is not null && compiledPlanPageStamps.ContainsKey(plan.First.Page)))
                         {
                             continue;
                         }
@@ -228,11 +294,85 @@ public static class AceClockFields
                             continue;
                         }
                         int definitionWord = bodyStart + f.Start + 8;
-                        normalized.AsSpan(definitionWord, 4).Clear();
-                        normalized.AsSpan((int)lvalPage + stamp, 4).Clear();
+                        long lvalStampOffset = lvalPage + stamp;
                         string where = $"TableDef {table.FirstPage} row page {page} slot {slot.Slot} {c.Name}";
-                        fields.Add(new ClockField(ClockFieldKind.LongValueStamp, definitionWord, 4, $"{where} long-value stamp"));
-                        fields.Add(new ClockField(ClockFieldKind.LongValueStamp, lvalPage + stamp, 4, $"LVAL page {plan.First.Page} stamp of {where}"));
+                        if (maskedStampOffsets.Add(definitionWord))
+                        {
+                            normalized.AsSpan(definitionWord, 4).Clear();
+                            fields.Add(new ClockField(ClockFieldKind.LongValueStamp, definitionWord, 4, $"{where} long-value stamp"));
+                        }
+                        if (maskedStampOffsets.Add(lvalStampOffset))
+                        {
+                            normalized.AsSpan((int)lvalStampOffset, 4).Clear();
+                            fields.Add(new ClockField(ClockFieldKind.LongValueStamp, lvalStampOffset, 4, $"LVAL page {plan.First.Page} stamp of {where}"));
+                        }
+                    }
+                }
+            }
+
+            // Freed data pages of dropped tables (owner TDEF is no longer in report.TableDefs): still carry the
+            // matching (row definition +8 word, LVAL page 0x08 stamp) tick pair
+            // (r-q54-excl-ddl-ix-cmd/drop-populated-indexed-lval-accdb, drop-populated-indexed-lval-mdb).
+            foreach (DataPageSummary dataPage in report.DataPages)
+            {
+                if (dataPage.IsLval || dataPage.Owner == MSysObjectsPage || liveTablePages.Contains(dataPage.Owner))
+                {
+                    continue;
+                }
+                int pageOffset = (int)(dataPage.Page * (long)pageSize);
+                ReadOnlySpan<byte> pageSpan = bytes.Slice(pageOffset, pageSize);
+                int rowCount = (int)d.DataPage.RowCount.Read(pageSpan);
+                for (int s = 0; s < rowCount; s++)
+                {
+                    if (DataPages.CheckedSlot(pageSpan, s, d, out _) is not { Deleted: false, Overflow: false } slot)
+                    {
+                        continue;
+                    }
+                    int bodyStart = pageOffset + slot.Start;
+                    ReadOnlySpan<byte> body = bytes.Slice(bodyStart, slot.Length);
+                    if (!RowEnvelope.TryOpen(body, d, out RowEnvelope row, out _) || row.MaskStart < d.Row.FixedBase + 4)
+                    {
+                        continue;
+                    }
+                    int v = BinaryPrimitives.ReadUInt16LittleEndian(body[(row.MaskStart - 2)..]);
+                    int trailerStart = row.MaskStart - 4 - (2 * v);
+                    if (v <= 0 || trailerStart < d.Row.FixedBase)
+                    {
+                        continue;
+                    }
+                    for (int j = 0; j < v; j++)
+                    {
+                        int sj = BinaryPrimitives.ReadUInt16LittleEndian(body[(row.MaskStart - 4 - (2 * j))..]);
+                        int ej = BinaryPrimitives.ReadUInt16LittleEndian(body[(row.MaskStart - 6 - (2 * j))..]);
+                        if (ej - sj != 12 || sj < d.Row.FixedBase || ej > trailerStart)
+                        {
+                            continue;
+                        }
+                        if (LongValuePlan.Inspect(body.Slice(sj, 12), out _) is not { Form: LongValueForm.Chain } plan
+                            || plan.First.Page == 0 || plan.First.Page >= report.PageCount
+                            || (compiledPlanPageStamps is not null && compiledPlanPageStamps.ContainsKey(plan.First.Page)))
+                        {
+                            continue;
+                        }
+                        long lvalPage = (long)plan.First.Page * pageSize;
+                        ReadOnlySpan<byte> target = bytes.Slice((int)lvalPage, pageSize);
+                        if (!DataPages.IsLvalPage(target, d) || plan.OpaqueWord == 0 || BinaryPrimitives.ReadUInt32LittleEndian(target[stamp..]) != plan.OpaqueWord)
+                        {
+                            continue;
+                        }
+                        int definitionWord = bodyStart + sj + 8;
+                        long lvalStampOffset = lvalPage + stamp;
+                        string where = $"freed TableDef {dataPage.Owner} row page {dataPage.Page} slot {slot.Slot} var[{j}]";
+                        if (maskedStampOffsets.Add(definitionWord))
+                        {
+                            normalized.AsSpan(definitionWord, 4).Clear();
+                            fields.Add(new ClockField(ClockFieldKind.LongValueStamp, definitionWord, 4, $"{where} long-value stamp"));
+                        }
+                        if (maskedStampOffsets.Add(lvalStampOffset))
+                        {
+                            normalized.AsSpan((int)lvalStampOffset, 4).Clear();
+                            fields.Add(new ClockField(ClockFieldKind.LongValueStamp, lvalStampOffset, 4, $"LVAL page {plan.First.Page} stamp of {where}"));
+                        }
                     }
                 }
             }
@@ -328,6 +468,7 @@ public static class AceClockFields
         }
         bool allowDeletedRows = AllowsDeletedMSysObjectsRows(context.Format);
         bool allowVacatedCopies = AllowsVacatedMSysObjectsCopies(context.Format);
+        bool allowCompiledPlan = AllowsCompiledPlanLval(context.Format);
         int pageCount = slice.Length / pageSize;
         uint? unusedAcesPage = null;
         for (int k = 0; k < pageCount; k++)
@@ -360,10 +501,14 @@ public static class AceClockFields
             if (page[d.DataPage.Kind.Offset] == 0x01 && !DataPages.IsLvalPage(page, d) && d.DataPage.Owner.Read(page) == MSysObjectsPage)
             {
                 ReadOnlySpan<byte> sidKeystream = hasSid ? sidBuf : ReadOnlySpan<byte>.Empty;
-                if (!NormalizeMSysObjectsDataPage(pageNumber, pageFileOffset, page, normPage, context.MSysObjects, cols, sidKeystream, allowDeletedRows, allowVacatedCopies, d, fields, ref unusedAcesPage, out refusal))
+                if (!NormalizeMSysObjectsDataPage(pageNumber, pageFileOffset, page, normPage, context.MSysObjects, cols, sidKeystream, allowDeletedRows, allowVacatedCopies, allowCompiledPlan, compiledPlanPageStamps: null, d, fields, ref unusedAcesPage, out refusal))
                 {
                     return null;
                 }
+            }
+            else if (allowCompiledPlan)
+            {
+                TryNormalizeCompiledPlanLvalPage(pageNumber, pageFileOffset, page, normPage, d, fields, out _);
             }
         }
         fields.Sort((a, b) => a.Offset.CompareTo(b.Offset));
@@ -407,27 +552,28 @@ public static class AceClockFields
         ColumnDescriptor? name = Column(objects, "Name", NativeTypes.Text);
         ColumnDescriptor? type = Column(objects, "Type", NativeTypes.Integer);
         ColumnDescriptor? id = Column(objects, "Id", NativeTypes.Long);
-        if (dateCreate is null || dateUpdate is null || flags is null || owner is null || name is null || type is null || id is null)
+        ColumnDescriptor? parentId = Column(objects, "ParentId", NativeTypes.Long);
+        ColumnDescriptor? lv = Column(objects, "Lv", NativeTypes.Ole);
+        if (dateCreate is null || dateUpdate is null || flags is null || owner is null || name is null || type is null || id is null || parentId is null)
         {
-            refusal = "MSysObjects lacks DateCreate, DateUpdate, Flags, Owner, Name, Type or Id with its recorded type";
+            refusal = "MSysObjects lacks DateCreate, DateUpdate, Flags, Owner, Name, Type, Id or ParentId with its recorded type";
             return false;
         }
-        cols = new MSysObjectsColumns(dateCreate, dateUpdate, flags, owner, name, type, id);
+        cols = new MSysObjectsColumns(dateCreate, dateUpdate, flags, owner, name, type, id, parentId, lv);
         return true;
     }
 
     /// <summary>
     /// Locates and normalizes MSysObjects clock fields on one data page: live non-overflow rows, (when
-    /// <paramref name="allowDeletedRows"/> is true) intact deleted rows immediately below <c>minStart</c> when the page
-    /// holds a deleted slot (r-q28-schema-write-open/pair-dao-Aa-aA; r-q39-querydef-bytes/delete-querydef-accdb,
-    /// delete-querydef-mdb), and (when <paramref name="allowVacatedCopies"/> is true) any vacated prefix copy of the
-    /// anchor row left below it by an in-place shrink (r-q28-schema-write-open/dao-fields-7;
-    /// r-q34-ddl-sweep/nn-two-cols-mdb-dao; r-fmt-1/create-accdb-calculated; r-q39-querydef-bytes/action-update-accdb,
-    /// pause-open-accdb, union-accdb, sql-put-type-change-accdb, delete-querydef-mdb).
+    /// <paramref name="allowDeletedRows"/> is true) intact or truncated deleted rows in the contiguous free gap
+    /// <c>[directoryEnd, minStart)</c> when the page holds a deleted slot, and (when <paramref name="allowVacatedCopies"/>
+    /// is true) vacated prefix copies (including renamed or truncated copies down to <c>DateCreate</c>) of live or
+    /// deleted rows on the page. When <paramref name="allowCompiledPlan"/> is true, also normalizes Type 5
+    /// <c>Lv</c> compiled-plan LVAL length/stamp words.
     /// </summary>
     private static bool NormalizeMSysObjectsDataPage(uint pageNumber, long pageFileOffset, ReadOnlySpan<byte> page, Span<byte> normalizedPage,
-        TableDefinition objects, MSysObjectsColumns cols, ReadOnlySpan<byte> sidKeystream, bool allowDeletedRows, bool allowVacatedCopies, FormatDescriptor d, List<ClockField> fields,
-        ref uint? acesPage, out string? refusal)
+        TableDefinition objects, MSysObjectsColumns cols, ReadOnlySpan<byte> sidKeystream, bool allowDeletedRows, bool allowVacatedCopies,
+        bool allowCompiledPlan, Dictionary<uint, uint>? compiledPlanPageStamps, FormatDescriptor d, List<ClockField> fields, ref uint? acesPage, out string? refusal)
     {
         refusal = null;
         DataPageRules r = d.DataPage;
@@ -445,7 +591,8 @@ public static class AceClockFields
         }
         int minStart = d.PageSize;
         int deletedSlotCount = 0;
-        SlotView? lowestLive = null;
+        var knownRows = new List<KnownMSysObjectsRow>();
+        var knownParentIds = new HashSet<int> { 0x0F000001, 0x0F000002, 0x0F000003 };
         for (int s = 0; s < count; s++)
         {
             if (DataPages.CheckedSlot(page, s, d, out string? slotFailure) is not { } slot)
@@ -466,10 +613,6 @@ public static class AceClockFields
             {
                 continue;
             }
-            if (lowestLive is null || slot.Start < lowestLive.Value.Start)
-            {
-                lowestLive = slot;
-            }
             ReadOnlySpan<byte> body = page.Slice(slot.Start, slot.Length);
             if (!RowEnvelope.TryOpen(body, d, out RowEnvelope row, out _))
             {
@@ -477,7 +620,13 @@ public static class AceClockFields
             }
             int fixedEnd = objects.KnownFixedEnd(row.ColumnCount, d);
             string where = $"MSysObjects row page {pageNumber} slot {slot.Slot}";
-            NormalizeMSysObjectsRowFields(row, fixedEnd, pageFileOffset + slot.Start, normalizedPage.Slice(slot.Start, slot.Length), cols, sidKeystream, where, fields);
+            NormalizeMSysObjectsRowFields(body, row, fixedEnd, pageFileOffset + slot.Start, normalizedPage.Slice(slot.Start, slot.Length), cols, sidKeystream, allowCompiledPlan, compiledPlanPageStamps, where, fields);
+            knownRows.Add(new KnownMSysObjectsRow(slot.Start, slot.Length, row.ColumnCount, row.ReadField(cols.Name, fixedEnd), row.ReadField(cols.Owner, fixedEnd)));
+            int parentIdOff = d.Row.FixedBase + cols.ParentId.FixedOffset;
+            if (body.Length >= parentIdOff + 4)
+            {
+                knownParentIds.Add(BinaryPrimitives.ReadInt32LittleEndian(body[parentIdOff..]));
+            }
             if (row.ReadField(cols.Name, fixedEnd) is { Outcome: FieldOutcome.Bytes } n
                 && row.ReadField(cols.Type, fixedEnd) is { Outcome: FieldOutcome.Bytes } t
                 && row.ReadField(cols.Id, fixedEnd) is { Outcome: FieldOutcome.Bytes } i
@@ -495,43 +644,53 @@ public static class AceClockFields
             return true;
         }
 
-        int anchorStart = -1;
-        int anchorLength = 0;
         int cursor = minStart;
-        if (allowDeletedRows)
+        int deletedRemaining = deletedSlotCount;
+        while (cursor > directoryEnd)
         {
-            for (int k = 0; k < deletedSlotCount && cursor > directoryEnd; k++)
+            if (allowDeletedRows && deletedRemaining > 0
+                && TryOpenDeletedRowEndingAt(page, directoryEnd, cursor, objects, cols, d, out int deletedStart, out RowEnvelope deletedRow))
             {
-                if (!TryOpenDeletedRowEndingAt(page, directoryEnd, cursor, objects, cols, d, out int deletedStart, out RowEnvelope deletedRow))
-                {
-                    break;
-                }
                 int deletedLen = cursor - deletedStart;
                 int fixedEnd = objects.KnownFixedEnd(deletedRow.ColumnCount, d);
                 string where = $"MSysObjects deleted row page {pageNumber} offset {deletedStart}";
-                NormalizeMSysObjectsRowFields(deletedRow, fixedEnd, pageFileOffset + deletedStart, normalizedPage.Slice(deletedStart, deletedLen), cols, sidKeystream, where, fields);
-                anchorStart = deletedStart;
-                anchorLength = deletedLen;
+                NormalizeMSysObjectsRowFields(page.Slice(deletedStart, deletedLen), deletedRow, fixedEnd, pageFileOffset + deletedStart,
+                    normalizedPage.Slice(deletedStart, deletedLen), cols, sidKeystream, allowCompiledPlan, compiledPlanPageStamps, where, fields);
+                knownRows.Add(new KnownMSysObjectsRow(deletedStart, deletedLen, deletedRow.ColumnCount, deletedRow.ReadField(cols.Name, fixedEnd), deletedRow.ReadField(cols.Owner, fixedEnd)));
+                deletedRemaining--;
                 cursor = deletedStart;
+                continue;
             }
-        }
-        if (anchorStart < 0 && lowestLive is { } live && live.Start == minStart)
-        {
-            anchorStart = live.Start;
-            anchorLength = live.Length;
-        }
 
-        if (allowVacatedCopies
-            && anchorStart > directoryEnd
-            && RowEnvelope.TryOpen(page.Slice(anchorStart, anchorLength), d, out RowEnvelope anchorRow, out _))
-        {
-            NormalizeVacatedCopiesBelow(pageNumber, pageFileOffset, page, normalizedPage, directoryEnd, anchorStart, anchorLength, anchorRow, objects, cols, sidKeystream, d, fields);
+            KnownMSysObjectsRow vacAnchor = default;
+            int vacPos = allowVacatedCopies
+                ? FindHighestVacatedCopyEndingAt(page, directoryEnd, cursor, knownRows, objects, cols, d, out vacAnchor)
+                : -1;
+            int truncPos = (allowDeletedRows && deletedRemaining > 0)
+                ? FindHighestTruncatedDeletedRowEndingAt(page, directoryEnd, cursor, knownParentIds, objects, cols, d)
+                : -1;
+
+            if (vacPos < 0 && truncPos < 0)
+            {
+                break;
+            }
+            if (vacPos >= truncPos)
+            {
+                NormalizeVacatedCopyAt(pageNumber, pageFileOffset, page, normalizedPage, vacPos, cursor, vacAnchor, objects, cols, sidKeystream, d, fields);
+                cursor = vacPos;
+            }
+            else
+            {
+                NormalizeTruncatedDeletedRowAt(pageNumber, pageFileOffset, normalizedPage, truncPos, cols, d, fields);
+                deletedRemaining--;
+                cursor = truncPos;
+            }
         }
         return true;
     }
 
-    private static void NormalizeMSysObjectsRowFields(RowEnvelope row, int fixedEnd, long rowFileOffset, Span<byte> normalizedBody,
-        MSysObjectsColumns cols, ReadOnlySpan<byte> sidKeystream, string where, List<ClockField> fields)
+    private static void NormalizeMSysObjectsRowFields(ReadOnlySpan<byte> body, RowEnvelope row, int fixedEnd, long rowFileOffset, Span<byte> normalizedBody,
+        MSysObjectsColumns cols, ReadOnlySpan<byte> sidKeystream, bool allowCompiledPlan, Dictionary<uint, uint>? compiledPlanPageStamps, string where, List<ClockField> fields)
     {
         foreach (ColumnDescriptor c in (ReadOnlySpan<ColumnDescriptor>)[cols.DateCreate, cols.DateUpdate])
         {
@@ -546,6 +705,104 @@ public static class AceClockFields
             Unmask(normalizedBody.Slice(o.Start, 2), sidKeystream);
             fields.Add(new ClockField(ClockFieldKind.MaskedSid, rowFileOffset + o.Start, 2, $"{where} Owner"));
         }
+        if (allowCompiledPlan && cols.Lv is { } lvCol
+            && row.ReadField(cols.Type, fixedEnd) is { Outcome: FieldOutcome.Bytes } t && t.End - t.Start == 2
+            && BinaryPrimitives.ReadInt16LittleEndian(body[t.Start..]) == 5
+            && row.ReadField(lvCol, fixedEnd) is { Outcome: FieldOutcome.Bytes } lv && lv.End - lv.Start == 12
+            && LongValuePlan.Inspect(body.Slice(lv.Start, 12), out _) is { Form: LongValueForm.SingleRow or LongValueForm.Chain } plan)
+        {
+            uint targetStamp = 0;
+            if (compiledPlanPageStamps is not null && !compiledPlanPageStamps.TryGetValue(plan.First.Page, out targetStamp))
+            {
+                return;
+            }
+            // Compiled query plan length (24-bit word at +0) varies across runs; flags (+3) and (slot, page) (+4..+7) stay strict.
+            normalizedBody.Slice(lv.Start, 3).Clear();
+            fields.Add(new ClockField(ClockFieldKind.CompiledPlanLval, rowFileOffset + lv.Start, 3, $"{where} {lvCol.Name} length"));
+            if (plan.Form == LongValueForm.Chain && plan.OpaqueWord != 0
+                && (compiledPlanPageStamps is null || plan.OpaqueWord == targetStamp))
+            {
+                normalizedBody.Slice(lv.Start + 8, 4).Clear();
+                fields.Add(new ClockField(ClockFieldKind.CompiledPlanLval, rowFileOffset + lv.Start + 8, 4, $"{where} {lvCol.Name} stamp"));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Normalizes a live (<c>0x01</c>) or freed (<c>0x09</c>) compiled-plan LVAL page identified by
+    /// <see cref="CompiledPlanMagic"/>. Keeps page kind, <c>"LVAL"</c> marker, and <c>rowCount</c> strictly compared,
+    /// and verifies <c>FreeCount</c>, slot flags, and zero free gap on live pages.
+    /// </summary>
+    private static bool TryNormalizeCompiledPlanLvalPage(uint pageNumber, long pageFileOffset, ReadOnlySpan<byte> page,
+        Span<byte> normalizedPage, FormatDescriptor d, List<ClockField> fields, out uint pageStamp)
+    {
+        pageStamp = 0;
+        if (page.Length < 32 || page[1] != 0x01 || !page.Slice(4, 4).SequenceEqual("LVAL"u8)
+            || d.DataPage.RowCount.Read(page) != 1)
+        {
+            return false;
+        }
+        byte kind = page[0];
+        if (kind == 0x01)
+        {
+            ushort s0 = BinaryPrimitives.ReadUInt16LittleEndian(page[14..]);
+            if ((s0 & ~d.DataPage.RowOffsetMask) != 0)
+            {
+                return false;
+            }
+            int slotStart = s0 & d.DataPage.RowOffsetMask;
+            if (slotStart < 16 || slotStart + CompiledPlanMagic.Length > page.Length)
+            {
+                return false;
+            }
+            if (d.DataPage.FreeCount.Read(page) != (uint)(slotStart - 16))
+            {
+                return false;
+            }
+            bool isSinglePlan = page.Slice(slotStart, CompiledPlanMagic.Length).SequenceEqual(CompiledPlanMagic);
+            bool isChainedPlan = !isSinglePlan
+                && slotStart + 4 + CompiledPlanMagic.Length <= page.Length
+                && BinaryPrimitives.ReadUInt32LittleEndian(page[slotStart..]) == 0
+                && page.Slice(slotStart + 4, CompiledPlanMagic.Length).SequenceEqual(CompiledPlanMagic);
+            if (!isSinglePlan && !isChainedPlan)
+            {
+                return false;
+            }
+            normalizedPage.Slice(2, 2).Clear();
+            fields.Add(new ClockField(ClockFieldKind.CompiledPlanLval, pageFileOffset + 2, 2, $"compiled-plan LVAL page {pageNumber} free"));
+            pageStamp = BinaryPrimitives.ReadUInt32LittleEndian(page[8..]);
+            if (pageStamp != 0)
+            {
+                normalizedPage.Slice(8, 4).Clear();
+                fields.Add(new ClockField(ClockFieldKind.CompiledPlanLval, pageFileOffset + 8, 4, $"compiled-plan LVAL page {pageNumber} stamp"));
+            }
+            normalizedPage.Slice(14, 2).Clear();
+            fields.Add(new ClockField(ClockFieldKind.CompiledPlanLval, pageFileOffset + 14, 2, $"compiled-plan LVAL page {pageNumber} slot 0"));
+            normalizedPage.Slice(16).Clear();
+            fields.Add(new ClockField(ClockFieldKind.CompiledPlanLval, pageFileOffset + 16, page.Length - 16, $"compiled-plan LVAL page {pageNumber} payload"));
+            return true;
+        }
+        if (kind == 0x09)
+        {
+            if (d.DataPage.FreeCount.Read(page) != (uint)(page.Length - 16)
+                || BinaryPrimitives.ReadUInt16LittleEndian(page[14..]) != 0xD000)
+            {
+                return false;
+            }
+            int nz = 16;
+            while (nz < page.Length && page[nz] == 0)
+            {
+                nz++;
+            }
+            if (nz + CompiledPlanMagic.Length > page.Length || !page.Slice(nz, CompiledPlanMagic.Length).SequenceEqual(CompiledPlanMagic))
+            {
+                return false;
+            }
+            normalizedPage.Slice(16).Clear();
+            fields.Add(new ClockField(ClockFieldKind.CompiledPlanLval, pageFileOffset + 16, page.Length - 16, $"freed compiled-plan LVAL page {pageNumber} payload"));
+            return true;
+        }
+        return false;
     }
 
     /// <summary>
@@ -643,63 +900,169 @@ public static class AceClockFields
     }
 
     /// <summary>
-    /// Locates any vacated prefix copy of the anchor MSysObjects row immediately below it in <c>[directoryEnd, anchorStart)</c>
-    /// (left when <see cref="DataPages.TryReplaceRow"/> shrinks a row in place or shifts the lowest row up). A candidate
-    /// offset must match the anchor row byte for byte across the bytes that stay equal across in-place commits
-    /// (C, Id, ParentId, Type, and the portion of <c>Name</c> and <c>Owner</c> preceding the anchor), excluding
-    /// <c>DateCreate</c>, <c>DateUpdate</c>, and <c>Flags</c> (which a later commit of the same QueryDef updates, as in
-    /// r-q39-querydef-bytes/action-update-accdb, pause-open-accdb, union-accdb, and sql-put-type-change-accdb).
-    /// <c>Flags</c> is never masked and remains strictly compared.
+    /// Finds the highest offset in <c>[directoryEnd, limit - dcEnd]</c> of a vacated prefix copy (intact, renamed, or
+    /// truncated down to <c>DateCreate</c>) matching <c>(C, Id, ParentId, Type)</c> of any known live or deleted
+    /// MSysObjects row on the page.
     /// </summary>
-    private static void NormalizeVacatedCopiesBelow(uint pageNumber, long pageFileOffset, ReadOnlySpan<byte> page, Span<byte> normalizedPage,
-        int directoryEnd, int anchorStart, int anchorLength, RowEnvelope anchorRow, TableDefinition objects, MSysObjectsColumns cols,
+    private static int FindHighestVacatedCopyEndingAt(ReadOnlySpan<byte> page, int directoryEnd, int limit,
+        List<KnownMSysObjectsRow> knownRows, TableDefinition objects, MSysObjectsColumns cols, FormatDescriptor d,
+        out KnownMSysObjectsRow matchedAnchor)
+    {
+        matchedAnchor = default;
+        int dcStart = d.Row.FixedBase + cols.DateCreate.FixedOffset;
+        int dcEnd = dcStart + 8;
+        if (limit - directoryEnd < dcEnd)
+        {
+            return -1;
+        }
+        for (int pos = limit - dcEnd; pos >= directoryEnd; pos--)
+        {
+            foreach (KnownMSysObjectsRow known in knownRows)
+            {
+                if (known.ColumnCount != objects.MaxColumns || known.Length < dcEnd)
+                {
+                    continue;
+                }
+                if (page.Slice(pos, dcStart).SequenceEqual(page.Slice(known.Start, dcStart)))
+                {
+                    matchedAnchor = known;
+                    return pos;
+                }
+            }
+        }
+        return -1;
+    }
+
+    private static void NormalizeVacatedCopyAt(uint pageNumber, long pageFileOffset, ReadOnlySpan<byte> page, Span<byte> normalizedPage,
+        int pos, int limit, KnownMSysObjectsRow known, TableDefinition objects, MSysObjectsColumns cols,
         ReadOnlySpan<byte> sidKeystream, FormatDescriptor d, List<ClockField> fields)
     {
-        if (anchorRow.ColumnCount != objects.MaxColumns)
+        int fixedEnd = objects.KnownFixedEnd(objects.MaxColumns, d);
+        int dcStart = d.Row.FixedBase + cols.DateCreate.FixedOffset;
+        int dcEnd = dcStart + 8;
+        int duStart = d.Row.FixedBase + cols.DateUpdate.FixedOffset;
+        int duEnd = duStart + 8;
+        int flagsStart = d.Row.FixedBase + cols.Flags.FixedOffset;
+        int flagsEnd = flagsStart + 4;
+        int available = limit - pos;
+        string where = $"MSysObjects vacated copy page {pageNumber} offset {pos}";
+        normalizedPage.Slice(pos + dcStart, 8).Clear();
+        fields.Add(new ClockField(ClockFieldKind.CatalogDate, pageFileOffset + pos + dcStart, 8, $"{where} {cols.DateCreate.Name}"));
+        if (available > duStart)
         {
-            return;
+            int duLen = Math.Min(8, available - duStart);
+            normalizedPage.Slice(pos + duStart, duLen).Clear();
+            fields.Add(new ClockField(ClockFieldKind.CatalogDate, pageFileOffset + pos + duStart, duLen, $"{where} {cols.DateUpdate.Name}"));
         }
-        int fixedEnd = objects.KnownFixedEnd(anchorRow.ColumnCount, d);
-        if (anchorRow.ReadField(cols.DateCreate, fixedEnd) is not { Outcome: FieldOutcome.Bytes } dc || dc.End - dc.Start != 8
-            || anchorRow.ReadField(cols.DateUpdate, fixedEnd) is not { Outcome: FieldOutcome.Bytes } du || du.End - du.Start != 8
-            || anchorRow.ReadField(cols.Name, fixedEnd) is not { Outcome: FieldOutcome.Bytes } nameField || nameField.End <= nameField.Start)
+        FieldRead nameField = known.NameField;
+        FieldRead ownerField = known.OwnerField;
+        ReadOnlySpan<byte> anchorBody = page.Slice(known.Start, known.Length);
+        if (!sidKeystream.IsEmpty
+            && available >= fixedEnd
+            && nameField.Outcome == FieldOutcome.Bytes && nameField.End > nameField.Start
+            && ownerField.Outcome == FieldOutcome.Bytes && ownerField.End - ownerField.Start == 2
+            && pos + ownerField.End <= limit
+            && MatchesVacatedPrefix(page, pos, limit, anchorBody, fixedEnd, dcStart, dcEnd, duStart, duEnd, flagsStart, flagsEnd, nameField, ownerField))
         {
-            return;
-        }
-        FieldRead flagsRead = anchorRow.ReadField(cols.Flags, fixedEnd);
-        if (flagsRead.Outcome == FieldOutcome.Malformed
-            || (flagsRead.Outcome == FieldOutcome.Bytes && flagsRead.End - flagsRead.Start != 4))
-        {
-            return;
-        }
-        int flagsStart = flagsRead.Outcome == FieldOutcome.Bytes ? flagsRead.Start : d.Row.FixedBase + cols.Flags.FixedOffset;
-        int flagsEnd = flagsRead.Outcome == FieldOutcome.Bytes ? flagsRead.End : flagsStart + 4;
-        FieldRead ownerField = anchorRow.ReadField(cols.Owner, fixedEnd);
-        ReadOnlySpan<byte> anchorBody = page.Slice(anchorStart, anchorLength);
-        int limit = anchorStart;
-        for (int pos = limit - fixedEnd; pos >= directoryEnd; pos--)
-        {
-            if (!MatchesVacatedPrefix(page, pos, limit, anchorBody, fixedEnd, dc, du, flagsStart, flagsEnd, nameField, ownerField))
-            {
-                continue;
-            }
-            string where = $"MSysObjects vacated copy page {pageNumber} offset {pos}";
-            normalizedPage.Slice(pos + dc.Start, 8).Clear();
-            fields.Add(new ClockField(ClockFieldKind.CatalogDate, pageFileOffset + pos + dc.Start, 8, $"{where} {cols.DateCreate.Name}"));
-            normalizedPage.Slice(pos + du.Start, 8).Clear();
-            fields.Add(new ClockField(ClockFieldKind.CatalogDate, pageFileOffset + pos + du.Start, 8, $"{where} {cols.DateUpdate.Name}"));
-            if (!sidKeystream.IsEmpty && ownerField.Outcome == FieldOutcome.Bytes && ownerField.End - ownerField.Start == 2 && pos + ownerField.End <= limit)
-            {
-                Unmask(normalizedPage.Slice(pos + ownerField.Start, 2), sidKeystream);
-                fields.Add(new ClockField(ClockFieldKind.MaskedSid, pageFileOffset + pos + ownerField.Start, 2, $"{where} Owner"));
-            }
-            limit = pos;
-            pos = limit - fixedEnd + 1;
+            Unmask(normalizedPage.Slice(pos + ownerField.Start, 2), sidKeystream);
+            fields.Add(new ClockField(ClockFieldKind.MaskedSid, pageFileOffset + pos + ownerField.Start, 2, $"{where} Owner"));
         }
     }
 
+    /// <summary>
+    /// Finds the highest offset in <c>[directoryEnd, limit - (fixedEnd + 2)]</c> of a truncated deleted MSysObjects row
+    /// whose variable trailer was overwritten when a later row shifted or grew over it (r-q44-ddl-alter-types/dropcon-check-accdb-ado,
+    /// dropcon-check-mdb-ado; r-q49-dt2-draftprops/draft-props-errors-accdb, draft-props-errors-mdb;
+    /// r-q54-excl-ddl-ix-cmd/qd-deferred-then-ddl-accdb, qd-deferred-then-ddl-mdb). Rejects any intact row whose trailer
+    /// is still present at <paramref name="limit"/> (so malformed intact deleted rows stay strictly compared).
+    /// </summary>
+    private static int FindHighestTruncatedDeletedRowEndingAt(ReadOnlySpan<byte> page, int directoryEnd, int limit,
+        HashSet<int> knownParentIds, TableDefinition objects, MSysObjectsColumns cols, FormatDescriptor d)
+    {
+        int c = objects.MaxColumns;
+        int fixedEnd = objects.KnownFixedEnd(c, d);
+        int dcStart = d.Row.FixedBase + cols.DateCreate.FixedOffset;
+        int duStart = d.Row.FixedBase + cols.DateUpdate.FixedOffset;
+        if (limit - directoryEnd < fixedEnd + 2)
+        {
+            return -1;
+        }
+        int idOff = d.Row.FixedBase + cols.Id.FixedOffset;
+        int parentIdOff = d.Row.FixedBase + cols.ParentId.FixedOffset;
+        int typeOff = d.Row.FixedBase + cols.Type.FixedOffset;
+        for (int pos = limit - (fixedEnd + 2); pos >= directoryEnd; pos--)
+        {
+            if (BinaryPrimitives.ReadUInt16LittleEndian(page[pos..]) != c)
+            {
+                continue;
+            }
+            int id = BinaryPrimitives.ReadInt32LittleEndian(page[(pos + idOff)..]);
+            int parentId = BinaryPrimitives.ReadInt32LittleEndian(page[(pos + parentIdOff)..]);
+            short type = BinaryPrimitives.ReadInt16LittleEndian(page[(pos + typeOff)..]);
+            if (id == 0 || !knownParentIds.Contains(parentId) || type is not (1 or 5 or 8 or 9))
+            {
+                continue;
+            }
+            double dc = BitConverter.UInt64BitsToDouble(BinaryPrimitives.ReadUInt64LittleEndian(page[(pos + dcStart)..]));
+            double du = BitConverter.UInt64BitsToDouble(BinaryPrimitives.ReadUInt64LittleEndian(page[(pos + duStart)..]));
+            if (!IsPlausibleCatalogDate(dc) || !IsPlausibleCatalogDate(du))
+            {
+                continue;
+            }
+            ushort firstChar = BinaryPrimitives.ReadUInt16LittleEndian(page[(pos + fixedEnd)..]);
+            if (firstChar < 0x20 || firstChar > 0x7E)
+            {
+                continue;
+            }
+            if (HasIntactTrailerAt(page, pos, limit, objects, d))
+            {
+                continue;
+            }
+            return pos;
+        }
+        return -1;
+    }
+
+    private static void NormalizeTruncatedDeletedRowAt(uint pageNumber, long pageFileOffset, Span<byte> normalizedPage,
+        int pos, MSysObjectsColumns cols, FormatDescriptor d, List<ClockField> fields)
+    {
+        int dcStart = d.Row.FixedBase + cols.DateCreate.FixedOffset;
+        int duStart = d.Row.FixedBase + cols.DateUpdate.FixedOffset;
+        string where = $"MSysObjects truncated deleted row page {pageNumber} offset {pos}";
+        normalizedPage.Slice(pos + dcStart, 8).Clear();
+        fields.Add(new ClockField(ClockFieldKind.CatalogDate, pageFileOffset + pos + dcStart, 8, $"{where} {cols.DateCreate.Name}"));
+        normalizedPage.Slice(pos + duStart, 8).Clear();
+        fields.Add(new ClockField(ClockFieldKind.CatalogDate, pageFileOffset + pos + duStart, 8, $"{where} {cols.DateUpdate.Name}"));
+    }
+
+    private static bool IsPlausibleCatalogDate(double value) =>
+        double.IsFinite(value) && value >= 36526.0 && value <= 109574.0;
+
+    private static bool HasIntactTrailerAt(ReadOnlySpan<byte> page, int start, int end, TableDefinition objects, FormatDescriptor d)
+    {
+        int c = objects.MaxColumns;
+        int v = objects.VariableColumns;
+        int m = (c + 7) / 8;
+        int fixedEnd = objects.KnownFixedEnd(c, d);
+        int trailerLen = 4 + (2 * v);
+        int maskStart = end - m;
+        int trailerStart = maskStart - trailerLen;
+        if (trailerStart < start + fixedEnd)
+        {
+            return false;
+        }
+        int vWord = BinaryPrimitives.ReadUInt16LittleEndian(page[(maskStart - 2)..]);
+        int start0 = BinaryPrimitives.ReadUInt16LittleEndian(page[(maskStart - 4)..]);
+        int eod = BinaryPrimitives.ReadUInt16LittleEndian(page[trailerStart..]);
+        bool vMatches = vWord == v;
+        bool start0Matches = start0 == fixedEnd;
+        bool eodMatches = eod >= fixedEnd && trailerStart - eod == start;
+        // Reject any intact-length row whose trailer is still present at end (even if vWord, eod, or start[0] was corrupted).
+        return (vMatches && (eodMatches || start0Matches)) || (eodMatches && start0Matches);
+    }
+
     private static bool MatchesVacatedPrefix(ReadOnlySpan<byte> page, int pos, int limit, ReadOnlySpan<byte> anchorBody,
-        int fixedEnd, FieldRead dc, FieldRead du, int flagsStart, int flagsEnd, FieldRead nameField, FieldRead ownerField)
+        int fixedEnd, int dcStart, int dcEnd, int duStart, int duEnd, int flagsStart, int flagsEnd, FieldRead nameField, FieldRead ownerField)
     {
         int available = limit - pos;
         if (available < fixedEnd || anchorBody.Length < fixedEnd)
@@ -708,7 +1071,7 @@ public static class AceClockFields
         }
         for (int k = 0; k < fixedEnd; k++)
         {
-            if ((k >= dc.Start && k < dc.End) || (k >= du.Start && k < du.End) || (k >= flagsStart && k < flagsEnd))
+            if ((k >= dcStart && k < dcEnd) || (k >= duStart && k < duEnd) || (k >= flagsStart && k < flagsEnd))
             {
                 continue;
             }

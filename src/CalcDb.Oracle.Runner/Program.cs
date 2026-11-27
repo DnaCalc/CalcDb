@@ -351,9 +351,11 @@ internal static partial class Program
         }
         // A candidate attempt answers for the module it ran: a different deployed build is a new attempt, and
         // --rerun asks for a new one anyway (after a worker change, which the module hash does not name).
+        // If an earlier candidate run already pruned its working files (w-store-prune), re-run when --compare needs them.
         if (setup.Implementation is { } implementation && existing is not null && (options.Has("rerun")
             || EvidenceJson.Read<AttemptRecord>(Path.Combine(store.AttemptDirectory(existing.AttemptId), "attempt.json")).Implementation?.ModuleSha256
-                != implementation.ModuleSha256))
+                != implementation.ModuleSha256
+            || (compare && NeedsRerunBecausePruned(store, new ArtifactStore(Path.Combine(evidenceDir, "artifacts"), Path.Combine(store.Root, "cas")), existing))))
         {
             existing = null;
         }
@@ -372,11 +374,20 @@ internal static partial class Program
             failures.AddRange(capture.Events.OfType<HandleEvent>().Where(h => !h.Success).Select(h => $"{who}{h.Op}({h.Handle}):w32={h.Win32Error}"));
             failures.AddRange(capture.Events.OfType<SyncEvent>().Where(s => s.TimedOut).Select(s => $"{who}await({s.Name}):timeout"));
         }
+        bool pruneCandidate = compare && setup.Implementation is not null && !options.Has("keep-candidate-files");
         if (!manifest.IsComplete || !compare)
         {
+            if (pruneCandidate)
+            {
+                PruneCandidateWorkingFiles(store, manifest.AttemptId);
+            }
             return new BatchRun(question, manifest, string.Join(" ", failures), null, null);
         }
         (Corpus.ComparisonRecord verdict, Capture? oracle) = CompareWithOracle(store, manifest, question, evidenceDir);
+        if (pruneCandidate)
+        {
+            PruneCandidateWorkingFiles(store, manifest.AttemptId);
+        }
         return new BatchRun(question, manifest, string.Join(" ", failures), verdict, oracle);
     }
 
@@ -412,6 +423,98 @@ internal static partial class Program
         Console.WriteLine($"       froze fixture '{name}' = {output.Sha256[..12]}");
     }
 
+    /// <summary>Result of pruning disposable working files (<c>inputs/</c>, <c>work/</c>, <c>artifacts/</c>) from a sealed attempt.</summary>
+    internal sealed record PruneAttemptResult(bool Pruned, long BytesRemoved, int FoldersFailed);
+
+    /// <summary>
+    /// Removes disposable working files (<c>inputs/</c>, <c>work/</c>, <c>artifacts/</c>) from a sealed candidate attempt
+    /// after comparison completes (task w-store-prune), preserving <c>manifest.json</c>, <c>attempt.json</c>,
+    /// <c>question.json</c>, <c>capture*.json</c>, and <c>receipts/</c>. Refuses (no-op) for unsealed or non-candidate
+    /// (ACE) attempts, and never follows reparse points/junctions or touches <c>compare-sets/</c>, <c>cas/</c>, or
+    /// retained <c>evidence/</c>.
+    /// </summary>
+    internal static PruneAttemptResult PruneCandidateWorkingFiles(JobStore store, string attemptId)
+    {
+        if (store.GetManifest(attemptId) is null)
+        {
+            return new PruneAttemptResult(false, 0, 0);
+        }
+        string dir = store.AttemptDirectory(attemptId);
+        string attemptJson = Path.Combine(dir, "attempt.json");
+        if (!File.Exists(attemptJson) || EvidenceJson.Read<AttemptRecord>(attemptJson).Implementation is null)
+        {
+            return new PruneAttemptResult(false, 0, 0);
+        }
+        return PruneAttemptWorkingDirectories(dir, logFailure: null);
+    }
+
+    /// <summary>
+    /// Returns true when <paramref name="existing"/> has any artifact whose bytes are absent from both
+    /// <paramref name="retained"/> and the attempt directory (e.g. pruned by <see cref="PruneCandidateWorkingFiles"/>),
+    /// so a subsequent <c>batch --compare</c> without <c>--rerun</c> re-runs instead of comparing missing files by SHA-256.
+    /// </summary>
+    internal static bool NeedsRerunBecausePruned(JobStore store, ArtifactStore retained, CaptureManifest existing)
+    {
+        if (existing.Artifacts.Count == 0)
+        {
+            return false;
+        }
+        string dir = store.AttemptDirectory(existing.AttemptId);
+        foreach (ArtifactRef a in existing.Artifacts)
+        {
+            if (retained.Locate(a.Sha256) is not null)
+            {
+                continue;
+            }
+            if (!File.Exists(Path.Combine(dir, a.RelativePath)))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static PruneAttemptResult PruneAttemptWorkingDirectories(string attemptDir, Action<string, Exception>? logFailure)
+    {
+        if (!Directory.Exists(attemptDir) || (new DirectoryInfo(attemptDir).Attributes & FileAttributes.ReparsePoint) != 0)
+        {
+            return new PruneAttemptResult(false, 0, 0);
+        }
+        bool any = false;
+        long bytes = 0;
+        int failed = 0;
+        var enumOptions = new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = FileAttributes.ReparsePoint };
+        foreach (string sub in (string[])["inputs", "work", "artifacts"])
+        {
+            string path = Path.Combine(attemptDir, sub);
+            if (!Directory.Exists(path))
+            {
+                continue;
+            }
+            if ((new DirectoryInfo(path).Attributes & FileAttributes.ReparsePoint) != 0)
+            {
+                continue;
+            }
+            try
+            {
+                // Input copies are read-only while an attempt runs; clear the attribute before deleting.
+                foreach (string file in Directory.EnumerateFiles(path, "*", enumOptions))
+                {
+                    bytes += new FileInfo(file).Length;
+                    File.SetAttributes(file, FileAttributes.Normal);
+                }
+                Directory.Delete(path, recursive: true);
+                any = true;
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                failed++;
+                logFailure?.Invoke(path, e);
+            }
+        }
+        return new PruneAttemptResult(any, bytes, failed);
+    }
+
     /// <summary>
     /// <c>prune [--days N]</c>: remove the file copies (inputs, work, artifacts) of sealed attempts older than N days
     /// (default 1). Manifests, captures and receipts stay, so show, comparisons and job states still work; such an
@@ -432,32 +535,10 @@ internal static partial class Program
             {
                 continue;
             }
-            bool any = false;
-            foreach (string sub in (string[])["inputs", "work", "artifacts"])
-            {
-                string path = Path.Combine(dir, sub);
-                if (!Directory.Exists(path))
-                {
-                    continue;
-                }
-                try
-                {
-                    // Input copies are read-only while an attempt runs; clear the attribute before deleting.
-                    foreach (string file in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
-                    {
-                        bytes += new FileInfo(file).Length;
-                        File.SetAttributes(file, FileAttributes.Normal);
-                    }
-                    Directory.Delete(path, recursive: true);
-                    any = true;
-                }
-                catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-                {
-                    failed++;
-                    Console.WriteLine($"not pruned: {path}: {e.Message}");
-                }
-            }
-            pruned += any ? 1 : 0;
+            PruneAttemptResult res = PruneAttemptWorkingDirectories(dir, (path, e) => Console.WriteLine($"not pruned: {path}: {e.Message}"));
+            pruned += res.Pruned ? 1 : 0;
+            bytes += res.BytesRemoved;
+            failed += res.FoldersFailed;
         }
         Console.WriteLine($"pruned {pruned} sealed attempts older than {days} days: {bytes / 1048576.0:F0} MB of file copies removed; {failed} folders not removed");
         return failed == 0 ? 0 : 1;
