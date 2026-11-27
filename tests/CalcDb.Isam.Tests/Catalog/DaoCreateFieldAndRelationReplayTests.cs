@@ -762,19 +762,25 @@ public sealed class DaoCreateFieldAndRelationReplayTests
             Assert.False(missing.PublishedAny);
             Assert.Equal(before, s.File.Snapshot());
 
-            // DeleteRelation inside BeginTrans refuses by name with 0 bytes written.
+            // DeleteRelation inside nested depth-2 BeginTrans refuses by name with 0 bytes written
+            // (depth 1 is admitted per evidence/r-q53-conv-abspos-subq-loc/dao-ddl-begintrans-accdb, dao-ddl-begintrans-mdb).
+            Assert.Null(s.Workspace.BeginTrans());
             Assert.Null(s.Workspace.BeginTrans());
             SchemaOutcome inTxDel = s.DeleteRelation("R1", 1);
             Assert.False(inTxDel.Succeeded);
             Assert.NotNull(inTxDel.Refused?.NotWritten);
             Assert.Null(s.Workspace.Rollback().Error);
+            Assert.Null(s.Workspace.Rollback().Error);
             Assert.Equal(before, s.File.Snapshot());
 
-            // AddField inside BeginTrans refuses by name with 0 bytes written.
+            // AddField inside nested depth-2 BeginTrans refuses by name with 0 bytes written
+            // (depth 1 is admitted per evidence/r-q53-conv-abspos-subq-loc/dao-ddl-begintrans-accdb, dao-ddl-begintrans-mdb).
+            Assert.Null(s.Workspace.BeginTrans());
             Assert.Null(s.Workspace.BeginTrans());
             SchemaOutcome inTxAdd = s.AddField(new AddFieldRequest("P", new NewField("X", NewFieldType.Long), SchemaRoute.Dao), 1);
             Assert.False(inTxAdd.Succeeded);
             Assert.NotNull(inTxAdd.Refused?.NotWritten);
+            Assert.Null(s.Workspace.Rollback().Error);
             Assert.Null(s.Workspace.Rollback().Error);
             Assert.Equal(before, s.File.Snapshot());
         }

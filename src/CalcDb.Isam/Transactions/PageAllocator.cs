@@ -603,6 +603,81 @@ public sealed class PageAllocator
         return true;
     }
 
+    /// <summary>
+    /// Plan the 4-byte (32-page) global-map extent reservation anchored at <c>firstFreeBefore / 8</c> for a depth-1
+    /// transactional DDL CommitTrans or Rollback (<c>evidence/r-q28-schema-write-open/txn-sql-create-commit</c>,
+    /// <c>evidence/r-q53-conv-abspos-subq-loc/txnddl-commit-rollback-accdb</c>,
+    /// <c>evidence/r-q53-conv-abspos-subq-loc/txnddl-commit-rollback-mdb</c>,
+    /// <c>evidence/r-q53-conv-abspos-subq-loc/dao-ddl-begintrans-accdb</c>,
+    /// <c>evidence/r-q53-conv-abspos-subq-loc/dao-ddl-begintrans-mdb</c>). When <paramref name="overlay"/> is
+    /// non-null (CommitTrans), bits already cleared in <paramref name="overlay"/> are skipped so only the remaining
+    /// unused bits in the 32-page block are cleared and returned in <paramref name="unusedReservedPages"/>; when
+    /// <paramref name="overlay"/> is null (Rollback), every free bit in the 32-page block is cleared and returned in
+    /// <paramref name="unusedReservedPages"/> for release at Close.
+    /// </summary>
+    internal bool TryPlanOverlayExtentReservation(
+        PrivateOverlay? overlay,
+        out List<PageEdit> reserveEdits,
+        out List<uint> unusedReservedPages,
+        out string? failure)
+    {
+        reserveEdits = [];
+        unusedReservedPages = [];
+        if (!_allowPendingRollbackExtent && _cache.HasPendingRollbackExtent)
+        {
+            failure = PendingRollbackExtentFailure;
+            return false;
+        }
+        if (!TryCaptureGlobalFreeMap(seen: null, out uint firstFreeBefore, out byte[] globalMapBefore, out failure))
+        {
+            return false;
+        }
+        byte[]? overlayMap = null;
+        if (overlay is not null)
+        {
+            using PagePin? pin = new PageSource(_cache, overlay).Pin(_d.Map.GlobalMapPage).Pin;
+            if (pin is null)
+            {
+                failure = $"page {_d.Map.GlobalMapPage} could not be read from the overlay";
+                return false;
+            }
+            overlayMap = pin.Bytes.ToArray();
+        }
+        MapRules m = _d.Map;
+        uint blockEnd = ((firstFreeBefore / 8) * 8) + 32;
+        SortedDictionary<int, byte> clearByOffset = [];
+        for (uint page = firstFreeBefore; page < blockEnd; page++)
+        {
+            if (!MapPages.TryInlineBit(globalMapBefore, m.GlobalFreeSlot, page, _d, out int offset, out byte mask, out failure))
+            {
+                failure = "the global map reservation: " + failure;
+                return false;
+            }
+            bool wasFreeBefore = (globalMapBefore[offset] & mask) != 0;
+            if (!wasFreeBefore)
+            {
+                if (page >= ExtentPages)
+                {
+                    failure = $"page {page} past file extent {ExtentPages} is already cleared in page 1";
+                    return false;
+                }
+                continue;
+            }
+            if (overlayMap is not null && (overlayMap[offset] & mask) == 0)
+            {
+                continue;
+            }
+            clearByOffset[offset] = (byte)(clearByOffset.GetValueOrDefault(offset) | mask);
+            unusedReservedPages.Add(page);
+        }
+        foreach ((int offset, byte clearMask) in clearByOffset)
+        {
+            reserveEdits.Add(new PageEdit(m.GlobalMapPage, new BitDelta(offset, 0, clearMask), PageRole.Map));
+        }
+        failure = null;
+        return true;
+    }
+
     /// <summary>The cache the allocator reads.</summary>
     public PageCache File => _cache;
 }

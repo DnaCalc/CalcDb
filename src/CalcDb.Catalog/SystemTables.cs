@@ -21,15 +21,16 @@ public sealed record SystemRow(RowId Root, IReadOnlyList<NativeValue> Values)
 public static class SystemTables
 {
     /// <summary>The rows of the local table <paramref name="name"/>, or null with the reason; an absent table is an empty list.</summary>
-    public static IReadOnlyList<SystemRow>? Read(PageCache cache, FormatDescriptor d, CatalogSnapshot catalog, ulong pageCount, string name, IReadOnlyList<(string Name, byte Type)> projection, out string? failure)
+    public static IReadOnlyList<SystemRow>? Read(PageCache cache, FormatDescriptor d, CatalogSnapshot catalog, ulong pageCount, string name, IReadOnlyList<(string Name, byte Type)> projection, out string? failure, PrivateOverlay? overlay = null)
     {
         failure = null;
+        var source = new PageSource(cache, overlay);
         CatalogEntry? entry = catalog.LocalTables(d).FirstOrDefault(e => e.Name == name);
         if (entry is null)
         {
             return [];
         }
-        TableDefSegmentView? view = TableDefSegmentView.Open((uint)entry.Id, p => Page(cache, p), d, 64, out string? viewFailure);
+        TableDefSegmentView? view = TableDefSegmentView.Open((uint)entry.Id, p => Page(source, p), d, 64, out string? viewFailure);
         TableDefinition? table = view is null ? null : TableDefDecoder.Decode(view, (uint)entry.Id, d, out viewFailure);
         if (table is null)
         {
@@ -50,14 +51,14 @@ public static class SystemTables
         }
         var rows = new List<SystemRow>();
         var failures = new List<TraversalFailure>();
-        foreach (RowView row in RowResolver.Scan(cache, d, table, pageCount, failures))
+        foreach (RowView row in RowResolver.Scan(source, d, table, pageCount, failures))
         {
             using (row)
             {
                 var values = new NativeValue[columns.Length];
                 for (int i = 0; i < columns.Length; i++)
                 {
-                    values[i] = FieldDecoder.Read(row, table, columns[i], cache, d);
+                    values[i] = FieldDecoder.Read(row, table, columns[i], source, d);
                     if (values[i].Kind == NativeKind.Failed)
                     {
                         failure = $"{name} row {row.Root} {columns[i].Name}: {values[i].Failure}";
@@ -75,5 +76,5 @@ public static class SystemTables
         return rows;
     }
 
-    private static ReadOnlyMemory<byte>? Page(PageCache cache, uint page) => CatalogBootstrap.Page(cache, page);
+    private static ReadOnlyMemory<byte>? Page(PageSource source, uint page) => CatalogBootstrap.Page(source, page);
 }

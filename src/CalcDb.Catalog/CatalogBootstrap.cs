@@ -97,24 +97,25 @@ public sealed record CatalogFailure(CatalogFailureKind Kind, string Detail)
 /// <summary>BootstrapCatalog (II-06 §1): the object table from the profile's root, its rows through the ordinary ISAM scan.</summary>
 public static class CatalogBootstrap
 {
-    public static CatalogSnapshot? Open(PageCache cache, FormatDescriptor d, ulong pageCount, out CatalogFailure? failure, bool readProperties = false)
+    public static CatalogSnapshot? Open(PageCache cache, FormatDescriptor d, ulong pageCount, out CatalogFailure? failure, bool readProperties = false, PrivateOverlay? overlay = null)
     {
-        CatalogSnapshot? snapshot = Open(cache, d, pageCount, out string? detail, readProperties);
-        failure = detail is null ? null : new CatalogFailure(IsPlaintextRoot(cache, d) ? CatalogFailureKind.Malformed : CatalogFailureKind.NotPlaintext, detail);
+        var source = new PageSource(cache, overlay);
+        CatalogSnapshot? snapshot = Open(source, d, pageCount, out string? detail, readProperties);
+        failure = detail is null ? null : new CatalogFailure(IsPlaintextRoot(source, d) ? CatalogFailureKind.Malformed : CatalogFailureKind.NotPlaintext, detail);
         return snapshot;
     }
 
-    private static bool IsPlaintextRoot(PageCache cache, FormatDescriptor d)
+    private static bool IsPlaintextRoot(PageSource source, FormatDescriptor d)
     {
-        using PagePin? pin = cache.Pin(d.Catalog.ObjectTableRoot).Pin;
+        using PagePin? pin = source.Pin(d.Catalog.ObjectTableRoot).Pin;
         return pin is not null && pin.Bytes[d.DataPage.Kind.Offset] == 0x02;
     }
 
-    private static CatalogSnapshot? Open(PageCache cache, FormatDescriptor d, ulong pageCount, out string? failure, bool readProperties)
+    private static CatalogSnapshot? Open(PageSource source, FormatDescriptor d, ulong pageCount, out string? failure, bool readProperties)
     {
         failure = null;
         uint root = d.Catalog.ObjectTableRoot;
-        TableDefSegmentView? view = TableDefSegmentView.Open(root, p => Page(cache, p), d, 64, out string? viewFailure);
+        TableDefSegmentView? view = TableDefSegmentView.Open(root, p => Page(source, p), d, 64, out string? viewFailure);
         if (view is null)
         {
             failure = "object table: " + viewFailure;
@@ -143,16 +144,16 @@ public static class CatalogBootstrap
         ColumnDescriptor? dateUpdate = objectTable.Columns.SingleOrDefault(c => c.Name == "DateUpdate" && c.TypeCode == NativeTypes.DateTime);
         var entries = new List<CatalogEntry>();
         var failures = new List<TraversalFailure>();
-        foreach (RowView row in RowResolver.Scan(cache, d, objectTable, pageCount, failures))
+        foreach (RowView row in RowResolver.Scan(source, d, objectTable, pageCount, failures))
         {
             using (row)
             {
-                NativeValue id = FieldDecoder.Read(row, objectTable, bound["Id"], cache, d);
-                NativeValue parent = FieldDecoder.Read(row, objectTable, bound["ParentId"], cache, d);
-                NativeValue name = FieldDecoder.Read(row, objectTable, bound["Name"], cache, d);
-                NativeValue type = FieldDecoder.Read(row, objectTable, bound["Type"], cache, d);
-                NativeValue flags = FieldDecoder.Read(row, objectTable, bound["Flags"], cache, d);
-                NativeValue? props = readProperties && lvProp is not null ? FieldDecoder.Read(row, objectTable, lvProp, cache, d) : null;
+                NativeValue id = FieldDecoder.Read(row, objectTable, bound["Id"], source, d);
+                NativeValue parent = FieldDecoder.Read(row, objectTable, bound["ParentId"], source, d);
+                NativeValue name = FieldDecoder.Read(row, objectTable, bound["Name"], source, d);
+                NativeValue type = FieldDecoder.Read(row, objectTable, bound["Type"], source, d);
+                NativeValue flags = FieldDecoder.Read(row, objectTable, bound["Flags"], source, d);
+                NativeValue? props = readProperties && lvProp is not null ? FieldDecoder.Read(row, objectTable, lvProp, source, d) : null;
                 NativeValue[] required = [id, parent, name, type, flags];
                 int bad = Array.FindIndex(required, v => v.Kind == NativeKind.Failed);
                 if (bad >= 0)
@@ -165,8 +166,8 @@ public static class CatalogBootstrap
                     failure = $"object table row {row.Root} LvProp: {failedProps.Failure}";
                     return null;
                 }
-                NativeValue? created = dateCreate is null ? null : FieldDecoder.Read(row, objectTable, dateCreate, cache, d);
-                NativeValue? updated = dateUpdate is null ? null : FieldDecoder.Read(row, objectTable, dateUpdate, cache, d);
+                NativeValue? created = dateCreate is null ? null : FieldDecoder.Read(row, objectTable, dateCreate, source, d);
+                NativeValue? updated = dateUpdate is null ? null : FieldDecoder.Read(row, objectTable, dateUpdate, source, d);
                 entries.Add(new CatalogEntry((int)id.Integer, (int)parent.Integer, name.Text ?? "", (short)type.Integer, (int)flags.Integer, row.Root)
                 {
                     Properties = props?.Bytes,
@@ -194,9 +195,11 @@ public static class CatalogBootstrap
         return new CatalogSnapshot(objectTable, entries, containers.Length == 1 ? containers[0].Id : null, anomalies);
     }
 
-    internal static ReadOnlyMemory<byte>? Page(PageCache cache, uint page)
+    internal static ReadOnlyMemory<byte>? Page(PageSource source, uint page)
     {
-        using PagePin? pin = cache.Pin(page).Pin;
+        using PagePin? pin = source.Pin(page).Pin;
         return pin?.Bytes.ToArray();
     }
+
+    internal static ReadOnlyMemory<byte>? Page(PageCache cache, uint page) => Page(new PageSource(cache), page);
 }

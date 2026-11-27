@@ -88,28 +88,33 @@ internal sealed class WritableSqlFixture : ISqlSchemaDatabase, IPublicationTarge
     private static bool NamesEqual(string a, string b) =>
         string.Equals(DdlBinder.NameKey(a), DdlBinder.NameKey(b), StringComparison.OrdinalIgnoreCase);
 
-    public ulong PageCount => Math.Max(Math.Max(_pageCount, _image.PageCount), _cache.KnownExtentPages);
+    public ulong PageCount => PageAllocator.ExtentOf(_cache, Math.Max(_pageCount, _image.PageCount), Workspace.OverlayOf(_cache));
 
     public SchemaWriter? OpenSchemaWriter(out string? failure)
     {
         failure = null;
-        return new SchemaWriter(_cache, D, _catalog, PageCount, _sortOrder);
+        return new SchemaWriter(_cache, D, _catalog, PageCount, _sortOrder, Workspace.OverlayOf(_cache));
     }
 
     public void OnSchemaPublished(ulong extentPages)
     {
-        _pageCount = Math.Max(_image.PageCount, extentPages);
+        PrivateOverlay? overlay = Workspace.OverlayOf(_cache);
+        if (overlay is null)
+        {
+            _pageCount = Math.Max(_image.PageCount, extentPages);
+        }
         _tables.Clear();
         foreach (TableEditContext ctx in _editContexts.Values)
         {
             ctx.Semantics.Dispose();
         }
         _editContexts.Clear();
-        _catalog = CatalogBootstrap.Open(_cache, D, PageCount, out _, readProperties: true)!;
-        _queries = QueryCatalog.Read(_cache, D, _catalog, PageCount, out _);
-        _relationships = RelationshipCatalog.Read(_cache, D, _catalog, PageCount, out _) ?? [];
-        _checkConstraints = CheckConstraintCatalog.Read(_cache, D, _catalog, PageCount, out _) ?? [];
-        _relationshipContext = new CatalogRelationshipContext(_cache, D, _relationships, PageCount, name => EditContext(name, out _));
+        ulong extent = PageCount;
+        _catalog = CatalogBootstrap.Open(_cache, D, extent, out _, readProperties: true, overlay: overlay)!;
+        _queries = QueryCatalog.Read(_cache, D, _catalog, extent, out _);
+        _relationships = RelationshipCatalog.Read(_cache, D, _catalog, extent, out _, overlay) ?? [];
+        _checkConstraints = CheckConstraintCatalog.Read(_cache, D, _catalog, extent, out _) ?? [];
+        _relationshipContext = new CatalogRelationshipContext(_cache, D, _relationships, extent, name => EditContext(name, out _));
     }
 
     public ulong NowDateBits() => DateBitsProvider?.Invoke() ?? SchemaWriter.DateBits(DateTime.Now);
@@ -174,7 +179,8 @@ internal sealed class WritableSqlFixture : ISqlSchemaDatabase, IPublicationTarge
             return cached;
         }
         CatalogEntry? entry = _catalog.LocalTables(D).FirstOrDefault(e => NamesEqual(e.Name, name));
-        TableDefSegmentView? seg = entry is null ? null : TableDefSegmentView.Open((uint)entry.Id, p => _cache.Pin(p).Pin is { } pin ? Copy(pin) : null, D, 64, out _);
+        var source = new PageSource(_cache, Workspace.OverlayOf(_cache));
+        TableDefSegmentView? seg = entry is null ? null : TableDefSegmentView.Open((uint)entry.Id, p => source.Pin(p).Pin is { } pin ? Copy(pin) : null, D, 64, out _);
         TableDefinition? table = entry is not null && seg is not null ? TableDefDecoder.Decode(seg, (uint)entry.Id, D, out _) : null;
         _tables[key] = table;
         return table;

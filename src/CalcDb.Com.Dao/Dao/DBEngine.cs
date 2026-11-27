@@ -1278,6 +1278,9 @@ internal sealed unsafe class WorkspaceObject : DaoObject
         DatabaseObject[]? databasesWithOverlay = level is not null
             ? [.. _databases.Where(d => !d.Closed && Transactions.OverlayOf(d.Cache) is not null)]
             : null;
+        DatabaseObject[]? databasesWithSchemaChanges = level is not null
+            ? [.. _databases.Where(d => !d.Closed && Transactions.HasSchemaChanges(d.Cache))]
+            : null;
         ResolutionOutcome outcome = Transactions.CommitTrans(Args.Int32(options, omitted: 0) ?? 0);
         if (outcome.Succeeded)
         {
@@ -1294,7 +1297,8 @@ internal sealed unsafe class WorkspaceObject : DaoObject
                 foreach (DatabaseObject d in _databases.ToArray())
                 {
                     bool hadOverlay = databasesWithOverlay is not null && Array.IndexOf(databasesWithOverlay, d) >= 0;
-                    d.Committed(level, outermost: level.Level == 1, hadOverlay);
+                    bool hadSchema = databasesWithSchemaChanges is not null && Array.IndexOf(databasesWithSchemaChanges, d) >= 0;
+                    d.Committed(level, outermost: level.Level == 1, hadOverlay, hadSchema);
                 }
             }
         }

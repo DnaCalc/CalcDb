@@ -485,6 +485,10 @@ public sealed class ActionReplayTests(ITestOutputHelper output)
                         Open.Add($"{where}: NotModelled.Edit.{commit.Open}: {commit.Detail}");
                         file.Dirty = $"NotModelled.Edit.{commit.Open}: {where}";
                     }
+                    else if (ws.Depth == 0)
+                    {
+                        file.Fixture.OnSchemaPublished(file.Fixture.PageCount);
+                    }
                     break;
                 case "Rollback":
                     ResolutionOutcome rb = ws.Rollback();
@@ -495,6 +499,10 @@ public sealed class ActionReplayTests(ITestOutputHelper output)
                     }
                     else
                     {
+                        if (ws.Depth == 0)
+                        {
+                            file.Fixture.OnSchemaPublished(file.Fixture.PageCount);
+                        }
                         // Temp QueryDefs created inside a rolled-back transaction become invalid (3420, COM object lifetime).
                         foreach (QueryDefState q in _queries)
                         {
