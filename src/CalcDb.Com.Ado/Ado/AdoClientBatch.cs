@@ -1573,56 +1573,29 @@ internal sealed unsafe class ClientRowBuffer
     {
         providerError = null;
         refusal = null;
-        if (incoming.Type == VarType.Null)
+        if (incoming.Type == VarType.Empty)
         {
-            return OwnedVariant.Null();
-        }
-        if (desc.AdoType == 3) // adInteger
-        {
-            NativeVariant copy = incoming;
-            OwnedVariant? converted = OwnedVariant.ChangeType(&copy, VarType.I4, SessionLocale.Lcid, out int hr);
-            if (converted is not null)
-            {
-                return converted;
-            }
-            providerError = hr == AdoObject.HResultOutOfRange
-                ? AdoSqlErrors.OutOfRangeOn(errorIid)
-                : hr == AdoObject.HResultTypeMismatch
-                    ? AdoSqlErrors.TypeMismatchOn(errorIid)
-                    : AdoSqlErrors.MultipleStepOn(errorIid);
+            refusal = Failure.NotModelled(
+                "NotModelled.AdoAssignEmpty",
+                $"Fabricated Field.Value assignment of VT_EMPTY into column '{desc.Name}' is not recorded");
             return null;
         }
-        if (desc.AdoType == 202) // adVarWChar
+        // r-q-wire/ado-connectionless-recordset #12, #15: only VT_I4 -> adInteger(3) and VT_BSTR (within DefinedSize) -> adVarWChar(202) are recorded.
+        if (desc.AdoType == 3 && incoming.Type == VarType.I4)
         {
-            OwnedVariant? textVal;
-            if (incoming.Type == VarType.Bstr)
+            return OwnedVariant.FromInt32((int)incoming.Int64);
+        }
+        if (desc.AdoType == 202 && incoming.Type == VarType.Bstr)
+        {
+            string s = Args.Text((nint)System.Runtime.CompilerServices.Unsafe.AsPointer(ref System.Runtime.CompilerServices.Unsafe.AsRef(in incoming))) ?? "";
+            if (desc.DefinedSize <= 0 || s.Length <= desc.DefinedSize)
             {
-                textVal = OwnedVariant.FromText(Args.Text((nint)System.Runtime.CompilerServices.Unsafe.AsPointer(ref System.Runtime.CompilerServices.Unsafe.AsRef(in incoming))) ?? "");
+                return OwnedVariant.FromText(s);
             }
-            else
-            {
-                NativeVariant copy = incoming;
-                textVal = OwnedVariant.ChangeType(&copy, VarType.Bstr, SessionLocale.Lcid, out int hr);
-                if (textVal is null)
-                {
-                    providerError = hr == AdoObject.HResultTypeMismatch
-                        ? AdoSqlErrors.TypeMismatchOn(errorIid)
-                        : AdoSqlErrors.MultipleStepOn(errorIid);
-                    return null;
-                }
-            }
-            string s = Args.Text((nint)textVal.Pointer) ?? "";
-            if (desc.DefinedSize > 0 && s.Length > desc.DefinedSize)
-            {
-                textVal.Dispose();
-                providerError = AdoSqlErrors.MultipleStepOn(errorIid);
-                return null;
-            }
-            return textVal;
         }
         refusal = Failure.NotModelled(
             "NotModelled.AdoFabricatedAssign",
-            $"Field.Value assignment into fabricated ADO type {desc.AdoType} ('{desc.Name}') is not recorded");
+            $"Field.Value assignment of {incoming.Type} into fabricated ADO type {desc.AdoType} ('{desc.Name}') is not recorded");
         return null;
     }
 

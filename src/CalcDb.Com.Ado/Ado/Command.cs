@@ -355,7 +355,7 @@ internal sealed unsafe class CommandObject : AdoObject
                     "NotModelled.AdoCommandExecuteVariantArrayParameters",
                     "Command.Execute with a SAFEARRAY Parameters argument is not recorded"));
             }
-            if (AdoArgs.IsObject(parametersArg))
+            if (pVt is VarType.Dispatch or VarType.Unknown)
             {
                 return NotImplemented("Command.Execute with an object Parameters argument (not recorded)");
             }

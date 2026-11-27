@@ -121,17 +121,24 @@ public sealed unsafe class AdoBatchErrSchemaTests
                 // r-q-wire/ado-connectionless-recordset #4-#23
                 Assert.Null(Call(af, "Append", "A", 3).Failure);
                 Assert.Null(Call(af, "Append", "B", 202, 50).Failure);
-                // Unrecorded field type refuses honestly.
+                // Unrecorded field type and pre-open Fields reads refuse honestly.
                 Assert.Equal(CalcDb.Com.Com.HResults.E_NOTIMPL, Call(af, "Append", "C", 5).Failure!.Value.Scode);
+                Assert.Equal(CalcDb.Com.Com.HResults.E_NOTIMPL, TryGet(af, "Count").Failure!.Value.Scode);
                 Assert.Equal(0, Get(ar, "State"));
 
                 Assert.Null(Call(ar, "Open").Failure);
                 Assert.Equal(1, Get(ar, "State"));
-                // Append on an open Recordset refuses honestly.
+                // Append, CancelBatch, and Clone on an open fabricated Recordset refuse honestly.
                 Assert.Equal(CalcDb.Com.Com.HResults.E_NOTIMPL, Call(af, "Append", "D", 3).Failure!.Value.Scode);
+                Assert.Equal(CalcDb.Com.Com.HResults.E_NOTIMPL, Call(ar, "CancelBatch").Failure!.Value.Scode);
+                Assert.Equal(CalcDb.Com.Com.HResults.E_NOTIMPL, Call(ar, "Clone").Failure!.Value.Scode);
 
                 Assert.Null(Call(ar, "AddNew").Failure);
                 nint fa = (nint)Get(af, "Item", "A")!;
+                // Unrecorded VT_EMPTY / VT_NULL / metadata reads refuse honestly.
+                Assert.Equal(CalcDb.Com.Com.HResults.E_NOTIMPL, Put(fa, "Value", null).Failure!.Value.Scode);
+                Assert.Equal(CalcDb.Com.Com.HResults.E_NOTIMPL, Put(fa, "Value", DBNull.Value).Failure!.Value.Scode);
+                Assert.Equal(CalcDb.Com.Com.HResults.E_NOTIMPL, TryGet(fa, "Type").Failure!.Value.Scode);
                 Assert.Null(Put(fa, "Value", 7).Failure);
                 Release(fa);
                 nint fb = (nint)Get(af, "Item", "B")!;
@@ -153,6 +160,9 @@ public sealed unsafe class AdoBatchErrSchemaTests
                 Assert.Equal((nint)0, (nint)Get(ar, "ActiveConnection")!);
                 Assert.Null(Call(ar, "Close").Failure);
                 Assert.Equal(0, Get(ar, "State"));
+                // Re-open / Append after Close refuse honestly (stale fabricated columns cleared).
+                Assert.Equal(CalcDb.Com.Com.HResults.E_NOTIMPL, Call(ar, "Open").Failure!.Value.Scode);
+                Assert.Equal(CalcDb.Com.Com.HResults.E_NOTIMPL, Call(af, "Append", "E", 3).Failure!.Value.Scode);
             }
             finally
             {
@@ -229,6 +239,13 @@ public sealed unsafe class AdoBatchErrSchemaTests
                     expectedDescription: "Parameter object is improperly defined. Inconsistent or incomplete information was provided.",
                     expectedHelpContext: 1240657u,
                     expectedInfoGuid: IidCommand);
+
+                // ? placeholder SQL with VT_EMPTY Parameters still fails 0x80040E10 (3748).
+                Assert.Null(Put(cmd, "CommandText", "UPDATE T SET S = ? WHERE ID = 1").Failure);
+                var qEmpty = Call(cmd, "Execute", null, null, 1);
+                AssertError(qEmpty, unchecked((int)0x80040E10), "Microsoft Access Database Engine",
+                    expectedDescription: "Parameter ?_1 has no default value.",
+                    expectedHelpContext: 5003747u);
             }
             finally
             {
@@ -409,13 +426,19 @@ public sealed unsafe class AdoBatchErrSchemaTests
                 Assert.Equal(7, afterRequery);
                 Assert.Null(Call(t1, "Close").Failure);
 
-                // Server static (2,3,1) Requery also succeeds (r-fix-wire-ado/txn-client-cache-rollback-distinct-rows #149).
+                // Server static (2,3,1) Requery materializes into static MemoryRowSource snapshot (RecordCount=7, Clone works)
+                // (r-fix-wire-ado/txn-client-cache-rollback-distinct-rows #149).
                 nint t2 = New(OwnRecordset);
                 try
                 {
                     Assert.Null(Put(t2, "CursorLocation", 2).Failure);
                     Assert.Null(Call(t2, "Open", "SELECT ID, S FROM T ORDER BY ID", new Dispatch(cn), 3, 1, 1).Failure);
                     Assert.Null(Call(t2, "Requery").Failure);
+                    Assert.Equal(7, Get(t2, "RecordCount"));
+                    nint t2Clone = (nint)Call(t2, "Clone").Value!;
+                    Assert.Equal(7, Get(t2Clone, "RecordCount"));
+                    Assert.Null(Call(t2Clone, "Close").Failure);
+                    Release(t2Clone);
                     int t2Count = 0;
                     while (!(bool)Get(t2, "EOF")!)
                     {

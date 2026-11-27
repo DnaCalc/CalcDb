@@ -641,6 +641,7 @@ internal sealed unsafe class AdoFieldsObject : AdoObject
     public void Bind(AdoFieldDescriptor[] columns)
     {
         InvalidateWrappers();
+        _fabricatedColumns.Clear();
         _pendingPrepareError = null;
         _columns = columns;
         _wrappers = columns.Length == 0 ? [] : new AdoFieldObject?[columns.Length];
@@ -650,6 +651,7 @@ internal sealed unsafe class AdoFieldsObject : AdoObject
     public void RecordFailedOpen(MappedProviderError? prepareError)
     {
         InvalidateWrappers();
+        _fabricatedColumns.Clear();
         _columns = [];
         _wrappers = [];
         _pendingPrepareError = prepareError;
@@ -663,6 +665,7 @@ internal sealed unsafe class AdoFieldsObject : AdoObject
     public void RecordFailedOpenWithSchema(AdoFieldDescriptor[] columns)
     {
         InvalidateWrappers();
+        _fabricatedColumns.Clear();
         _pendingPrepareError = null;
         _columns = columns;
         _wrappers = columns.Length == 0 ? [] : new AdoFieldObject?[columns.Length];
@@ -675,6 +678,7 @@ internal sealed unsafe class AdoFieldsObject : AdoObject
     public void OnRecordsetClosed()
     {
         InvalidateWrappers();
+        _fabricatedColumns.Clear();
         _wrappers = _columns.Length == 0 ? [] : new AdoFieldObject?[_columns.Length];
     }
 
@@ -682,6 +686,7 @@ internal sealed unsafe class AdoFieldsObject : AdoObject
     public void Detach()
     {
         InvalidateWrappers();
+        _fabricatedColumns.Clear();
         _pendingPrepareError = null;
         _columns = [];
         _wrappers = [];
@@ -703,6 +708,10 @@ internal sealed unsafe class AdoFieldsObject : AdoObject
     private CallResult Count()
     {
         DetachIfConnectionClosed();
+        if (!_recordset.IsOpen && _fabricatedColumns.Count > 0)
+        {
+            return NotImplemented("Fields.Count on a closed Recordset with appended fabricated fields before Open (not recorded)");
+        }
         if (_pendingPrepareError is { } err)
         {
             _recordset.ReportProviderError(err);
@@ -714,6 +723,10 @@ internal sealed unsafe class AdoFieldsObject : AdoObject
     private CallResult Item(nint index)
     {
         DetachIfConnectionClosed();
+        if (!_recordset.IsOpen && _fabricatedColumns.Count > 0)
+        {
+            return NotImplemented("Fields.Item on a closed Recordset with appended fabricated fields before Open (not recorded)");
+        }
         if (_pendingPrepareError is { } err)
         {
             _recordset.ReportProviderError(err);
@@ -767,9 +780,9 @@ internal sealed unsafe class AdoFieldsObject : AdoObject
 
     private CallResult Append(ReadOnlySpan<nint> args)
     {
-        if (_recordset.IsOpen)
+        if (_recordset.IsOpen || _recordset.HasActiveConnection || _recordset.ClosedAfterOpen)
         {
-            return NotImplemented("Fields.Append on an open Recordset (not recorded)");
+            return NotImplemented("Fields.Append on an open, connected, or previously opened Recordset (not recorded)");
         }
         string? name = args.Length > 0 && args[0] != 0 ? Args.Text(args[0]) : null;
         if (string.IsNullOrEmpty(name))
@@ -787,8 +800,9 @@ internal sealed unsafe class AdoFieldsObject : AdoObject
         {
             return NotImplemented("Fields.Append with missing or non-numeric Type (not recorded)");
         }
+        bool sizeProvided = args.Length > 2 && args[2] != 0 && !TypedCall.IsMissing(Args.Cell(args[2]));
         int definedSize = 0;
-        if (args.Length > 2 && args[2] != 0 && !TypedCall.IsMissing(Args.Cell(args[2])))
+        if (sizeProvided)
         {
             if (AdoArgs.Int32(args[2]) is not int parsedSize)
             {
@@ -796,18 +810,10 @@ internal sealed unsafe class AdoFieldsObject : AdoObject
             }
             definedSize = parsedSize;
         }
-        int attrib = -1;
-        if (args.Length > 3 && args[3] != 0 && !TypedCall.IsMissing(Args.Cell(args[3])))
+        bool attribProvided = args.Length > 3 && args[3] != 0 && !TypedCall.IsMissing(Args.Cell(args[3]));
+        if (attribProvided)
         {
-            if (AdoArgs.Int32(args[3]) is not int parsedAttrib)
-            {
-                return NotImplemented("Fields.Append with non-numeric Attrib (not recorded)");
-            }
-            attrib = parsedAttrib;
-        }
-        if (attrib != -1)
-        {
-            return NotImplemented($"Fields.Append with Attrib={attrib} (only omitted/-1 is recorded in r-q-wire/ado-connectionless-recordset)");
+            return NotImplemented("Fields.Append with explicit Attrib argument (only omitted Attrib is recorded in r-q-wire/ado-connectionless-recordset)");
         }
         if (args.Length > 4 && args[4] != 0 && !TypedCall.IsMissing(Args.Cell(args[4])) && Args.TypeOf(args[4]) != VarType.Empty)
         {
@@ -815,22 +821,26 @@ internal sealed unsafe class AdoFieldsObject : AdoObject
         }
 
         // r-q-wire/ado-connectionless-recordset #4-#5: Append("A", adInteger=3) and Append("B", adVarWChar=202, 50).
+        // Metadata properties (Type/DefinedSize/Precision/NumericScale/Attributes) were not observed in that record and refuse honestly.
+        Failure metaRefusal = Failure.NotModelled(
+            "NotModelled.AdoFabricatedFieldMetadata",
+            $"Reading Field metadata on fabricated connectionless field '{name}' is not recorded");
         AdoFieldDescriptor descriptor;
         if (adoType == 3) // adInteger
         {
-            if (definedSize is not (0 or 4))
+            if (sizeProvided)
             {
-                return NotImplemented($"Fields.Append(adInteger) with DefinedSize={definedSize} (only omitted/0 or 4 is recorded)");
+                return NotImplemented($"Fields.Append(adInteger) with explicit DefinedSize={definedSize} (only omitted DefinedSize is recorded)");
             }
-            descriptor = new AdoFieldDescriptor(name, 3, 4, 10, 255, 16, false, null, -1);
+            descriptor = new AdoFieldDescriptor(name, 3, 4, 10, 255, 16, false, null, -1, MetadataRefusal: metaRefusal);
         }
         else if (adoType == 202) // adVarWChar
         {
-            if (definedSize <= 0)
+            if (!sizeProvided || definedSize <= 0)
             {
                 return NotImplemented($"Fields.Append(adVarWChar) with DefinedSize={definedSize} (positive DefinedSize required)");
             }
-            descriptor = new AdoFieldDescriptor(name, 202, definedSize, 255, 255, 0, false, null, -1);
+            descriptor = new AdoFieldDescriptor(name, 202, definedSize, 255, 255, 0, false, null, -1, MetadataRefusal: metaRefusal);
         }
         else
         {
@@ -844,6 +854,10 @@ internal sealed unsafe class AdoFieldsObject : AdoObject
     private CallResult NewEnum()
     {
         DetachIfConnectionClosed();
+        if (!_recordset.IsOpen && _fabricatedColumns.Count > 0)
+        {
+            return NotImplemented("Fields._NewEnum on a closed Recordset with appended fabricated fields before Open (not recorded)");
+        }
         if (_pendingPrepareError is { } err)
         {
             _recordset.ReportProviderError(err);

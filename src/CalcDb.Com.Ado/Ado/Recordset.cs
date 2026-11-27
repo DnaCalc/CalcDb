@@ -1375,6 +1375,10 @@ internal sealed unsafe class RecordsetObject : AdoObject
 
     public bool IsOpen => _rows is not null;
 
+    internal bool HasActiveConnection => _activeConnection is not null;
+
+    internal bool ClosedAfterOpen => _closedAfterOpen;
+
     internal bool IsBoundToOpenAceConnection => _activeConnection is { IsOpen: true, IsPersistenceOpen: false };
 
     public bool IsActiveConnectionOpen => _activeConnection is { IsOpen: true };
@@ -1752,7 +1756,8 @@ internal sealed unsafe class RecordsetObject : AdoObject
             return;
         }
         bool wasAtEof = _eof;
-        if (ks.OnTransactionRolledBack(newDepth, out int clampedCount))
+        bool droppedRows = ks.OnTransactionRolledBack(newDepth, out int clampedCount);
+        if (droppedRows)
         {
             ResetServerValueReadState();
             if (clampedCount == 0)
@@ -1768,7 +1773,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
                 _eof = false;
             }
         }
-        if (newDepth == 0 && wasAtEof && _effectiveCursorLocation == 2 && _effectiveCursorType == 1 && _effectiveLockType == 3 && ks.IsUpdatable)
+        if (newDepth == 0 && wasAtEof && !droppedRows && clampedCount > 0 && _effectiveCursorLocation == 2 && _effectiveCursorType == 1 && _effectiveLockType == 3 && ks.IsUpdatable)
         {
             // r-ado-1b/txn-client-cache-rollback #72-#93, r-fix-wire-ado/txn-client-cache-rollback-distinct-rows #84-#111:
             // an updatable server keyset (Preserve on Abort = False) that was at EOF when an outer RollbackTrans ran
@@ -2779,6 +2784,10 @@ internal sealed unsafe class RecordsetObject : AdoObject
             }
             return NotImplemented($"Recordset.UpdateBatch({affect}) on optimistic cursor (mdb={_isMdb}, {_effectiveCursorLocation}, {_effectiveCursorType}, 3) (not recorded)");
         }
+        if (_rows is ClientBatchRowSource { Buffer.IsFabricated: true })
+        {
+            return NotImplemented("Recordset.CancelBatch on a fabricated connectionless Recordset (not recorded)");
+        }
         if (_rows is not ClientBatchRowSource cb || !cb.IsBatchOptimistic)
         {
             return NotImplemented("Recordset.UpdateBatch on a non-batch cursor");
@@ -2944,6 +2953,10 @@ internal sealed unsafe class RecordsetObject : AdoObject
             }
             ClearConnectionErrors();
             return CallResult.Nothing;
+        }
+        if (_rows is ClientBatchRowSource { Buffer.IsFabricated: true })
+        {
+            return NotImplemented("Recordset.CancelBatch on a fabricated connectionless Recordset (not recorded)");
         }
         if (_rows is not ClientBatchRowSource cb || !cb.IsBatchOptimistic)
         {
@@ -3226,6 +3239,10 @@ internal sealed unsafe class RecordsetObject : AdoObject
             memClone.Release();
             return memRes;
         }
+        if (_rows is ClientBatchRowSource { Buffer.IsFabricated: true })
+        {
+            return NotImplemented("Recordset.Clone on a fabricated connectionless Recordset (not recorded)");
+        }
         if (_rows is not ClientBatchRowSource cb)
         {
             return NotImplemented("Recordset.Clone on a non-client-batch cursor (belongs to a later stretch)");
@@ -3351,6 +3368,20 @@ internal sealed unsafe class RecordsetObject : AdoObject
             return CallResult.Fail(refusal!);
         }
 
+        if (isServerStatic && fresh is not MemoryRowSource)
+        {
+            PersistedColumn[]? persistCols = fresh is SelectRowSource selectForPersist
+                ? selectForPersist.BuildPersistColumns(session)
+                : null;
+            MemoryRowSource? snapshot = MemoryRowSource.Materialize(fresh, isClientCursor: false, out Failure? matFailure, fresh.HeldTables, persistCols);
+            fresh.Dispose();
+            if (snapshot is null)
+            {
+                return CallResult.Fail(matFailure!);
+            }
+            fresh = snapshot;
+        }
+
         AdoEvents.RecordsetChangeComplete(_events, AdoEventReason.Close, null, AdoEventStatus.Ok, this);
 
         _rows!.Dispose();
@@ -3378,6 +3409,10 @@ internal sealed unsafe class RecordsetObject : AdoObject
             _eof = false;
             _position = 0;
             fresh.TrySeek(0, out _);
+            if (IsServerStaticBookmarkMode)
+            {
+                EnsureServerStaticBookmark(0);
+            }
         }
         // r-q2-ado-misc/ado-events-recordset-moves #30-#31: server keyset Requery re-arms lazy initial position realization
         // so a subsequent Close() emits WillMove(10)/MoveComplete(10) before RecordsetChangeComplete(9).
@@ -5406,6 +5441,10 @@ internal sealed unsafe class RecordsetObject : AdoObject
                 && cursorArg == 0
                 && lockArg == 0
                 && optionsArg == 0
+                && !_cursorLocationExplicit
+                && _requestedCursorType == 0
+                && _requestedLockType == 1
+                && !_closedAfterOpen
                 && _fields is { HasFabricatedColumns: true })
             {
                 return OpenFromFabricated(_fields.GetFabricatedColumns());
@@ -6418,6 +6457,10 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return NotImplemented("Recordset.MoveLast while editing (implicit Update on MoveLast is not recorded)");
         }
+        if (_keysetTruncatedAfterRollback)
+        {
+            return NotImplemented("Recordset.MoveLast on a server keyset truncated after outer RollbackTrans at EOF (not recorded)");
+        }
         _initialPositionPending = false;
         ConsumeDeletedCurrent();
         if (_effectiveCursorType == 0)
@@ -6651,6 +6694,10 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return FailAdo(AdoErrors.NotAllowedInContext);
         }
+        if (_keysetTruncatedAfterRollback)
+        {
+            return NotImplemented("Recordset.MovePrevious on a server keyset truncated after outer RollbackTrans at EOF (not recorded)");
+        }
         _initialPositionPending = false;
         bool removedCurrent = ConsumeDeletedCurrent();
         if ((!removedCurrent && ViewIsEmpty) || _bof)
@@ -6712,6 +6759,10 @@ internal sealed unsafe class RecordsetObject : AdoObject
         if (HasActiveChunkState)
         {
             return FailChunkNavigation("Move");
+        }
+        if (_keysetTruncatedAfterRollback)
+        {
+            return NotImplemented("Recordset.Move on a server keyset truncated after outer RollbackTrans at EOF (not recorded)");
         }
         if (_rows is ClientBatchRowSource && FlushPendingEdit(out _) is { } moveFlushErr)
         {
