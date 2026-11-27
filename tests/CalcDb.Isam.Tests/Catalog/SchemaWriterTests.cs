@@ -1780,26 +1780,14 @@ public sealed class SchemaWriterTests
         byte[] nullImage = Kept.AfterSetupImage("ix-cat1b-rows-chain-accdb-dao");
         using (var session = new Session(nullImage))
         {
-            // Existing NULL on PRIMARY and DISALLOW NULL now fail ACE 3058 with 0 bytes written
-            // (evidence/r-q50-jk44-ddl-vis/ddl-index-disallow-primary-rows-accdb, ddl-index-disallow-primary-rows-mdb).
-            NewIndex[] nullAce3058 =
+            // Existing NULL on PRIMARY, DISALLOW NULL (fresh session without prior global-map activity), UNIQUE non-IGNORE NULL,
+            // DESC non-IGNORE NULL, and 2-col non-IGNORE NULL/IGNORE NULL refuse by name (only a single ascending Long Null row in
+            // a non-unique non-IGNORE NULL index is recorded in r-q43-schema-lval-index/ix-lval-pk-rows-*; 0-byte 3058 on PRIMARY /
+            // DISALLOW NULL is recorded only on a single Long column after prior global-map activity in r-q50-jk44-ddl-vis).
+            NewIndex[] nullRefused =
             [
                 new("PK_C", ["C"], PrimaryKey: true, Unique: true),
                 new("IX_C_DIS", ["C"], PrimaryKey: false, DisallowNull: true),
-            ];
-            foreach (NewIndex idx in nullAce3058)
-            {
-                SchemaOutcome outcome = session.Writer().CreateIndex(session.Workspace, new("TI", idx, SchemaRoute.Sql), 2);
-                Assert.False(outcome.Succeeded, $"{idx.Name} should fail 3058");
-                Assert.False(outcome.PublishedAny, $"{idx.Name} should not publish");
-                Assert.Equal(3058, outcome.Refused?.Error);
-                Assert.Equal(nullImage, session.File.Snapshot());
-            }
-
-            // Existing NULL on UNIQUE non-IGNORE NULL, DESC non-IGNORE NULL, and 2-col non-IGNORE NULL/IGNORE NULL refuse by name
-            // (only a single ascending Long Null row in a non-unique non-IGNORE NULL index is recorded in r-q43-schema-lval-index/ix-lval-pk-rows-*).
-            NewIndex[] nullRefused =
-            [
                 new("IX_C_DESC", ["C"], PrimaryKey: false, Descending: [true]),
                 new("IX_BC_PLAIN", ["B", "C"], PrimaryKey: false),
                 new("UK_C", ["C"], PrimaryKey: false, Unique: true),

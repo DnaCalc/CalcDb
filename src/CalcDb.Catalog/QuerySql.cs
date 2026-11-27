@@ -95,9 +95,12 @@ public static class QuerySql
             return RenderedSql.Refuse(optionFailure);
         }
         bool ownerAccess = (options & OwnerAccess) != 0;
-        if (ownerAccess && (family != QueryFamily.Select || (options & ~OwnerAccess) != 0))
+        if (ownerAccess && (family != QueryFamily.Select || (options & ~OwnerAccess) != 0
+            || q.Role(QueryAttributes.Parameters).Any()
+            || q.Role(QueryAttributes.Where).Any()
+            || q.Role(QueryAttributes.OrderBy).Any()))
         {
-            return RenderedSql.Refuse("WITH OWNERACCESS OPTION combined with non-SELECT or other SELECT option bits (only plain SELECT WITH OWNERACCESS OPTION is observed in r-q50-jk44-ddl-vis/ddl-view-create-drop-*)");
+            return RenderedSql.Refuse("WITH OWNERACCESS OPTION combined with non-SELECT, PARAMETERS, WHERE, ORDER BY, or other SELECT option bits (only plain SELECT WITH OWNERACCESS OPTION is observed in r-q50-jk44-ddl-vis/ddl-view-create-drop-accdb, ddl-view-create-drop-mdb)");
         }
         short selectOptions = (short)(options & ~OwnerAccess);
         QueryRow[] outputs = [.. q.Role(QueryAttributes.Output)];

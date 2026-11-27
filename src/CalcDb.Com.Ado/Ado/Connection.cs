@@ -560,7 +560,12 @@ internal sealed class AdoSqlViewDatabase(AdoOpenSession session) : ISqlDatabase
 
     public string? SavedSelectSql(string name)
     {
-        if (session.FindSavedQuery(name) is { Family: QueryFamily.Select } q)
+        // r-q50-jk44-ddl-vis/ddl-view-create-drop-accdb, ddl-view-create-drop-mdb: only plain ADO-created
+        // views (Flags 0x10000000, QueryFamily.Select, no parameters, no WITH OWNERACCESS OPTION) are recorded as FROM sources.
+        if (session.FindSavedQuery(name) is { Family: QueryFamily.Select } q
+            && (q.Entry.Flags & 0x10000000) != 0
+            && !q.Role(QueryAttributes.Parameters).Any()
+            && !q.Role(QueryAttributes.Options).Any(r => (r.Flag & 0x0004) != 0))
         {
             RenderedSql rendered = QuerySql.Render(q);
             return rendered.Text;
@@ -2091,6 +2096,11 @@ internal sealed unsafe class ConnectionObject : AdoObject
             if (unmodelledExecArg is not null)
             {
                 return CallResult.Fail(Failure.NotModelled("NotModelled.AdoExecArguments", unmodelledExecArg));
+            }
+            if (execLiteralArgs is not null && (explicitCommand is not null || commandParameters is { Count: > 0 }))
+            {
+                AdoSqlText.DisposeParams(execLiteralArgs);
+                return CallResult.Fail(Failure.NotModelled("NotModelled.AdoExecArguments", "EXEC with inline literal arguments via Command.Execute or alongside Command.Parameters is not recorded (r-q50-jk44-ddl-vis/ddl-proc-create-exec-drop-accdb, ddl-proc-create-exec-drop-mdb record Connection.Execute only)"));
             }
             try
             {

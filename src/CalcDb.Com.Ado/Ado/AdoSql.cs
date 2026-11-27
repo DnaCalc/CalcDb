@@ -1088,6 +1088,16 @@ internal static class AdoSqlText
                 if (rest[i] == ',')
                 {
                     i++;
+                    while (i < rest.Length && char.IsWhiteSpace(rest[i]))
+                    {
+                        i++;
+                    }
+                    if (i >= rest.Length)
+                    {
+                        DisposeParams(parsed);
+                        unmodelledArg = "trailing comma in EXEC argument list";
+                        return true;
+                    }
                     continue;
                 }
                 DisposeParams(parsed);

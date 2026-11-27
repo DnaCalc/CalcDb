@@ -614,7 +614,7 @@ public static class DdlParser
             {
                 return ParseCreateView(out failure);
             }
-            if (allowAdoCheck && (TakeWord("PROCEDURE") || TakeWord("PROC")))
+            if (allowAdoCheck && TakeWord("PROCEDURE"))
             {
                 return ParseCreateProcedure(out failure);
             }
@@ -663,10 +663,13 @@ public static class DdlParser
             var parameters = new List<DdlProcedureParameter>();
             if (TakeSymbol('('))
             {
-                if (!TakeSymbol(')'))
+                if (TakeSymbol(')'))
                 {
-                    while (true)
-                    {
+                    failure = Open("NotModelled.DdlCreateProcedureSyntax", "empty parameter list () in CREATE PROCEDURE is not recorded");
+                    return null;
+                }
+                while (true)
+                {
                         string? pName = ReadIdentifier(IdentifierMode.OtherDdlName, out SqlFailure? pNameFail);
                         if (pName is null)
                         {
@@ -689,7 +692,6 @@ public static class DdlParser
                         }
                         failure = Open("NotModelled.DdlCreateProcedureSyntax", "expected ',' or ')' in CREATE PROCEDURE parameter list");
                         return null;
-                    }
                 }
             }
             if (!TakeWord("AS"))
@@ -1717,7 +1719,7 @@ public static class DdlParser
                 return new DropViewStatement(s, viewName);
             }
 
-            if (allowAdoCheck && (TakeWord("PROCEDURE") || TakeWord("PROC")))
+            if (allowAdoCheck && TakeWord("PROCEDURE"))
             {
                 string? procName = ReadIdentifier(IdentifierMode.OtherDdlName, out SqlFailure? procNameFail);
                 if (procName is null)

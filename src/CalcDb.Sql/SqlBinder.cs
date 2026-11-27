@@ -804,7 +804,8 @@ public sealed class BoundSelect : IDisposable
         out SqlFailure? failure,
         bool allowRepeatedSingleSourceColumn = false,
         OuterScopeChain? outerChain = null,
-        bool allowDuplicateOutputNames = false)
+        bool allowDuplicateOutputNames = false,
+        bool allowViewExpansion = true)
     {
         var bound = new BoundSelect(syntax, database.Context, parameters, ownsSyntax);
         failure = bound.Declare(syntax.Parameters);
@@ -820,7 +821,7 @@ public sealed class BoundSelect : IDisposable
         }
         else if (failure is null)
         {
-            failure = new Binder(bound, syntax, database, allowRepeatedSingleSourceColumn, outerChain, allowDuplicateOutputNames).Run();
+            failure = new Binder(bound, syntax, database, allowRepeatedSingleSourceColumn, outerChain, allowDuplicateOutputNames, allowViewExpansion).Run();
         }
         if (failure is not null)
         {
@@ -1739,7 +1740,7 @@ public sealed class BoundSelect : IDisposable
         }
     }
 
-    private sealed class Binder(BoundSelect bound, SelectSyntax syntax, ISqlDatabase database, bool allowRepeatedSingleSourceColumn = false, OuterScopeChain? outerChain = null, bool allowDuplicateOutputNames = false)
+    private sealed class Binder(BoundSelect bound, SelectSyntax syntax, ISqlDatabase database, bool allowRepeatedSingleSourceColumn = false, OuterScopeChain? outerChain = null, bool allowDuplicateOutputNames = false, bool allowViewExpansion = true)
     {
         private readonly ExpressionContext _context = database.Context;
         private SourceScope _scope = null!;
@@ -2029,12 +2030,12 @@ public sealed class BoundSelect : IDisposable
                     {
                         if (database.IsQuery(named.Name))
                         {
-                            if (database.SavedSelectSql(named.Name) is { } viewSql)
+                            if (allowViewExpansion && database.SavedSelectSql(named.Name) is { } viewSql)
                             {
                                 SelectSyntax? viewSyntax = SqlParser.Parse(viewSql, out _);
-                                if (viewSyntax is not null)
+                                if (viewSyntax is not null && !viewSyntax.WithOwnerAccess)
                                 {
-                                    BoundSelect? viewInner = Bind(viewSyntax, database, ownsSyntax: true, parameters: [], out SqlFailure? viewBindFail);
+                                    BoundSelect? viewInner = Bind(viewSyntax, database, ownsSyntax: true, parameters: [], out SqlFailure? viewBindFail, allowViewExpansion: false);
                                     if (viewBindFail is null && viewInner is not null && viewInner.ParameterList.Count == 0)
                                     {
                                         int viewIndex = bound.SourceList.Count;
@@ -2047,6 +2048,10 @@ public sealed class BoundSelect : IDisposable
                                     {
                                         viewSyntax.Dispose();
                                     }
+                                }
+                                else
+                                {
+                                    viewSyntax?.Dispose();
                                 }
                             }
                             return Open("NotModelled.QuerySource", $"saved query {named.Name} as a source (W-07/saved-definition reads it)");

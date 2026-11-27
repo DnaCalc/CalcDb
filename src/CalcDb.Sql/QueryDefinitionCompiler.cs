@@ -48,7 +48,7 @@ public static class QueryDefinitionCompiler
     /// <c>r-q50-jk44-ddl-vis/ddl-view-create-drop-*</c>, <c>ddl-proc-create-exec-drop-*</c>), the <c>Start (0x00)</c> row
     /// carries <c>Flag = 1</c> instead of DAO's <c>Flag = 0</c>.
     /// </summary>
-    public static QueryDefinitionCompilation Compile(string sql, string? connect = null, bool isAdoDdl = false)
+    public static QueryDefinitionCompilation Compile(string sql, string? connect = null, bool isAdoDdl = false, bool allowOwnerAccess = false)
     {
         if (!string.IsNullOrEmpty(connect))
         {
@@ -64,7 +64,7 @@ public static class QueryDefinitionCompiler
         string lead = LeadKeyword(sql);
         if (lead.Equals("SELECT", StringComparison.OrdinalIgnoreCase) || lead == "(")
         {
-            return CompileSelectOrUnion(sql, startFlag);
+            return CompileSelectOrUnion(sql, startFlag, allowOwnerAccess);
         }
         if (lead.Equals("UPDATE", StringComparison.OrdinalIgnoreCase)
             || lead.Equals("DELETE", StringComparison.OrdinalIgnoreCase)
@@ -161,16 +161,16 @@ public static class QueryDefinitionCompiler
         return QueryDefinitionCompilation.Ok(QueryFamily.PassThrough, b.Build());
     }
 
-    private static QueryDefinitionCompilation CompileSelectOrUnion(string sql, short startFlag = 0)
+    private static QueryDefinitionCompilation CompileSelectOrUnion(string sql, short startFlag = 0, bool allowOwnerAccess = false)
     {
         using SelectSyntax? select = SqlParser.ParseForDefinition(sql, out SqlFailure? failure);
         if (select is null)
         {
             return QueryDefinitionCompilation.Fail(failure!);
         }
-        if (select.WithOwnerAccess && (startFlag == 0 || select.IsUnion || select.IntoTarget is not null))
+        if (select.WithOwnerAccess && (!allowOwnerAccess || select.IsUnion || select.IntoTarget is not null))
         {
-            return Open("NotModelled.QueryDefOwnerAccess", "CreateQueryDef with WITH OWNERACCESS OPTION (only ADO CREATE VIEW plain SELECT is recorded in r-q50-jk44-ddl-vis/ddl-view-create-drop-*)");
+            return Open("NotModelled.QueryDefOwnerAccess", "CreateQueryDef with WITH OWNERACCESS OPTION (only ADO CREATE VIEW plain SELECT is recorded in r-q50-jk44-ddl-vis/ddl-view-create-drop-accdb, ddl-view-create-drop-mdb)");
         }
         if (select.IsUnion)
         {

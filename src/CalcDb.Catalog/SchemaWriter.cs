@@ -1027,7 +1027,19 @@ public sealed class SchemaWriter
         {
             if (request.Route != SchemaRoute.Ado)
             {
-                return new SchemaRefusal(null, $"CREATE TABLE with CHECK constraint '{chk.Name}' on {request.Route} route is not recorded (evidence/r-q50-jk44-ddl-vis/ddl-multi-constraint-table-* records ADO only)");
+                return new SchemaRefusal(null, $"CREATE TABLE with CHECK constraint '{chk.Name}' on {request.Route} route is not recorded (evidence/r-q50-jk44-ddl-vis/ddl-multi-constraint-table-accdb, ddl-multi-constraint-table-mdb record ADO only)");
+            }
+            if (exclusiveSession)
+            {
+                return new SchemaRefusal(null, "ADO CREATE TABLE with CHECK in an exclusive session is not recorded (evidence/r-q50-jk44-ddl-vis/ddl-multi-constraint-table-accdb, ddl-multi-constraint-table-mdb record shared sessions only)");
+            }
+            if (bigIntCount > 0 || dateTime2Count > 0 || lvalCount > 0 || request.Fields.Any(f => f.UnicodeCompression))
+            {
+                return new SchemaRefusal(null, "ADO CREATE TABLE combining CHECK with BIGINT/DATETIME2, Memo/OLE, or WITH COMPRESSION is not recorded (evidence/r-q50-jk44-ddl-vis/ddl-multi-constraint-table-accdb, ddl-multi-constraint-table-mdb)");
+            }
+            if (!hasDefault || request.ForeignKey is null || request.AllIndexes.Count != 2)
+            {
+                return new SchemaRefusal(null, $"ADO CREATE TABLE with CHECK constraint '{chk.Name}' outside the recorded 6-constraint shape (PK + FK + UNIQUE + DEFAULT + CHECK) is not recorded (evidence/r-q50-jk44-ddl-vis/ddl-multi-constraint-table-accdb, ddl-multi-constraint-table-mdb)");
             }
             if (!IsValidName(chk.Name))
             {
@@ -1047,6 +1059,20 @@ public sealed class SchemaWriter
                 || chkConnPayload!.Length > LongValuePlan.InlinePayloadMax)
             {
                 return new SchemaRefusal(null, $"CHECK constraint '{chk.Name}' Connect field: {chkConnFail ?? "exceeds inline LVAL limit"}");
+            }
+        }
+        if (request.Route == SchemaRoute.Ado && request.ForeignKey is { } adoFk && request.AllIndexes.Count == 2)
+        {
+            NewIndex idx0 = request.AllIndexes[0];
+            NewIndex idx1 = request.AllIndexes[1];
+            bool fkOrdOk = adoFk.ChildColumns.Count == 1
+                && idx0.PrimaryKey && !idx1.PrimaryKey && idx1.Unique && idx1.Fields.Count == 1
+                && TryMatchFieldName(adoFk.ChildColumns[0], fieldNames, out int fkColOrd, out _)
+                && TryMatchFieldName(idx1.Fields[0], fieldNames, out int uqColOrd, out _)
+                && fkColOrd >= 0 && uqColOrd >= 0 && fkColOrd < uqColOrd;
+            if (!fkOrdOk)
+            {
+                return new SchemaRefusal(null, "ADO CREATE TABLE combining FOREIGN KEY and UNIQUE outside single-column PK + FK-before-UNIQUE declaration order is not recorded (evidence/r-q50-jk44-ddl-vis/ddl-multi-constraint-table-accdb, ddl-multi-constraint-table-mdb)");
             }
         }
         if (hasDefault)
@@ -1095,7 +1121,7 @@ public sealed class SchemaWriter
         }
         if (request.Route is SchemaRoute.Sql or SchemaRoute.Ado && (requiredFields.Count > 0 || hasDefault || request.CheckConstraint is not null))
         {
-            bool useMultiSteps = hasDefault || request.Route == SchemaRoute.Ado;
+            bool useMultiSteps = hasDefault || request.CheckConstraint is not null;
             List<DaoPropertyStep> sqlSteps = useMultiSteps
                 ? BuildSqlAdoPropertySteps(request.Fields, checkConstraint: request.CheckConstraint)
                 : BuildSinglePropertySteps(requiredFields, SqlFieldRequired);
@@ -2075,11 +2101,17 @@ public sealed class SchemaWriter
         }
         if (!BuildIndexLeaf(table, request.Index, out byte[] leafBytes, out uint entryCount, out uint uniqueEntryCount, out bool duplicateMemoUnique, out bool nullInDisallowOrPrimary, out string? buildFailure))
         {
-            if (nullInDisallowOrPrimary)
+            if (nullInDisallowOrPrimary
+                && request.Route == SchemaRoute.Sql
+                && request.Index.Fields.Count == 1
+                && table.Columns.FirstOrDefault(c => string.Equals(c.Name, request.Index.Fields[0], StringComparison.OrdinalIgnoreCase))?.TypeCode == NativeTypes.Long
+                && workspace.HasGlobalMapAllocationOrReservation(_cache))
             {
                 // evidence/r-q50-jk44-ddl-vis/ddl-index-ignore-null-rows-accdb, ddl-index-ignore-null-rows-mdb (after-dis-fail),
                 // ddl-index-disallow-primary-rows-accdb, ddl-index-disallow-primary-rows-mdb (after-pri-fail):
-                // CREATE INDEX WITH DISALLOW NULL or WITH PRIMARY over an existing Null row fails 3058 with 0 bytes written.
+                // SQL CREATE INDEX WITH DISALLOW NULL or WITH PRIMARY on a single Long column over an existing Null row
+                // in a session with prior global-map activity fails 3058 with 0 bytes written (fresh-session / Text 3058
+                // writes page 0 + page 1 in r-q54-excl-ddl-ix-cmd/ix-unique-dup-3022-bytes-* and stays refused by name).
                 return new SchemaOutcome(new SchemaRefusal(3058, null), default, _pageCount, PublishedAny: false);
             }
             if (duplicateMemoUnique)
@@ -5550,7 +5582,12 @@ public sealed class SchemaWriter
         }
         if (_catalog.Entries.Any(e => e.ParentId == _catalog.TablesContainer && TablesContainerNamesEqual(e.Name, request.Name)))
         {
-            return new SchemaOutcome(new SchemaRefusal(3012, null), default, _pageCount);
+            return new SchemaOutcome(
+                request.IsAdoDdl
+                    ? new SchemaRefusal(null, $"ADO CREATE VIEW/PROCEDURE duplicate object '{request.Name}' error code is not recorded (evidence/r-q50-jk44-ddl-vis/ddl-view-create-drop-accdb, ddl-proc-create-exec-drop-accdb)")
+                    : new SchemaRefusal(3012, null),
+                default,
+                _pageCount);
         }
         if (request.Rows.Count == 0)
         {
@@ -5823,7 +5860,12 @@ public sealed class SchemaWriter
         }
         if (FindQuery(name) is not { } entry)
         {
-            return new SchemaOutcome(new SchemaRefusal(3265, null), default, _pageCount);
+            return new SchemaOutcome(
+                isAdoDdl
+                    ? new SchemaRefusal(null, $"ADO DROP VIEW/PROCEDURE missing object '{name}' error code is not recorded (evidence/r-q50-jk44-ddl-vis/ddl-view-create-drop-accdb, ddl-proc-create-exec-drop-accdb)")
+                    : new SchemaRefusal(3265, null),
+                default,
+                _pageCount);
         }
         if (SystemTable("MSysACEs", out string? acesFailure) is not { } aces)
         {
@@ -5997,6 +6039,15 @@ public sealed class SchemaWriter
                 return NotWritten($"query '{entry.Name}' MSysObjects row {entry.Root}: {envFail}");
             }
             int knownFixedEnd = objects.KnownFixedEnd(env.ColumnCount, _d);
+            if (isAdoDdl)
+            {
+                ColumnDescriptor lvExtraCol = objects.Columns[Ordinal(objects, "LvExtra")];
+                FieldRead lvExtraRead = env.ReadField(lvExtraCol, knownFixedEnd);
+                if (lvExtraRead.Outcome != FieldOutcome.Null)
+                {
+                    return NotWritten($"query '{entry.Name}' has non-Null MSysObjects.LvExtra ({lvExtraRead.Outcome}): deleting an ADO view/procedure with compiled LvExtra LVAL bytes is not recorded");
+                }
+            }
             FieldRead lvRead = env.ReadField(lvPropCol, knownFixedEnd);
             if (!(isAdoDdl && lvRead.Outcome == FieldOutcome.Null))
             {
@@ -6609,18 +6660,20 @@ public sealed class SchemaWriter
         }
         if (request.CheckConstraint is { } chk)
         {
-            int? maxNegId = null;
-            foreach (CatalogEntry e in _catalog.Entries)
+            HashSet<int> usedNegIds = [.. _catalog.Entries.Where(e => e.Id < 0).Select(e => e.Id)];
+            if (preparedFk is not null)
             {
-                if (e.Id < 0 && (maxNegId is null || e.Id > maxNegId.Value))
-                {
-                    maxNegId = e.Id;
-                }
+                usedNegIds.Add(preparedFk.NextRelationshipObjectId);
             }
             int nextNegId = preparedFk is not null
                 ? preparedFk.NextRelationshipObjectId + 1
-                : (maxNegId is int maxNeg ? maxNeg + 1 : int.MinValue);
-            string dbText = $"\u0001{(char)request.Name.Length}{request.Name}\u0001{(char)chk.ColumnName.Length}{chk.ColumnName}";
+                : (usedNegIds.Count > 0 ? usedNegIds.Max() + 1 : int.MinValue);
+            while (usedNegIds.Contains(nextNegId))
+            {
+                nextNegId++;
+            }
+            string canonicalChkCol = request.Fields.First(f => string.Equals(f.Name, chk.ColumnName, StringComparison.OrdinalIgnoreCase)).Name;
+            string dbText = $"\u0001{(char)request.Name.Length}{request.Name}\u0001{(char)canonicalChkCol.Length}{canonicalChkCol}";
             string? connFail = null;
             if (!TryEncodeCompressedLatin1Text(dbText, out byte[]? dbPayload, out string? dbFail)
                 || !TryEncodeCompressedLatin1Text(chk.Expression, out byte[]? connPayload, out connFail))

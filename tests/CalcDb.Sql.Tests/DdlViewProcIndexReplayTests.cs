@@ -105,7 +105,9 @@ public sealed class DdlViewProcIndexReplayTests
         Assert.True(o1.Succeeded, $"{question} CREATE PROCEDURE P1 failed: {o1.Failure}");
         AssertImagesEqual($"{question} [after-create-p1]", expP1, db.Image.Snapshot());
 
-        // P2: parameterized UPDATE
+        // P2: parameterized UPDATE (note: ACE's after-create-p2/p3/after-drop-* snapshots follow EXEC P1/P2/P3,
+        // which attach an unmodelled 12-byte MSysObjects.LvExtra compiled-query LVAL reference, so P2/P3 are
+        // verified here via MSysQueries catalog readback, QuerySql.Render, and clean DROP PROCEDURE).
         ulong p2Date = ReadObjectDateUpdate(snaps["after-create-p2"], "P2");
         db.DateBitsProvider = () => p2Date;
         ActionOutcome o2 = ActionExecutor.Execute("CREATE PROCEDURE P2 (pId LONG, pTxt TEXT(20)) AS UPDATE T SET A = pTxt WHERE ID = pId", db, source: ActionErrorSource.Ado);

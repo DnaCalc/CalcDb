@@ -5331,6 +5331,12 @@ internal sealed unsafe class RecordsetObject : AdoObject
                 refusal = Failure.NotModelled("NotModelled.AdoExecArguments", unmodelledExecArg);
                 return null;
             }
+            if (execLiteralArgs is not null && selectContext.Route != AdoSelectRoute.ConnectionExecuteSql)
+            {
+                AdoSqlText.DisposeParams(execLiteralArgs);
+                refusal = Failure.NotModelled("NotModelled.AdoExecArguments", "EXEC with inline literal arguments outside Connection.Execute is not recorded (r-q50-jk44-ddl-vis/ddl-proc-create-exec-drop-accdb, ddl-proc-create-exec-drop-mdb)");
+                return null;
+            }
             try
             {
                 IReadOnlyList<AdoCommandParam>? effectiveParams = commandParameters ?? execLiteralArgs;

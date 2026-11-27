@@ -857,7 +857,7 @@ public static class DdlBinder
         {
             return Fail(BindAce(3125, SqlMessages.InvalidObjectName(stmt.ViewName)), out failure);
         }
-        QueryDefinitionCompilation compiled = QueryDefinitionCompiler.Compile(stmt.SelectSql, isAdoDdl: true);
+        QueryDefinitionCompilation compiled = QueryDefinitionCompiler.Compile(stmt.SelectSql, isAdoDdl: true, allowOwnerAccess: true);
         if (!compiled.Succeeded)
         {
             return Fail(compiled.Failure!, out failure);
@@ -865,6 +865,10 @@ public static class DdlBinder
         if (compiled.Family != QueryFamily.Select)
         {
             return Fail(BindOpen("NotModelled.DdlCreateViewBody", $"CREATE VIEW '{stmt.ViewName}' with non-SELECT body ({compiled.Family}) is not recorded"), out failure);
+        }
+        if (compiled.Rows!.Any(r => r.Attribute == QueryAttributes.Parameters))
+        {
+            return Fail(BindOpen("NotModelled.DdlCreateViewParameters", $"CREATE VIEW '{stmt.ViewName}' with PARAMETERS is not recorded (r-q50-jk44-ddl-vis/ddl-view-create-drop-accdb, ddl-view-create-drop-mdb)"), out failure);
         }
         failure = null;
         return new BoundDdl(stmt, BoundDdlKind.CreateQuery, CreateQuery: new CreateQueryDefRequest(stmt.ViewName, compiled.Family, compiled.Rows!, IsAdoDdl: true));
