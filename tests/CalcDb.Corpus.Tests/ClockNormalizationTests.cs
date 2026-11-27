@@ -1892,10 +1892,10 @@ public sealed class ClockNormalizationTests
         Assert.False(FileImageComparison.Compare(dropMdbFull, nonStampLval).EqualOutsideClock);
 
         // (d) Compiled-plan Lv/LVAL (ado-cmd-exec-noparam-mdb): Lv descriptor flags (+3) and page pointer (+4..+7) on p17,
-        // and LVAL page kind/marker/rowCount/slot-flags/free-gap on p25, remain strict.
+        // and LVAL page kind/marker/rowCount/slot-flags/FreeCount-consistency on p25, remain strict.
         EvidenceRecord adoMdbRec = LoadRecord(@"evidence\r-q54-excl-ddl-ix-cmd\ado-cmd-exec-noparam-mdb\r-q54-excl-ddl-ix-cmd.ado-cmd-exec-noparam-mdb.5cdfb4ca1a.a1.json");
         byte[] adoMdbFull = Convert.FromHexString(adoMdbRec.Capture!.Events.OfType<HandleEvent>().Last(h => h.Op == "read" && h.Success && h.Offset == 0 && h.Bytes is not null).Bytes!);
-        foreach (int absOff in (int[])[(17 * 4096) + 0xCEB, (17 * 4096) + 0xCED, (25 * 4096) + 0, (25 * 4096) + 4, (25 * 4096) + 12, (25 * 4096) + 15, (25 * 4096) + 20])
+        foreach (int absOff in (int[])[(17 * 4096) + 0xCEB, (17 * 4096) + 0xCED, (25 * 4096) + 0, (25 * 4096) + 2, (25 * 4096) + 4, (25 * 4096) + 12, (25 * 4096) + 15])
         {
             byte[] bad = (byte[])adoMdbFull.Clone();
             bad[absOff] ^= (absOff == (25 * 4096) + 15) ? (byte)0x40 : (byte)0x01;

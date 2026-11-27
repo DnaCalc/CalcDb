@@ -755,8 +755,7 @@ public static class AceClockFields
             {
                 return false;
             }
-            if (d.DataPage.FreeCount.Read(page) != (uint)(slotStart - 16)
-                || page.Slice(16, slotStart - 16).IndexOfAnyExcept((byte)0) >= 0)
+            if (d.DataPage.FreeCount.Read(page) != (uint)(slotStart - 16))
             {
                 return false;
             }

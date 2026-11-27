@@ -193,6 +193,10 @@ public sealed class CandidatePruneTests : IDisposable
         AttemptRecord attempt = PrepareAndSeal(store, "card/cand-junction", ImplementationSelection.CalcDbEnvironment, impl, seal: true);
         string attemptDir = store.AttemptDirectory(attempt.AttemptId);
         string workLink = Path.Combine(attemptDir, "work");
+        if (Directory.Exists(workLink))
+        {
+            Directory.Delete(workLink, recursive: true);
+        }
 
         // Create a directory junction (no elevation required on Windows) pointing at protected-target.
         using var proc = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("cmd.exe", $"/c mklink /J \"{workLink}\" \"{targetDir}\"")
