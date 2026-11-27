@@ -379,7 +379,7 @@ internal sealed unsafe class DBEngineObject : DaoObject
                 VarType vt = (VarType)cell->Vt;
                 switch (vt)
                 {
-                    case VarType.Empty or VarType.I4 or VarType.I2 or VarType.UI1:
+                    case VarType.I4:
                         break;
                     case VarType.Null:
                         return Fail(3421, DaoErrors.ConversionError);
@@ -388,25 +388,22 @@ internal sealed unsafe class DBEngineObject : DaoObject
                         {
                             return Fail(3421, DaoErrors.ConversionError);
                         }
-                        break;
+                        return CallResult.Fail(Failure.NotModelled(
+                            "NotModelled.IdleArgumentType",
+                            "DBEngine.Idle with a numeric-text BSTR argument (only omitted, I4, non-numeric BSTR and Null are recorded)"));
                     default:
                         return CallResult.Fail(Failure.NotModelled(
                             "NotModelled.IdleArgumentType",
-                            $"DBEngine.Idle with {vt} argument (only omitted, I4, BSTR and Null are recorded)"));
+                            $"DBEngine.Idle with {vt} argument (only omitted, I4, non-numeric BSTR and Null are recorded)"));
                 }
             }
         }
-        IReadOnlyList<TransactionCoordinator> workspaces = Engine.Changes.Workspaces;
-        for (int wi = 0; wi < workspaces.Count; wi++)
+        for (int si = 0; si < Engine.Sessions.Count; si++)
         {
-            TransactionCoordinator coordinator = workspaces[wi];
-            for (int si = 0; si < Engine.Sessions.Count; si++)
+            DatabaseObject session = Engine.Sessions[si];
+            if (!session.Closed)
             {
-                DatabaseObject session = Engine.Sessions[si];
-                if (!session.Closed)
-                {
-                    coordinator.EndLazyBurst(session.Cache);
-                }
+                session.Workspace.Transactions.EndLazyBurst(session.Cache);
             }
         }
         Engine.IdleCalledForDeferredQueryDef = true;
