@@ -866,7 +866,7 @@ public static class DdlBinder
         {
             return Fail(BindOpen("NotModelled.DdlCreateViewBody", $"CREATE VIEW '{stmt.ViewName}' with non-SELECT body ({compiled.Family}) is not recorded"), out failure);
         }
-        if (compiled.Rows!.Any(r => r.Attribute == QueryAttributes.Parameters))
+        if (compiled.Rows!.Any(r => r.Attribute == QueryAttributes.Parameter))
         {
             return Fail(BindOpen("NotModelled.DdlCreateViewParameters", $"CREATE VIEW '{stmt.ViewName}' with PARAMETERS is not recorded (r-q50-jk44-ddl-vis/ddl-view-create-drop-accdb, ddl-view-create-drop-mdb)"), out failure);
         }

@@ -96,7 +96,7 @@ public static class QuerySql
         }
         bool ownerAccess = (options & OwnerAccess) != 0;
         if (ownerAccess && (family != QueryFamily.Select || (options & ~OwnerAccess) != 0
-            || q.Role(QueryAttributes.Parameters).Any()
+            || q.Role(QueryAttributes.Parameter).Any()
             || q.Role(QueryAttributes.Where).Any()
             || q.Role(QueryAttributes.OrderBy).Any()))
         {

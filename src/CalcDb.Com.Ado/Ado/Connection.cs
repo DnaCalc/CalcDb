@@ -564,7 +564,7 @@ internal sealed class AdoSqlViewDatabase(AdoOpenSession session) : ISqlDatabase
         // views (Flags 0x10000000, QueryFamily.Select, no parameters, no WITH OWNERACCESS OPTION) are recorded as FROM sources.
         if (session.FindSavedQuery(name) is { Family: QueryFamily.Select } q
             && (q.Entry.Flags & 0x10000000) != 0
-            && !q.Role(QueryAttributes.Parameters).Any()
+            && !q.Role(QueryAttributes.Parameter).Any()
             && !q.Role(QueryAttributes.Options).Any(r => (r.Flag & 0x0004) != 0))
         {
             RenderedSql rendered = QuerySql.Render(q);

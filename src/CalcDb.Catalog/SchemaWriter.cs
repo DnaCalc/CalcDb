@@ -1065,9 +1065,9 @@ public sealed class SchemaWriter
         {
             NewIndex idx0 = request.AllIndexes[0];
             NewIndex idx1 = request.AllIndexes[1];
-            bool fkOrdOk = adoFk.ChildColumns.Count == 1
+            bool fkOrdOk = adoFk.Fields.Count == 1
                 && idx0.PrimaryKey && !idx1.PrimaryKey && idx1.Unique && idx1.Fields.Count == 1
-                && TryMatchFieldName(adoFk.ChildColumns[0], fieldNames, out int fkColOrd, out _)
+                && TryMatchFieldName(adoFk.Fields[0], fieldNames, out int fkColOrd, out _)
                 && TryMatchFieldName(idx1.Fields[0], fieldNames, out int uqColOrd, out _)
                 && fkColOrd >= 0 && uqColOrd >= 0 && fkColOrd < uqColOrd;
             if (!fkOrdOk)
