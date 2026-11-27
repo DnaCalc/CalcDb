@@ -410,9 +410,9 @@ internal static class AdoSqlErrors
             // r-str-ado-act/ado-execute-action #18-22, r-ado-1b/errors-by-route, r-ado-1b/rs-source-kinds #43
             3078 => Make(AdoObject.HResultNoTable, failure.Message, 5003011, "3078", -524420377, AdoObject.IidCommand),
             // r-str-ado-act/ado-execute-action #12 (INSERT INTO missing table);
-            // r-q49-dt2-draftprops/ddl-default-eval-edge-ado-{accdb,mdb} #116-119: SQLState "3192", NativeError -534185241.
+            // r-q49-dt2-draftprops/ddl-default-eval-edge-ado-accdb, ddl-default-eval-edge-ado-mdb #116-119: SQLState "3192", NativeError -534185241.
             3192 => Make(AdoObject.HResultNoTable, failure.Message, 5003011, "3192", -534185241, AdoObject.IidCommand),
-            // r-q49-dt2-draftprops/ddl-default-eval-edge-ado-{accdb,mdb} #46-61:
+            // r-q49-dt2-draftprops/ddl-default-eval-edge-ado-accdb, ddl-default-eval-edge-ado-mdb #46-61:
             // ad-hoc Connection.Execute CREATE TABLE syntax error (e.g. compound/missing DEFAULT) fails 0x80040E14,
             // helpContext 5003290, SQLState "3000", NativeError -537529823, IID_ICommandText.
             3290 when !isSavedQuery && isConnectionExecuteAction && sql is not null && IsCreateTableSql(sql) =>
@@ -420,7 +420,7 @@ internal static class AdoSqlErrors
             3290 => FailUnmodelledDetail(
                 "ADO OLE DB error detail for ACE error 3290 on this route or statement is not recorded (only ad-hoc Connection.Execute CREATE TABLE is recorded in r-q49-dt2-draftprops/ddl-default-eval-edge-ado-*)",
                 out unmodelled),
-            // r-q49-dt2-draftprops/ddl-default-eval-edge-ado-{accdb,mdb} #64-67:
+            // r-q49-dt2-draftprops/ddl-default-eval-edge-ado-accdb, ddl-default-eval-edge-ado-mdb #64-67:
             // ad-hoc Connection.Execute CREATE TABLE DEFAULT type mismatch fails 0x80004005 (E_FAIL),
             // helpContext 5003000, SQLState "3072", NativeError -529731193, IID_ICommand.
             3000 when !isSavedQuery && isConnectionExecuteAction && sql is not null && IsCreateTableSql(sql) =>
@@ -428,7 +428,7 @@ internal static class AdoSqlErrors
             3000 => FailUnmodelledDetail(
                 "ADO OLE DB error detail for ACE error 3000 on this route or statement is not recorded (only ad-hoc Connection.Execute CREATE TABLE is recorded in r-q49-dt2-draftprops/ddl-default-eval-edge-ado-*)",
                 out unmodelled),
-            // r-q49-dt2-draftprops/ddl-default-eval-edge-ado-{accdb,mdb} #70-73:
+            // r-q49-dt2-draftprops/ddl-default-eval-edge-ado-accdb, ddl-default-eval-edge-ado-mdb #70-73:
             // ad-hoc Connection.Execute CREATE TABLE DEFAULT referencing a field fails 0x80004005 (E_FAIL),
             // helpContext 5003355, SQLState "3344", NativeError -536678012, IID_ICommand.
             3355 when !isSavedQuery && isConnectionExecuteAction && sql is not null && IsCreateTableSql(sql) =>

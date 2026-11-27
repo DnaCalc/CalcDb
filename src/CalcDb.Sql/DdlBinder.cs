@@ -813,7 +813,7 @@ public static class DdlBinder
             columnName = columns[idx].Name;
             return true;
         }
-        // r-q50-jk44-ddl-vis/ddl-multi-constraint-table-{accdb,mdb}: "Score >= 0 AND Score <= 100"
+        // r-q50-jk44-ddl-vis/ddl-multi-constraint-table-accdb, ddl-multi-constraint-table-mdb: "Score >= 0 AND Score <= 100"
         int andIdx = trimmed.IndexOf(" AND ", StringComparison.OrdinalIgnoreCase);
         if (andIdx > 0 && trimmed.IndexOf(" AND ", andIdx + 5, StringComparison.OrdinalIgnoreCase) < 0)
         {

@@ -2077,8 +2077,8 @@ public sealed class SchemaWriter
         {
             if (nullInDisallowOrPrimary)
             {
-                // evidence/r-q50-jk44-ddl-vis/ddl-index-ignore-null-rows-{accdb,mdb} (after-dis-fail),
-                // ddl-index-disallow-primary-rows-{accdb,mdb} (after-pri-fail):
+                // evidence/r-q50-jk44-ddl-vis/ddl-index-ignore-null-rows-accdb, ddl-index-ignore-null-rows-mdb (after-dis-fail),
+                // ddl-index-disallow-primary-rows-accdb, ddl-index-disallow-primary-rows-mdb (after-pri-fail):
                 // CREATE INDEX WITH DISALLOW NULL or WITH PRIMARY over an existing Null row fails 3058 with 0 bytes written.
                 return new SchemaOutcome(new SchemaRefusal(3058, null), default, _pageCount, PublishedAny: false);
             }

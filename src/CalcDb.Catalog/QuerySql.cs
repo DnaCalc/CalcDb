@@ -367,7 +367,7 @@ public static class QuerySql
         }
         if (ownerAccess)
         {
-            // r-q50-jk44-ddl-vis/ddl-view-create-drop-{accdb,mdb} V2: "SELECT ID\r\nFROM T\r\nWITH OWNERACCESS OPTION;\r\n"
+            // r-q50-jk44-ddl-vis/ddl-view-create-drop-accdb, ddl-view-create-drop-mdb V2: "SELECT ID\r\nFROM T\r\nWITH OWNERACCESS OPTION;\r\n"
             sql.Append(Line).Append("WITH OWNERACCESS OPTION");
         }
         sql.Append(';').Append(Line);

@@ -560,7 +560,7 @@ internal sealed class AdoSqlViewDatabase(AdoOpenSession session) : ISqlDatabase
 
     public ExpressionContext Context => session.Sql.Context;
 
-    public bool IsSystemTable(string name, TableDefinition table) => session.Sql.IsSystemTable(name, table);
+    public bool IsSystemTable(string name, TableDefinition table) => ((ISqlDatabase)session.Sql).IsSystemTable(name, table);
 }
 
 /// <summary>
@@ -2293,7 +2293,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
         }
         if (explicitCommand is null && family == QueryFamily.Update)
         {
-            // r-q50-jk44-ddl-vis/ddl-proc-create-exec-drop-{accdb,mdb}: Connection.Execute("EXEC P2 1, 'updated'", ..., adExecuteNoRecords)
+            // r-q50-jk44-ddl-vis/ddl-proc-create-exec-drop-accdb, ddl-proc-create-exec-drop-mdb: Connection.Execute("EXEC P2 1, 'updated'", ..., adExecuteNoRecords)
             RenderedSql rendered = QuerySql.Render(query);
             if (rendered.Text is not { } sql)
             {

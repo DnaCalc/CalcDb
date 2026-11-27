@@ -1503,7 +1503,7 @@ public static class DdlParser
                 }
                 else if (TakeWord("UPDATE") && TakeWord("CASCADE") && !onUpdateCascade)
                 {
-                    // r-q50-jk44-ddl-vis/ddl-multi-constraint-table-{accdb,mdb}: ON DELETE CASCADE ON UPDATE CASCADE.
+                    // r-q50-jk44-ddl-vis/ddl-multi-constraint-table-accdb, ddl-multi-constraint-table-mdb: ON DELETE CASCADE ON UPDATE CASCADE.
                     onUpdateCascade = true;
                 }
                 else

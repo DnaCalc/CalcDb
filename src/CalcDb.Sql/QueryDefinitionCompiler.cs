@@ -243,7 +243,7 @@ public static class QueryDefinitionCompiler
             b.Add(QueryAttributes.Source, name1: tableName);
             if (select.WithOwnerAccess)
             {
-                // r-q50-jk44-ddl-vis/ddl-view-create-drop-{accdb,mdb} V2: Options(0x03, Flag=0x0004).
+                // r-q50-jk44-ddl-vis/ddl-view-create-drop-accdb, ddl-view-create-drop-mdb V2: Options(0x03, Flag=0x0004).
                 b.Add(QueryAttributes.Options, flag: OptionOwnerAccess);
             }
         }
