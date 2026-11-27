@@ -215,6 +215,15 @@ public abstract unsafe class DispatchObject : ComObject
     protected virtual ushort CoercionFlags(MemberDecl member, int parameter) => 0;
 
     /// <summary>
+    /// The failure an Invoke publishes when <paramref name="dispId"/> names a declared member on this interface under a
+    /// different <see cref="InvokeKind"/> than <paramref name="flags"/>, or null for the standard
+    /// <c>DISP_E_MEMBERNOTFOUND</c>. ACE's DAO publishes DAO 3001 or 3251 with IErrorInfo for recorded wrong-kind calls
+    /// (r-dao-1b/eng-members-each, r-dao-1b/coll-newenum-get, r-dao-1-err-1/prop-enumerate-and-context,
+    /// r-dao-1-err-1/err-bind-arity-member).
+    /// </summary>
+    protected virtual Failure? WrongInvokeKindFailure(int dispId, ushort flags) => null;
+
+    /// <summary>
     /// The DISPID a class's live IDispatch gives a member where it differs from the captured type library, or null.
     /// ADO's Parameters answers Append 3 and Delete 4 although its library declares 1610809344 and 1610809345
     /// (every r-ado-1b, r-fix-wire-ado and r-str-ado-act record that appends a parameter). GetIDsOfNames returns it and
@@ -385,6 +394,11 @@ public abstract unsafe class DispatchObject : ComObject
         MemberDecl? member = Choose(dispId, flags) ?? ChooseLive(dispId, flags);
         if (member is null)
         {
+            if (WrongInvokeKindFailure(dispId, flags) is { } wrongKind)
+            {
+                OnFailure(wrongKind);
+                return ErrorPublication.ToExcepInfo(wrongKind, info);
+            }
             return HResults.DISP_E_MEMBERNOTFOUND;
         }
         int declared = member.Parameters.Count;

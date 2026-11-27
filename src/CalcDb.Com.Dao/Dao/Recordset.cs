@@ -2414,13 +2414,14 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
 /// A Field wrapper is shared while a client holds it (R-DAO-1 DAO-ID) and made anew after its last release. Lookup
 /// follows DAO-COLL. After the recordset closes, members fail 3420 with source DAO.Recordset, as ACE reports it.
 /// </summary>
-internal sealed unsafe class FieldsObject : DaoObject
+internal sealed unsafe class FieldsObject : DaoObject, IDaoEnumerableCollection
 {
     private static readonly InterfaceDecl Decl = DaoTypes.Fields;
     private static readonly nint Vtable = DualEntries.Build(Decl);
     private static readonly OperationTable Operations = new OperationTable(Decl)
         .Get("Count", (self, args) => LiveRead(self, f => Int16(f.Recordset.Cursor.Table.Columns.Count)))
         .Get("Item", static (self, args) => (FieldsObject)self is { Recordset.Closed: true } closed ? closed.Recordset.Fail(3420, DaoErrors.ObjectInvalid) : ((FieldsObject)self).Item(args[0]))
+        .Method("_NewEnum", (self, args) => Live(self, f => NewEnumResult(f)))
         .Method("Append", (self, args) => Live(self, f => f.Fail(3273, DaoErrors.MethodNotApplicable))) // r-dao-1b/coll-append-delete-unsupported call 34
         .Method("Delete", (self, args) => Live(self, f => f.Fail(3273, DaoErrors.MethodNotApplicable))) // r-dao-1b/coll-append-delete-unsupported call 35
         .Method("Refresh", (self, args) => Live(self, f => CallResult.Nothing));
@@ -2516,6 +2517,29 @@ internal sealed unsafe class FieldsObject : DaoObject
 
     /// <summary>Keep a released Field wrapper for its column; false when one is kept already or the recordset is closed.</summary>
     public bool Park(int ordinal, FieldObject field) => !Recordset.Closed && _parked.TryAdd(ordinal, field);
+
+    bool IDaoEnumerableCollection.IsEnumInvalid => Recordset.Closed;
+    string IDaoEnumerableCollection.EnumClosedSource => Recordset.Source;
+    int IDaoEnumerableCollection.EnumCount => Recordset.Cursor.Table.Columns.Count;
+    void IDaoEnumerableCollection.AddRefCollection() => AddRef();
+    void IDaoEnumerableCollection.ReleaseCollection() => Release();
+
+    nint IDaoEnumerableCollection.EnumDispatchAt(int index)
+    {
+        nint dispatch;
+        if (_held.TryGetValue(index, out FieldObject? held))
+        {
+            held.QueryInterface(ComIids.IDispatch, &dispatch);
+            return dispatch;
+        }
+        FieldObject field = _parked.Remove(index, out FieldObject? parked)
+            ? parked.Reuse(Recordset.AfterMoveFirstEpoch)
+            : new FieldObject(this, index, Recordset.AfterMoveFirstEpoch);
+        _held[index] = field;
+        field.QueryInterface(ComIids.IDispatch, &dispatch);
+        field.Release();
+        return dispatch;
+    }
 
     protected override void OnFinalRelease()
     {
@@ -2959,13 +2983,14 @@ internal sealed unsafe class FieldObject : DaoObject
 }
 
 /// <summary>DBEngine.Errors: the engine state's latest failure (R-ORACLE-1 OR-OBS), one collection object per engine.</summary>
-internal sealed unsafe class ErrorsObject : DaoObject
+internal sealed unsafe class ErrorsObject : DaoObject, IDaoEnumerableCollection
 {
     private static readonly InterfaceDecl Decl = DaoTypes.Errors;
     private static readonly nint Vtable = DualEntries.Build(Decl);
     private static readonly OperationTable Operations = new OperationTable(Decl)
         .Get("Count", (self, args) => Int16(((ErrorsObject)self).Engine.Errors.Count))
         .Get("Item", (self, args) => ((ErrorsObject)self).Item(args[0]))
+        .Method("_NewEnum", (self, args) => NewEnumResult((ErrorsObject)self))
         .Method("Refresh", (self, args) => CallResult.Nothing);
 
     public ErrorsObject(EngineState engine) : base(Decl, Vtable, engine, "DAO.Errors")
@@ -2986,6 +3011,21 @@ internal sealed unsafe class ErrorsObject : DaoObject
         CallResult result = Object(error);
         error.Release();
         return result;
+    }
+
+    bool IDaoEnumerableCollection.IsEnumInvalid => false;
+    string IDaoEnumerableCollection.EnumClosedSource => Source;
+    int IDaoEnumerableCollection.EnumCount => Engine.Errors.Count;
+    void IDaoEnumerableCollection.AddRefCollection() => AddRef();
+    void IDaoEnumerableCollection.ReleaseCollection() => Release();
+
+    nint IDaoEnumerableCollection.EnumDispatchAt(int index)
+    {
+        var error = new ErrorObject(Engine, Engine.Errors[index]);
+        nint dispatch;
+        error.QueryInterface(ComIids.IDispatch, &dispatch);
+        error.Release();
+        return dispatch;
     }
 }
 
