@@ -1048,9 +1048,10 @@ public sealed partial class StatementRollbackReplayTests
     [Fact]
     public void Pending_rollback_extent_blocks_allocating_and_page1_writes_until_Close()
     {
-        // Pass-2 Findings 1, 2, 4, 6: while an ACCDB rollback extent reservation is pending before Close:
+        // Pass-2 Findings 1, 2, 4, 6 (updated for cxb6): while an ACCDB rollback extent reservation is pending before Close:
         // - non-allocating writes that do not touch page 1 (Edit+Update, Delete, AddNew onto existing page) succeed;
-        // - allocating writes or page-1 writes refuse by name on both the owning and another Workspace;
+        // - SQL-statement allocating writes (DML, plain SQL CREATE TABLE, depth-1 BeginTrans, ws2) consume SharedRollbackExtent
+        //   (Cxb6RollbackAndPendingExtentTests), while recordset AddNew (outside BeginStatement) and direct page-1 writes still refuse;
         // - BeginTrans is not refused: read-only levels, non-allocating writes, writes to another File B, and
         //   allocating writes on File A after PublishCloseCommit(fileA) all succeed;
         // - another Workspace's page-0-only PublishCloseCommit (empty _releaseAtClose) is not refused.

@@ -1164,14 +1164,14 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     public bool AllowNonContiguousReserved(PageCache cache) =>
         !_sessionReservedExtent.ContainsKey(cache) && SharedRollbackExtent.IsActiveShared(cache);
 
-    public IReadOnlyList<uint> SessionReservedPages(PageCache cache)
+    public IReadOnlyList<uint> SessionReservedPages(PageCache cache, bool includeSharedRollbackExtent = false)
     {
         IReadOnlyList<uint>? pages = null;
         if (_sessionReservedExtent.TryGetValue(cache, out List<uint>? sessionPages) && sessionPages.Count > 0)
         {
             pages = sessionPages;
         }
-        else if (SharedRollbackExtent.IsActiveShared(cache))
+        else if (includeSharedRollbackExtent && SharedRollbackExtent.IsActiveShared(cache))
         {
             pages = SharedRollbackExtent.SnapshotRemaining(cache);
         }
@@ -1574,13 +1574,14 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             return new ResolutionOutcome(new MutationError(MutationError.NoTransaction, MutationErrorSource.Workspace));
         }
         ExplicitFrame top = _frames[^1];
-        if (_frames.Count == 1
-            && _statement is not null
+        if (_statement is not null
             && _statementHasOwnLevel
+            && _frames.Count > _statementExternalDepth
             && top.ConsumedAutoNumbers?.Values.Any(m => m.Reseed) == true)
         {
             // No record observes a committed multi-row INSERT ... SELECT with explicit AutoNumber values below the
-            // counter (r-q27 exp-gap-5/10 are single-row INSERT VALUES; r-q29 exp-sel-below-* all roll back on 3022).
+            // counter (r-q27 exp-gap-5/10 are single-row INSERT VALUES; r-q29 exp-sel-below-* and r-q45
+            // rb-exp-an-begintrans-* all roll back their statement level on 3022).
             return DiscardRefusedFrame(
                 top,
                 MutationOpen.AutoNumberReseed,
@@ -1621,7 +1622,10 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             parent.StatementCount += top.StatementCount;
             parent.HasNonInsertSelectWork |= top.HasNonInsertSelectWork;
             parent.HasAutoNumberTarget |= top.HasAutoNumberTarget;
-            parent.MergeAutoNumbersFrom(top);
+            bool cleanExplicitStatement = _statement is not null
+                && _statementHasOwnLevel
+                && top.ConsumedAutoNumbers?.Values.Any(m => m.Explicit) == true;
+            parent.MergeAutoNumbersFrom(top, cleanExplicitStatement ? "an explicit AutoNumber" : null);
             parent.MergeExplicitCountersFrom(top);
             if (top.StatementTableDefPages is { Count: > 0 } sidePages)
             {
@@ -2339,6 +2343,23 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             {
                 return (MutationOpen.Publication, "the file cannot be written: " + leaseFailure);
             }
+            if (!_sessionReservedExtent.ContainsKey(p.Cache))
+            {
+                List<uint>? sharedConsumedForCache = null;
+                for (int ci = 0; ci < _pending.Count; ci++)
+                {
+                    if (_pending[ci].Physical is { ConsumedReservedPages.Count: > 0 } phys && ReferenceEquals(phys.File, p.Cache))
+                    {
+                        sharedConsumedForCache ??= [];
+                        sharedConsumedForCache.AddRange(phys.ConsumedReservedPages);
+                    }
+                }
+                if (sharedConsumedForCache is { Count: > 0 }
+                    && !SharedRollbackExtent.TryValidateAvailable(p.Cache, sharedConsumedForCache, out string? sharedFailure))
+                {
+                    return (MutationOpen.Publication, "shared pending rollback extent conflict: " + sharedFailure);
+                }
+            }
             Dictionary<ulong, PageRole> roles = [];
             for (int ci = 0; ci < _pending.Count; ci++)
             {
@@ -2522,7 +2543,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                         _releaseAtClose.Remove(g2Cache);
                     }
                 }
-                if (_rollbackExtentPending.Contains(g2Cache))
+                if (_rollbackExtentPending.Contains(g2Cache) && !Jet4MdbHeader(g2Cache))
                 {
                     SharedRollbackExtent.ActivateAfterGroup2(g2Cache);
                 }
@@ -2588,6 +2609,16 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                 null,
                 MutationOpen.Publication,
                 "outer Rollback after an inner Rollback on a non-AutoNumber table is not recorded (r-q50/dao-edit-buf-nested-partial)");
+        }
+        if (_statement is null
+            && top.Changes.Exists(c => c.Physical is { ConsumedReservedPages.Count: > 0 } phys
+                && !_sessionReservedExtent.ContainsKey(phys.File)
+                && SharedRollbackExtent.IsActiveShared(phys.File)))
+        {
+            return new ResolutionOutcome(
+                null,
+                MutationOpen.Publication,
+                "rolling back a BeginTrans level that consumed pages from a pending rollback extent is not recorded (cxb6: rb-pending-extent-begintrans-accdb records CommitTrans only)");
         }
         if (_statement is not null)
         {
@@ -3322,10 +3353,10 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                 }
                 if (counters.ExtentPlan is { } ext)
                 {
+                    _rollbackExtentPending.Add(counters.File);
+                    counters.File.RegisterRollbackExtentOwner(Locker);
                     if (!isJet4Mdb)
                     {
-                        _rollbackExtentPending.Add(counters.File);
-                        counters.File.RegisterRollbackExtentOwner(Locker);
                         SharedRollbackExtent.StageGroup1(counters.File, ext.UnusedExtentPages);
                     }
                     _reservedExtent.Add(counters.File);
@@ -4089,7 +4120,11 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                 }
                 if (physical.ConsumedReservedPages.Count > 0)
                 {
-                    if (InExplicitTransaction && !(_frames.Count == 1 && InStatement && SharedRollbackExtent.IsActiveShared(physical.File)))
+                    if (InExplicitTransaction
+                        && !(_frames.Count == 1
+                            && InStatement
+                            && _rollbackExtentPending.Contains(physical.File)
+                            && SharedRollbackExtent.IsActiveShared(physical.File)))
                     {
                         return new AcceptOutcome(false, null, MutationOpen.Publication, "consuming pages from a session page-1 extent reservation inside BeginTrans is not recorded (r-q42-field-rule-and)");
                     }
@@ -4535,11 +4570,15 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                 return (MutationOpen.None, null);
             }
         }
+        bool ownedRollbackExtent = _rollbackExtentPending.Contains(cache);
         List<PageEdit> frees = [];
         List<LockResource> footprint = [];
         List<uint> releasedPages = [];
-        if (_rollbackExtentPending.Contains(cache)
-            && SharedRollbackExtent.TryGetRemainingForClose(cache, out List<uint> sharedRemaining))
+        List<uint>? sharedRemaining = null;
+        HashSet<uint>? sharedConsumed = null;
+        bool hasSharedState = ownedRollbackExtent
+            && SharedRollbackExtent.TryGetCloseState(cache, out sharedRemaining, out sharedConsumed);
+        if (hasSharedState && sharedRemaining is not null)
         {
             foreach (uint page in sharedRemaining)
             {
@@ -4549,11 +4588,11 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                 }
             }
         }
-        else if (_releaseAtClose.TryGetValue(cache, out List<uint>? released))
+        if (_releaseAtClose.TryGetValue(cache, out List<uint>? released))
         {
             foreach (uint page in released)
             {
-                if (!releasedPages.Contains(page))
+                if ((!hasSharedState || sharedConsumed is null || !sharedConsumed.Contains(page)) && !releasedPages.Contains(page))
                 {
                     releasedPages.Add(page);
                 }
@@ -4652,9 +4691,12 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             }
             _pendingRolledBackPages.Remove(cache);
             cache.UnregisterRollbackExtentOwner(Locker);
-            SharedRollbackExtent.Clear(cache);
+            if (ownedRollbackExtent && !cache.HasPendingRollbackExtent)
+            {
+                SharedRollbackExtent.Clear(cache);
+            }
         }
-        else if (_unresolved.Contains(cache))
+        else if (ownedRollbackExtent && _unresolved.Contains(cache))
         {
             SharedRollbackExtent.MarkBlocked(cache);
         }

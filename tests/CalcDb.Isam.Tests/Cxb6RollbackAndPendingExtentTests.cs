@@ -269,6 +269,8 @@ public sealed class Cxb6RollbackAndPendingExtentTests
             AssignText(frame, Col(t, "S"), "second-stmt");
             UpdateOutcome ins = frame.Update();
             Assert.True(ins.Succeeded, ins.ToString());
+            // Before Complete() (matching ACE's ~0.5 s write-behind at after-stmt2-exec-live).
+            AssertBytesEqual(question, recordFileName, "after-stmt2-exec-live", checkpoints["after-stmt2-exec-live"], session.Image.Snapshot());
             ResolutionOutcome end2 = stmt2.Complete();
             Assert.True(end2.Succeeded, end2.ToString());
         }
@@ -377,6 +379,8 @@ public sealed class Cxb6RollbackAndPendingExtentTests
             Assert.True(uFrame.Assign(Col(u, "V"), I4(42)).Succeeded);
             UpdateOutcome insU = uFrame.Update();
             Assert.True(insU.Succeeded, insU.ToString());
+            // Before Complete() (matching ACE's ~0.5 s write-behind at after-ins-u-live).
+            AssertBytesEqual(question, recordFileName, "after-ins-u-live", checkpoints["after-ins-u-live"], session.Image.Snapshot());
             Assert.True(stmtU.Complete().Succeeded);
         }
         AssertBytesEqual(question, recordFileName, "after-pause-live", checkpoints["after-pause-live"], session.Image.Snapshot());
@@ -422,6 +426,8 @@ public sealed class Cxb6RollbackAndPendingExtentTests
                 AssignText(otherFrame, Col(other, "S"), "from-ws2");
                 UpdateOutcome ins2 = otherFrame.Update();
                 Assert.True(ins2.Succeeded, ins2.ToString());
+                // Before Complete() (matching ACE's ~0.5 s write-behind at after-ws2-ins-live).
+                AssertBytesEqual(question, recordFileName, "after-ws2-ins-live", checkpoints["after-ws2-ins-live"], session.Image.Snapshot());
                 Assert.True(stmt2.Complete().Succeeded);
             }
             AssertBytesEqual(question, recordFileName, "after-ws2-pause-live", checkpoints["after-ws2-pause-live"], session.Image.Snapshot());
@@ -495,9 +501,10 @@ public sealed class Cxb6RollbackAndPendingExtentTests
             }
 
             byte[] beforeSecond = session.Image.Snapshot();
-            Assert.False(session.Cache.HasPendingRollbackExtent);
+            Assert.True(session.Cache.HasPendingRollbackExtent);
             Assert.True(session.Workspace.NeedsCloseCommit(session.Cache));
 
+            // Both the owning Workspace and a second Workspace on the same MDB PageCache refuse before Close.
             using (StatementScope stmt2 = session.Workspace.BeginStatement(isInsertSelect: false))
             {
                 Assert.True(frame.AddNew().Succeeded);
@@ -507,6 +514,19 @@ public sealed class Cxb6RollbackAndPendingExtentTests
                 Assert.Equal(MutationOpen.Publication, second.Open);
                 Assert.True(frame.CancelUpdate().Succeeded);
                 Assert.True(stmt2.Complete().Succeeded);
+            }
+            using (var ws2 = new TransactionCoordinator(new LockerId(2)) { Publisher = session, Clock = static () => TimeSpan.Zero })
+            {
+                using TableCursor ws2Cursor = session.OpenCursor(an, ws2);
+                using var ws2Frame = new EditFrame(ctx, ws2Cursor, ws2) { ConflictSource = MutationErrorSource.Database };
+                using StatementScope ws2Stmt = ws2.BeginStatement(isInsertSelect: false);
+                Assert.True(ws2Frame.AddNew().Succeeded);
+                Assert.True(ws2Frame.Assign(Col(an, "K"), I4(1001)).Succeeded);
+                AssignText(ws2Frame, Col(an, "S"), "mdb-ws2");
+                UpdateOutcome ws2Res = ws2Frame.Update();
+                Assert.Equal(MutationOpen.Publication, ws2Res.Open);
+                Assert.True(ws2Frame.CancelUpdate().Succeeded);
+                Assert.True(ws2Stmt.Complete().Succeeded);
             }
             Assert.Equal(beforeSecond, session.Image.Snapshot());
 

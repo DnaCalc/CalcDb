@@ -1305,9 +1305,9 @@ public sealed class EditFrame : IDisposable
                 _workspace.OverlayOf(insertWriter.File),
                 reseedAutoNumber: reseedAcceptedAuto,
                 deferTableDefCountUpdate: deferInsertCounts,
-                sessionReservedPages: _workspace.SessionReservedPages(insertWriter.File),
+                sessionReservedPages: _workspace.SessionReservedPages(insertWriter.File, includeSharedRollbackExtent: _workspace.InStatement),
                 reusableExtentSession: _workspace.HasReusableExtentSession(insertWriter.File),
-                allowNonContiguousReserved: _workspace.AllowNonContiguousReserved(insertWriter.File));
+                allowNonContiguousReserved: _workspace.InStatement && _workspace.AllowNonContiguousReserved(insertWriter.File));
         }
         else
         {
