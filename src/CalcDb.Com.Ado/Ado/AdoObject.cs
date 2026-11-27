@@ -161,6 +161,9 @@ internal abstract class AdoObject : DispatchObject
     /// <summary>DB_E_NOCOMMAND / 0x80040E0C.</summary>
     public const int HResultCommandNotSet = unchecked((int)0x80040E0C);
 
+    /// <summary>DB_E_BADBOOKMARK / 0x80040E0E (invalid bookmark on server keyset/static cursor; r-ado-1b/book-raw-forms, r-q2-ado-misc/book-static-exchange).</summary>
+    public const int HResultBadBookmark = unchecked((int)0x80040E0E);
+
     /// <summary>DB_E_PARAMNOTOPTIONAL / 0x80040E10.</summary>
     public const int HResultParamNotOptional = unchecked((int)0x80040E10);
 

@@ -1249,6 +1249,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
         .Put("AbsolutePosition", (self, args) => ((RecordsetObject)self).PutAbsolutePosition(args[0]))
         .Get("Bookmark", (self, args) => ((RecordsetObject)self).GetBookmark())
         .Put("Bookmark", (self, args) => ((RecordsetObject)self).PutBookmark(args[0]))
+        .Method("CompareBookmarks", (self, args) => ((RecordsetObject)self).CompareBookmarks(args[0], args[1]))
         .Get("EditMode", (self, args) => ((RecordsetObject)self).GetEditMode())
         .Get("Status", (self, args) => ((RecordsetObject)self).GetStatus())
         .Get("MarshalOptions", (self, args) => Int32(((RecordsetObject)self)._marshalOptions))
@@ -1347,6 +1348,15 @@ internal sealed unsafe class RecordsetObject : AdoObject
     private readonly ConnectionPoint _events;
     private bool _initialPositionPending;
     private int[]? _viewMap;
+    /// <summary>
+    /// Lazy sequential 1-based bookmark assignment for server-side static cursors (loc=2, type=3), where ACE assigns
+    /// bookmark numbers as rows are visited or scanned (r-ado-1b/book-raw-forms b3 #280/#282/#284 -> 1,2,3;
+    /// r-fix-wire-ado/book-position-readback b3 #211/#226/#241 after RecordCount -> 1,2,7;
+    /// r-q2-ado-misc/book-static-exchange rs #116 -> unvisited bookmark 3 fails 0x80040E0E).
+    /// </summary>
+    private Dictionary<int, int>? _serverStaticRowToBookmark;
+    private Dictionary<int, int>? _serverStaticBookmarkToRow;
+    private int _nextServerStaticBookmark;
     private string? _lastSavedFilePath;
     private int _lastSavedFormat;
 
@@ -1782,6 +1792,10 @@ internal sealed unsafe class RecordsetObject : AdoObject
         }
         if (_rows!.TrySeek(baseIndex, out failure))
         {
+            if (IsServerStaticBookmarkMode)
+            {
+                EnsureServerStaticBookmark(baseIndex);
+            }
             return true;
         }
         providerError = (_rows as SelectRowSource)?.LastSeekProviderError;
@@ -3109,9 +3123,11 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return NotImplemented($"Recordset.Clone(LockType={reqLock}) (only omitted/adLockUnspecified=-1 is recorded)");
         }
-        if (_rows is MemoryRowSource mem && IsClientCursor)
+        if (_rows is MemoryRowSource mem && (IsClientCursor || _effectiveCursorType == 3))
         {
-            // r-q2-ado-misc/ado-events-clone-propagation #16: client static read-only Clone().
+            // r-q2-ado-misc/ado-events-clone-propagation #16 (client static read-only Clone),
+            // r-str-ado-act/ado-view #42 (client static Clone),
+            // r-q2-ado-misc/book-static-exchange #128 (server static read-only Clone).
             var memClone = new RecordsetObject
             {
                 _isClone = true,
@@ -4315,7 +4331,18 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return CallResult.Fail(refusal);
         }
-        return Int32(_hasBookmarks && ViewKnownCount >= 0 ? ViewKnownCount : -1);
+        int count = _hasBookmarks && ViewKnownCount >= 0 ? ViewKnownCount : -1;
+        if (count > 0 && IsServerStaticBookmarkMode)
+        {
+            // r-fix-wire-ado/book-position-readback b3 #210-#241: reading RecordCount on a server static cursor
+            // scans all rows in order, assigning sequential bookmarks 1..count.
+            int baseCount = _rows!.KnownCount;
+            for (int i = 0; i < baseCount; i++)
+            {
+                EnsureServerStaticBookmark(i);
+            }
+        }
+        return Int32(count);
     }
 
     private static AdoRecordCountSource ClassifyRecordCountSource(IAdoRowSource rowSource) => rowSource switch
@@ -4675,19 +4702,298 @@ internal sealed unsafe class RecordsetObject : AdoObject
         return CallResult.Nothing;
     }
 
-    private CallResult GetBookmark() => !IsOpen
-        ? FailAdo(AdoErrors.ObjectClosed)
-        : !_hasBookmarks
-            ? FailAdo(AdoErrors.BookmarksNotSupported)
-            : NotImplemented("Recordset.Bookmark get on a bookmark-capable cursor");
+    private bool IsServerStaticBookmarkMode =>
+        _hasBookmarks && !IsClientCursor && _effectiveCursorType == 3 && _rows is MemoryRowSource;
 
-    private CallResult PutBookmark(nint arg) => !IsOpen
-        ? FailAdo(AdoErrors.ObjectClosed)
-        : HasActiveChunkState
-            ? FailChunkNavigation("Bookmark")
-            : !_hasBookmarks
-                ? FailAdo(AdoErrors.BookmarksNotSupported)
-                : NotImplemented("Recordset.Bookmark put on a bookmark-capable cursor");
+    private int EnsureServerStaticBookmark(int baseRowIndex)
+    {
+        _serverStaticRowToBookmark ??= [];
+        _serverStaticBookmarkToRow ??= [];
+        if (_serverStaticRowToBookmark.TryGetValue(baseRowIndex, out int existing))
+        {
+            return existing;
+        }
+        int assigned = _nextServerStaticBookmark++;
+        _serverStaticRowToBookmark[baseRowIndex] = assigned;
+        _serverStaticBookmarkToRow[assigned] = baseRowIndex;
+        return assigned;
+    }
+
+    private CallResult GetBookmark()
+    {
+        if (!IsOpen)
+        {
+            return FailAdo(AdoErrors.ObjectClosed);
+        }
+        if (!_hasBookmarks)
+        {
+            return FailAdo(AdoErrors.BookmarksNotSupported);
+        }
+        if (_bof || _eof || _position < 0 || _suspendedAfterForwardMoveLast || _bothBofEofAfterForwardMove)
+        {
+            // r-ado-1b/book-raw-forms #156/#160/#287/#291/#418/#422, r-fix-wire-ado/book-position-readback #167/#184/#257/#274/#347/#364:
+            // Bookmark at BOF or EOF fails 0x800A0BCD (NoCurrentRecord).
+            return FailAdo(AdoErrors.NoCurrentRecord);
+        }
+        if (_rows is KeysetRowSource ks)
+        {
+            int baseIndex = _viewMap is not null ? _viewMap[_position] : _position;
+            if (baseIndex < 0 || baseIndex >= ks.KeysetCount)
+            {
+                return FailAdo(AdoErrors.NoCurrentRecord);
+            }
+            if (baseIndex >= 256)
+            {
+                return NotImplemented("Recordset.Bookmark on server keyset beyond 256 rows (not recorded)");
+            }
+            // r-ado-1b/book-raw-forms b2 #149/#151/#153, r-fix-wire-ado/book-position-readback b2 #121/#136/#151:
+            // server keyset Bookmark is VT_R8 starting at 512 (0x200) for row 0 (512, 513, ..., 518).
+            return CallResult.Of(OwnedVariant.FromDouble((double)(512 + baseIndex)));
+        }
+        if (_rows is ClientBatchRowSource cb)
+        {
+            if (cb.ActiveRow is not { State: not ClientRowState.Purged } row)
+            {
+                return FailAdo(AdoErrors.NoCurrentRecord);
+            }
+            // r-q2-ado-misc/book-static-exchange rc: client static Bookmark is stable 1-based VT_R8 BookmarkId.
+            return CallResult.Of(OwnedVariant.FromDouble((double)row.BookmarkId));
+        }
+        if (_rows is MemoryRowSource)
+        {
+            int baseIndex = _viewMap is not null ? _viewMap[_position] : _position;
+            if (IsServerStaticBookmarkMode)
+            {
+                // r-ado-1b/book-raw-forms b3 #280/#282/#284, r-fix-wire-ado/book-position-readback b3 #211/#226/#241.
+                return CallResult.Of(OwnedVariant.FromDouble((double)EnsureServerStaticBookmark(baseIndex)));
+            }
+            // r-str-ado-act/ado-view #49/#50, r-ado-1b/book-raw-forms b4 #411/#413/#415, r-fix-wire-ado/book-position-readback b4 #301/#316/#331:
+            // client static Bookmark is 1-based base row index as VT_R8 (preserved across Filter and Clone).
+            return CallResult.Of(OwnedVariant.FromDouble((double)(baseIndex + 1)));
+        }
+        return NotImplemented("Recordset.Bookmark get on this cursor row source (not recorded)");
+    }
+
+    private CallResult PutBookmark(nint arg)
+    {
+        if (!IsOpen)
+        {
+            return FailAdo(AdoErrors.ObjectClosed);
+        }
+        if (HasActiveChunkState)
+        {
+            return FailChunkNavigation("Bookmark");
+        }
+        if (!_hasBookmarks)
+        {
+            return FailAdo(AdoErrors.BookmarksNotSupported);
+        }
+        if (IsEditing)
+        {
+            return NotImplemented("Recordset.Bookmark put while editing (not recorded)");
+        }
+        if (!TryDecodeBookmarkArg(arg, out long bookmarkValue, out CallResult? decodeFailure))
+        {
+            return decodeFailure!.Value;
+        }
+        ConsumeDeletedCurrent();
+        if (!TryResolveBookmarkViewIndex(bookmarkValue, out int viewIndex, out CallResult? resolveFailure))
+        {
+            return resolveFailure!.Value;
+        }
+        if (!TrySeekView(viewIndex, out Failure? fail))
+        {
+            return fail is not null ? CallResult.Fail(fail) : CallResult.Nothing;
+        }
+        ResetServerValueReadState();
+        _bof = false;
+        _eof = false;
+        _bothBofEofAfterForwardMove = false;
+        _suspendedAfterForwardMoveLast = false;
+        _position = viewIndex;
+        ClearConnectionErrors();
+        return CallResult.Nothing;
+    }
+
+    /// <summary>
+    /// Recordset.CompareBookmarks(Bookmark1, Bookmark2) (r-q2-ado-misc/book-static-exchange #45/#46/#141/#142):
+    /// returns CompareEnum (0=adCompareLessThan, 1=adCompareEqual, 2=adCompareGreaterThan, 3=adCompareNotComparable).
+    /// </summary>
+    private CallResult CompareBookmarks(nint arg1, nint arg2)
+    {
+        if (!IsOpen)
+        {
+            return FailAdo(AdoErrors.ObjectClosed);
+        }
+        if (!_hasBookmarks)
+        {
+            return FailAdo(AdoErrors.BookmarksNotSupported);
+        }
+        if (!TryDecodeBookmarkArg(arg1, out long bm1, out CallResult? fail1))
+        {
+            return fail1!.Value;
+        }
+        if (!TryDecodeBookmarkArg(arg2, out long bm2, out CallResult? fail2))
+        {
+            return fail2!.Value;
+        }
+        if (bm1 == bm2)
+        {
+            // r-q2-ado-misc/book-static-exchange #46 (client 3==3 -> 1) and #142 (server static 3==3 -> 1).
+            return Int32(1);
+        }
+        if (!TryFindBookmarkViewIndex(bm1, out int idx1) || !TryFindBookmarkViewIndex(bm2, out int idx2))
+        {
+            // r-q2-ado-misc/book-static-exchange #141 (server static unvisited bookmark -> 3 adCompareNotComparable).
+            return Int32(3);
+        }
+        return Int32(idx1 < idx2 ? 0 : idx1 > idx2 ? 2 : 1);
+    }
+
+    private bool TryDecodeBookmarkArg(nint arg, out long value, out CallResult? failure)
+    {
+        value = 0;
+        failure = null;
+        if (arg == 0)
+        {
+            failure = FailAdo(AdoErrors.ArgumentsWrongType);
+            return false;
+        }
+        NativeVariant* raw = Args.Cell(arg);
+        NativeVariant cell = ((VarType)raw->Vt & VarType.ByRef) != 0 ? ByRefValues.Dereference(raw) : *raw;
+        VarType vt = (VarType)cell.Vt;
+        if (vt == VarType.R8)
+        {
+            double d = cell.Double;
+            if (!double.IsFinite(d) || d != Math.Truncate(d) || d < 0 || d > long.MaxValue)
+            {
+                value = -1;
+                return true;
+            }
+            value = (long)d;
+            return true;
+        }
+        if (vt == (VarType.Array | VarType.UI1))
+        {
+            nint psa = cell.Pointer;
+            if (psa == 0)
+            {
+                failure = FailAdo(AdoErrors.ArgumentsWrongType);
+                return false;
+            }
+            (int Lower, int Count)[] shape = SafeArrays.Shape(psa);
+            if (shape.Length == 1 && shape[0].Count == 4)
+            {
+                // r-ado-1b/book-raw-forms b2 #210 (4-byte array -> 0x80040E0E), b3 #341 & b4 #472 (01000000 -> bookmark 1).
+                ReadOnlySpan<byte> bytes = new(SafeArrays.ElementPointer(psa, shape[0].Lower), 4);
+                value = System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(bytes);
+                return true;
+            }
+            failure = NotImplemented($"Recordset.Bookmark with byte array of dims={shape.Length}, count={(shape.Length > 0 ? shape[0].Count : 0)} (only 4-byte 1D array is recorded)");
+            return false;
+        }
+        if (vt is VarType.I4 or VarType.I2 or VarType.Bstr or VarType.Empty or VarType.Null)
+        {
+            // r-ado-1b/book-raw-forms b2/b3/b4: VT_I4, VT_BSTR, VT_EMPTY, VT_NULL fail 0x800A0BB9.
+            failure = FailAdo(AdoErrors.ArgumentsWrongType);
+            return false;
+        }
+        failure = NotImplemented($"Recordset.Bookmark with VarType {vt} (not recorded)");
+        return false;
+    }
+
+    private bool TryFindBookmarkViewIndex(long bookmarkValue, out int viewIndex)
+    {
+        viewIndex = -1;
+        if (bookmarkValue < 0)
+        {
+            return false;
+        }
+        if (_rows is KeysetRowSource ks)
+        {
+            long keysetIdx = bookmarkValue - 512;
+            if (keysetIdx < 0 || keysetIdx >= ks.KeysetCount || keysetIdx >= 256)
+            {
+                return false;
+            }
+            return TryBaseIndexToViewIndex((int)keysetIdx, out viewIndex);
+        }
+        if (_rows is ClientBatchRowSource cb)
+        {
+            IReadOnlyList<ClientRow> view = cb.View;
+            for (int i = 0; i < view.Count; i++)
+            {
+                if (view[i].BookmarkId == bookmarkValue)
+                {
+                    viewIndex = i;
+                    return true;
+                }
+            }
+            return false;
+        }
+        if (_rows is MemoryRowSource)
+        {
+            if (IsServerStaticBookmarkMode)
+            {
+                if (_serverStaticBookmarkToRow is null
+                    || bookmarkValue > int.MaxValue
+                    || !_serverStaticBookmarkToRow.TryGetValue((int)bookmarkValue, out int serverBase))
+                {
+                    return false;
+                }
+                return TryBaseIndexToViewIndex(serverBase, out viewIndex);
+            }
+            if (bookmarkValue < 1 || bookmarkValue > _rows.KnownCount)
+            {
+                return false;
+            }
+            return TryBaseIndexToViewIndex((int)(bookmarkValue - 1), out viewIndex);
+        }
+        return false;
+    }
+
+    private bool TryBaseIndexToViewIndex(int baseIndex, out int viewIndex)
+    {
+        viewIndex = -1;
+        if (baseIndex < 0)
+        {
+            return false;
+        }
+        if (_viewMap is null)
+        {
+            viewIndex = baseIndex;
+            return true;
+        }
+        for (int i = 0; i < _viewMap.Length; i++)
+        {
+            if (_viewMap[i] == baseIndex)
+            {
+                viewIndex = i;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private bool TryResolveBookmarkViewIndex(long bookmarkValue, out int viewIndex, out CallResult? failure)
+    {
+        failure = null;
+        if (TryFindBookmarkViewIndex(bookmarkValue, out viewIndex))
+        {
+            return true;
+        }
+        if (!IsClientCursor)
+        {
+            // r-ado-1b/book-raw-forms b2 #210/#258, r-q2-ado-misc/book-static-exchange rs #116/#129/#149/#161/#168/#181:
+            // invalid bookmark on server keyset or server static fails 0x80040E0E (3159, IID_IRowset) and populates Connection.Errors.
+            MappedProviderError err = AdoSqlErrors.InvalidBookmark();
+            ReportProviderError(err);
+            failure = CallResult.Fail(err.ComFailure);
+            return false;
+        }
+        failure = NotImplemented($"Recordset.Bookmark put with invalid bookmark value {bookmarkValue} on client cursor (not recorded)");
+        return false;
+    }
 
     private CallResult GetEditMode()
     {
@@ -5802,6 +6108,9 @@ internal sealed unsafe class RecordsetObject : AdoObject
         _bothBofEofAfterForwardMove = false;
         _suspendedAfterForwardMoveLast = false;
         ResetChunkState();
+        _serverStaticRowToBookmark = null;
+        _serverStaticBookmarkToRow = null;
+        _nextServerStaticBookmark = 1;
         if (rowSource.IsEmpty)
         {
             _bof = true;
@@ -5813,6 +6122,10 @@ internal sealed unsafe class RecordsetObject : AdoObject
             _bof = false;
             _eof = false;
             _position = 0;
+            if (IsServerStaticBookmarkMode)
+            {
+                EnsureServerStaticBookmark(0);
+            }
         }
         FieldsCollection.Bind(rowSource.Columns);
         _activeConnection?.OpenSession?.RegisterRecordset(this);
@@ -5867,6 +6180,9 @@ internal sealed unsafe class RecordsetObject : AdoObject
         _initialPositionPending = false;
         ResetChunkState();
         _viewMap = null;
+        _serverStaticRowToBookmark = null;
+        _serverStaticBookmarkToRow = null;
+        _nextServerStaticBookmark = 1;
         _filterGroup = 0;
         _filterExpr = null;
         _filterText = null;
@@ -6973,19 +7289,22 @@ internal sealed unsafe class RecordsetObject : AdoObject
 }
 
 /// <summary>
-/// ADODB.Record (_Record) as constructed: closed, with RecordType, ParentURL, Fields and Close refused 0x800A0E78
-/// (r-q-ado-misc/record-open-forms). Open is not built: the ACE provider supports none of the Record sources asked
-/// (ADO-RECORD), and those answers need an open connection.
+/// ADODB.Record (_Record): closed state and ACE-provider <c>Open</c> refusals (R-ADO-1 ADO-RECORD;
+/// r-q-ado-misc/record-open-forms, r-oledb-odbc/stream-record-from-row). ACE does not support opening a Record
+/// from a table/SQL string (0x800A0E7D), Command (0x800A0CB3), or Recordset (0x800A0CB3); State stays 0 and
+/// RecordType/ParentURL/Fields/Close fail 0x800A0E78.
 /// </summary>
-internal sealed class RecordObject : AdoObject
+internal sealed unsafe class RecordObject : AdoObject
 {
     private static readonly InterfaceDecl Decl = AdoTypes.Record;
     private static readonly nint Vtable = DualEntries.Build(Decl);
     private static readonly OperationTable Operations = new OperationTable(Decl)
         .Get("State", (self, args) => Int32(0))
+        .Get("Mode", (self, args) => Int32(1))
         .Get("RecordType", (self, args) => ((RecordObject)self).Fail(AdoErrors.ObjectClosed))
         .Get("ParentURL", (self, args) => ((RecordObject)self).Fail(AdoErrors.ObjectClosed))
         .Get("Fields", (self, args) => ((RecordObject)self).Fail(AdoErrors.ObjectClosed))
+        .Method("Open", (self, args) => ((RecordObject)self).Open(args))
         .Method("Close", (self, args) => ((RecordObject)self).Fail(AdoErrors.ObjectClosed));
 
     private RecordObject() : base(Decl, Vtable, "ADODB.Record")
@@ -6993,6 +7312,43 @@ internal sealed class RecordObject : AdoObject
     }
 
     protected override OperationTable Table => Operations;
+
+    private CallResult Open(ReadOnlySpan<nint> args)
+    {
+        nint sourceArg = args.Length > 0 ? args[0] : 0;
+        nint connArg = args.Length > 1 ? args[1] : 0;
+        for (int i = 2; i < args.Length; i++)
+        {
+            if (args[i] != 0 && !TypedCall.IsMissing(Args.Cell(args[i])) && Args.TypeOf(args[i]) != VarType.Empty)
+            {
+                return NotImplemented($"Record.Open with extra parameter {i} (not recorded)");
+            }
+        }
+        if (sourceArg != 0 && AdoArgs.IsObject(sourceArg))
+        {
+            if (AdoArgs.ObjectOf<CommandObject>(sourceArg) is not null
+                && connArg != 0 && AdoArgs.ObjectOf<ConnectionObject>(connArg) is { IsOpen: true, IsPersistenceOpen: false })
+            {
+                // r-q-ado-misc/record-open-forms #56: Record.Open(Command, open ACE Connection) -> 0x800A0CB3.
+                return Fail(AdoErrors.OperationNotSupported);
+            }
+            if (AdoArgs.ObjectOf<RecordsetObject>(sourceArg) is { IsOpen: true }
+                && (connArg == 0 || TypedCall.IsMissing(Args.Cell(connArg)) || Args.TypeOf(connArg) == VarType.Empty))
+            {
+                // r-oledb-odbc/stream-record-from-row #15: Record.Open(open Recordset) -> 0x800A0CB3.
+                return Fail(AdoErrors.OperationNotSupported);
+            }
+            return NotImplemented("Record.Open with this object Source/ActiveConnection form (not recorded)");
+        }
+        if (sourceArg != 0 && Args.TypeOf(sourceArg) == VarType.Bstr
+            && connArg != 0 && AdoArgs.ObjectOf<ConnectionObject>(connArg) is { IsOpen: true, IsPersistenceOpen: false })
+        {
+            // r-q-ado-misc/record-open-forms #16 (table name "K"), #36 (SQL "SELECT * FROM K"):
+            // Record.Open(BSTR, open ACE Connection) -> 0x800A0E7D.
+            return Fail(AdoErrors.ConnectionCannotBeUsed);
+        }
+        return NotImplemented("Record.Open with this Source/ActiveConnection form (not recorded)");
+    }
 
     /// <summary>
     /// No aggregation: ACT-AGGREGATE asked Connection, Recordset, Command and Stream, not Record, so an outer is refused

@@ -258,9 +258,10 @@ public sealed unsafe class AdoExecuteAndRecordsetTests
             Assert.Equal(true, Call(rs, "Supports", 512).Value); // adMovePrevious
             Assert.Equal(false, Call(rs, "Supports", 16778240).Value); // adAddNew on ReadOnly lock
 
-            // Bookmark get/put on bookmark-capable cursor refuses with E_NOTIMPL until Bookmark is implemented (F1).
-            Assert.Equal(HResults.E_NOTIMPL, Invoke(rs, "Bookmark", 2).Failure!.Value.Scode);
-            Assert.Equal(HResults.E_NOTIMPL, Put(rs, "Bookmark", 1).Failure!.Value.Scode);
+            // Bookmark get/put on server keyset cursor (r-ado-1b/book-raw-forms b2, r-fix-wire-ado/book-position-readback b2):
+            // row 0 returns 512.0 (VT_R8); invalid VT_I4 put fails 0x800A0BB9 (ADODB.Recordset, 1240641).
+            Assert.Equal(512.0, Get(rs, "Bookmark"));
+            AssertError(Put(rs, "Bookmark", 1), unchecked((int)0x800A0BB9), "ADODB.Recordset", expectedHelpContext: 1240641u);
             Assert.Null(Call(rs, "MoveLast").Failure);
             Assert.Equal(5, Get(rs, "AbsolutePosition"));
             Assert.Null(Call(rs, "MoveFirst").Failure);

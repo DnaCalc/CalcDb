@@ -334,6 +334,8 @@ internal sealed unsafe class KeysetRowSource : IAdoRowSource
         return true;
     }
 
+    public int KeysetCount => _rowIds.Count;
+
     public bool TrySeek(int index, out Failure? failure)
     {
         failure = null;
