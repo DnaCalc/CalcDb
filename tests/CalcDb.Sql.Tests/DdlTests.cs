@@ -1167,7 +1167,7 @@ public sealed class DdlTests
         AssertAceError(db, "ALTER TABLE T ADD CONSTRAINT CK_N CHECK (id > 0)", 3289);
         AssertAceError(db, "CREATE TABLE Ck (n LONG CHECK (n > 0))", 3292, ActionErrorSource.Ado);
         AssertAceError(db, "CREATE TABLE TC (ID INTEGER, W INTEGER CHECK (W > 0))", 3292, ActionErrorSource.Ado);
-        AssertNotModelled(db, "CREATE TABLE Ck (n LONG, CONSTRAINT CK_N CHECK (n > 0))", "NotModelled.Schema", ActionErrorSource.Ado);
+        AssertNotModelled(db, "CREATE TABLE Ck (n LONG, CONSTRAINT CK_N CHECK (n > 0))", "NotModelled.SchemaWriter", ActionErrorSource.Ado);
         AssertNotModelled(db, "CREATE TABLE Ck (n LONG CONSTRAINT CK_N CHECK (n > 0))", "NotModelled.DdlCreateTableCheck", ActionErrorSource.Ado);
         AssertNotModelled(db, "CREATE TABLE Ck (n LONG, CHECK (n > 0))", "NotModelled.DdlCreateTableCheck", ActionErrorSource.Ado);
         AssertNotModelled(db, "CREATE TABLE Fk (n LONG, CONSTRAINT FK_N FOREIGN KEY (n) REFERENCES T (id))", "NotModelled.DdlForeignKey");
