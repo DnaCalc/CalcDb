@@ -1792,7 +1792,7 @@ public sealed class SchemaWriterTests
                 SchemaOutcome outcome = session.Writer().CreateIndex(session.Workspace, new("TI", idx, SchemaRoute.Sql), 2);
                 Assert.False(outcome.Succeeded, $"{idx.Name} should fail 3058");
                 Assert.False(outcome.PublishedAny, $"{idx.Name} should not publish");
-                Assert.Equal(3058, outcome.Refused?.AceError);
+                Assert.Equal(3058, outcome.Refused?.Error);
                 Assert.Equal(nullImage, session.File.Snapshot());
             }
 
