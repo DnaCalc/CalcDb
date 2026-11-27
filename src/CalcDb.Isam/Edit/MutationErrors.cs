@@ -99,6 +99,15 @@ public readonly record struct MutationError(int Number, MutationErrorSource Sour
     /// <summary>3421 "Data type conversion error." (r-q-fmt-sort/scalar-bounds-accdb, from DAO.Field at the put).</summary>
     public const int Conversion = 3421;
 
+    /// <summary>3759 "Scaling of decimal value resulted in data truncation." (evidence/r-q53-conv-abspos-subq-loc/conv-dao-scalars-{accdb,mdb}, calls 165, 218).</summary>
+    public const int DecimalScaleTruncation = 3759;
+
+    /// <summary>3761 "The decimal field's precision is too small to accept the numeric you attempted to add." (evidence/r-q53-conv-abspos-subq-loc/conv-dao-scalars-{accdb,mdb}, calls 555, 561).</summary>
+    public const int DecimalPrecisionTooSmall = 3761;
+
+    /// <summary>0x80020004 (DISP_E_PARAMNOTFOUND, Missing VT_ERROR put into DAO Field.Value without overwriting DBEngine.Errors; evidence/r-q53-conv-abspos-subq-loc/conv-dao-scalars-{accdb,mdb}, calls 471, 567).</summary>
+    public const int MissingArgument = unchecked((int)0x80020004);
+
     /// <summary>13 (0x800A000D, Type mismatch without overwriting DBEngine.Errors; r-q49-dt2-draftprops/dt2-update-invalid-accdb, dt2-dao-createfield-addnew-accdb, r-q-fmt-sort/dt2-ticks-accdb).</summary>
     public const int ExtendedDateTimeInvalid = 13;
 
@@ -140,6 +149,8 @@ public readonly record struct MutationError(int Number, MutationErrorSource Sour
         RuleWithText => Argument ?? "",
         RuleWithoutText => $"One or more values are prohibited by the validation rule '{Argument}' set for '{Owner}'. Enter a value that the expression for this field can accept.",
         Conversion => "Data type conversion error.",
+        DecimalScaleTruncation => "Scaling of decimal value resulted in data truncation.",
+        DecimalPrecisionTooSmall => "The decimal field's precision is too small to accept the numeric you attempted to add.",
         RuleEvaluation => "Error evaluating  CHECK constraint. ",
         _ => $"ACE error {Number}",
     };

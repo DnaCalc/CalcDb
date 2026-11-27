@@ -413,7 +413,7 @@ public sealed class MutationSemantics : IDisposable
         out string? reason)
     {
         column = null;
-        if (!CheckConstraintExpression.TryParse(expression, out CheckConstraintExpression? parsed, out reason))
+        if (!CheckConstraintExpression.TryParse(expression, out CheckConstraintExpression? parsed, out reason, allowCompoundAnd: true))
         {
             return false;
         }

@@ -1053,11 +1053,15 @@ public sealed class SameWidthWriter(TableFootprints footprints)
             edits.Add(new PageEdit(_table.FirstPage, new TableDefCountsDelta(+1, autoNumberFloor, [.. incrementUnique], [], _d, reseedAutoNumber), PageRole.Catalog));
             AddUnique(footprint, new LockResource(_table.FirstPage, LockPurpose.TableDef));
         }
+        IReadOnlyList<uint> newlyReserved = externalAllocator is null && allocator.NewlyReservedExtentPages.Count > 0 ? [.. allocator.NewlyReservedExtentPages] : [];
         return new CompiledChange(new PhysicalChange(_cache, edits, footprint, root)
         {
             AllocatedGlobalMapPages = externalAllocator is null && allocator.AllocatedCount > 0 ? [.. allocator.AllocatedPages] : [],
             BaseExtentPages = externalAllocator is null && allocator.AllocatedCount > 0 ? Math.Max(_pageCount, _cache.KnownExtentPages) : 0,
             ConsumedReservedPages = externalAllocator is null && allocator.ConsumedReservedPages.Count > 0 ? [.. allocator.ConsumedReservedPages] : [],
+            HasReservedExtent = newlyReserved.Count > 0,
+            ReservedExtentPages = newlyReserved,
+            ReleasedAtClose = newlyReserved,
             DeferredEntryIncrements = deferTableDefCountUpdate ? [.. incrementUnique] : null,
         }, null);
     }
@@ -2642,9 +2646,8 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         return false;
     }
 
-    private static uint? AllocatePage(PageAllocator allocator, PrivateOverlay? seen, out PageEdit? globalEdit, out string? failure)
+    private static uint? AllocatePage(PageAllocator allocator, PrivateOverlay? seen, List<PageEdit> globalEdits, out string? failure)
     {
-        globalEdit = null;
         if (allocator.HasSessionReservedPages)
         {
             if (!allocator.TryAllocateFromReserved(seen, out uint reserved, out failure))
@@ -2653,18 +2656,27 @@ public sealed class SameWidthWriter(TableFootprints footprints)
             }
             return reserved;
         }
+        if (allocator.HadSessionReservedPages)
+        {
+            if (!allocator.TryAllocateNextExtent(seen, globalEdits, out uint nextExtentPage, out failure))
+            {
+                return null;
+            }
+            return nextExtentPage;
+        }
         if (allocator.Allocate(seen, out PageEdit edit, out failure) is not { } page)
         {
             return null;
         }
-        globalEdit = edit;
+        globalEdits.Add(edit);
         return page;
     }
 
     /// <summary>A new LVAL page holding <paramref name="row"/> as slot 0, in the column's owned map and, when asked, its free map.</summary>
     private uint? NewLvalPage(LvalColumnMapSpec maps, bool joinsFree, uint stamp, byte[] row, PageAllocator allocator, PrivateOverlay? seen, List<PageEdit> edits, out string? failure)
     {
-        if (AllocatePage(allocator, seen, out PageEdit? globalEdit, out failure) is not { } page)
+        List<PageEdit> globalEdits = [];
+        if (AllocatePage(allocator, seen, globalEdits, out failure) is not { } page)
         {
             failure = $"an LVAL page: {failure}";
             return null;
@@ -2691,10 +2703,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
             }
             edits.Add(free);
         }
-        if (globalEdit is { } ge)
-        {
-            edits.Add(ge);
-        }
+        edits.AddRange(globalEdits);
         return page;
     }
 
@@ -2731,7 +2740,8 @@ public sealed class SameWidthWriter(TableFootprints footprints)
             }
             edits.Add(cleared);
         }
-        if (AllocatePage(allocator, seen, out PageEdit? globalEdit, out failure) is not { } page)
+        List<PageEdit> globalEdits = [];
+        if (AllocatePage(allocator, seen, globalEdits, out failure) is not { } page)
         {
             failure = $"no FreeMap page has room and no page can be allocated: {failure}";
             return null;
@@ -2770,10 +2780,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         {
             edits.Add(f);
         }
-        if (globalEdit is { } ge)
-        {
-            edits.Add(ge);
-        }
+        edits.AddRange(globalEdits);
         return new RowLocator(page, first);
     }
 

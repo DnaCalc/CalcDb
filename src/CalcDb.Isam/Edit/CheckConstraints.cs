@@ -44,15 +44,21 @@ public sealed record CheckConstraintExpression(
     CheckComparisonOp Op,
     CheckLiteralKind LiteralKind,
     int LongValue = 0,
-    string? TextValue = null)
+    string? TextValue = null,
+    CheckConstraintExpression? AndRight = null)
 {
     private static readonly HashSet<string> DisallowedKeywords = new(StringComparer.OrdinalIgnoreCase)
     {
         "SELECT", "FROM", "WHERE", "EXISTS", "IN", "BETWEEN", "LIKE", "IS", "NULL", "AND", "OR", "NOT", "XOR", "EQV", "IMP", "MOD", "TRUE", "FALSE",
     };
 
-    /// <summary>Parse a recorded single-column CHECK expression, or return false with a named refusal reason.</summary>
-    public static bool TryParse(string expression, out CheckConstraintExpression? parsed, out string? reason)
+    /// <summary>
+    /// Parse a recorded single-column CHECK expression, or return false with a named refusal reason.
+    /// When <paramref name="allowCompoundAnd"/> is true, also admits a same-column <c>Long</c> compound <c>AND</c>
+    /// of two single-column comparisons (<c>Score &gt;= 0 AND Score &lt;= 100</c>;
+    /// <c>evidence/r-q50-jk44-ddl-vis/ddl-multi-constraint-table-{accdb,mdb}</c>).
+    /// </summary>
+    public static bool TryParse(string expression, out CheckConstraintExpression? parsed, out string? reason, bool allowCompoundAnd = false)
     {
         parsed = null;
         ReadOnlySpan<char> span = expression.AsSpan().Trim();
@@ -70,6 +76,22 @@ public sealed record CheckConstraintExpression(
             }
         }
         string trimmed = span.ToString();
+
+        if (allowCompoundAnd && TrySplitTopLevelAnd(trimmed, out string? leftExpr, out string? rightExpr))
+        {
+            if (TryParse(leftExpr!, out CheckConstraintExpression? leftParsed, out _, allowCompoundAnd: false)
+                && TryParse(rightExpr!, out CheckConstraintExpression? rightParsed, out _, allowCompoundAnd: false)
+                && leftParsed!.LiteralKind == CheckLiteralKind.Long
+                && rightParsed!.LiteralKind == CheckLiteralKind.Long
+                && string.Equals(leftParsed.ColumnName, rightParsed.ColumnName, StringComparison.OrdinalIgnoreCase))
+            {
+                parsed = leftParsed with { Expression = trimmed, AndRight = rightParsed };
+                reason = null;
+                return true;
+            }
+            reason = "compound AND in CHECK expression is only recorded for two signed 32-bit integer comparisons on the same Long column (r-q50-jk44-ddl-vis/ddl-multi-constraint-table-*)";
+            return false;
+        }
 
         // Case 1: signed 32-bit integer literal on the left, comparison op, bare column on the right.
         if (span[0] == '-' || char.IsAsciiDigit(span[0]))
@@ -196,6 +218,40 @@ public sealed record CheckConstraintExpression(
 
         reason = "only a bare column compared against a signed 32-bit integer or single-quoted Latin-1 string literal is recorded for ADD CONSTRAINT CHECK";
         return false;
+    }
+
+    private static bool TrySplitTopLevelAnd(string trimmed, out string? left, out string? right)
+    {
+        left = null;
+        right = null;
+        bool inQuotes = false;
+        int matchAt = -1;
+        for (int i = 0; i < trimmed.Length; i++)
+        {
+            if (trimmed[i] == '\'')
+            {
+                inQuotes = !inQuotes;
+                continue;
+            }
+            if (!inQuotes && i > 0 && i + 4 < trimmed.Length
+                && char.IsWhiteSpace(trimmed[i - 1])
+                && char.IsWhiteSpace(trimmed[i + 3])
+                && trimmed.AsSpan(i, 3).Equals("AND", StringComparison.OrdinalIgnoreCase))
+            {
+                if (matchAt >= 0)
+                {
+                    return false; // more than one AND is not recorded
+                }
+                matchAt = i;
+            }
+        }
+        if (matchAt < 0)
+        {
+            return false;
+        }
+        left = trimmed[..matchAt].Trim();
+        right = trimmed[(matchAt + 3)..].Trim();
+        return left.Length > 0 && right.Length > 0;
     }
 
     internal static string OpText(CheckComparisonOp op) => op switch

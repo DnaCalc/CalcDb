@@ -44,6 +44,7 @@ public sealed class PageAllocator
     private readonly HashSet<uint> _handedOut = [];
     private readonly List<uint> _sessionReservedPages = [];
     private readonly List<uint> _consumedReservedPages = [];
+    private readonly List<uint> _newlyReservedExtentPages = [];
     private readonly List<uint> _zeroGapPages = [];
 
     public PageAllocator(PageCache cache, FormatDescriptor d, ulong extentPages)
@@ -76,8 +77,14 @@ public sealed class PageAllocator
     /// <summary>Whether this allocator holds unused pages from an earlier 32-page page-1 reservation in this session.</summary>
     public bool HasSessionReservedPages => _sessionReservedPages.Count > 0;
 
+    /// <summary>Whether this allocator started with (or took) a reusable 32-page session page-1 reservation.</summary>
+    public bool HadSessionReservedPages => _hadSessionReservedPages || _newlyReservedExtentPages.Count > 0;
+
     /// <summary>Pages consumed from the session's reserved page-1 extent by <see cref="TryAllocateFromReserved"/>.</summary>
     public IReadOnlyList<uint> ConsumedReservedPages => _consumedReservedPages;
+
+    /// <summary>Unused pages remaining in a newly reserved 32-page page-1 extent taken by <see cref="TryAllocateNextExtent"/>.</summary>
+    public IReadOnlyList<uint> NewlyReservedExtentPages => _newlyReservedExtentPages;
 
     /// <summary>Zero-filled gap pages skipped when a non-contiguous reserved allocation jumped past earlier rolled-back pages (evidence/r-q47-bigint-expr-edges/rel-mismatch-3368-*).</summary>
     public IReadOnlyList<uint> ZeroGapPages => _zeroGapPages;
@@ -120,10 +127,75 @@ public sealed class PageAllocator
             }
         }
         _sessionReservedPages.RemoveAt(0);
-        _consumedReservedPages.Add(candidate);
+        if (!_newlyReservedExtentPages.Remove(candidate))
+        {
+            _consumedReservedPages.Add(candidate);
+        }
         _handedOut.Add(candidate);
         ExtentPages = candidate + 1UL;
         page = candidate;
+        failure = null;
+        return true;
+    }
+
+    /// <summary>
+    /// Allocate the next contiguous page on page 1 and clear the remaining pages of its 4-byte (32-page) global-map
+    /// extent block when a session's prior 32-page extent has been exhausted
+    /// (<c>evidence/r-q54-excl-ddl-ix-cmd/second-32page-extent-{accdb,mdb}</c>: crossing page 32 clears a 2nd 32-page
+    /// block on page 1 and queues its unused tail for reuse in the session and release at Close).
+    /// </summary>
+    public bool TryAllocateNextExtent(PrivateOverlay? seen, List<PageEdit> edits, out uint page, out string? failure)
+    {
+        page = 0;
+        if (!_allowPendingRollbackExtent && _cache.HasPendingRollbackExtent)
+        {
+            failure = PendingRollbackExtentFailure;
+            return false;
+        }
+        if (_sessionReservedPages.Count > 0)
+        {
+            failure = "direct page-1 extent allocation while unused session reserved pages remain is not recorded (r-q54-excl-ddl-ix-cmd/second-32page-extent-*)";
+            return false;
+        }
+        if (!TryCaptureGlobalFreeMap(seen, out uint firstFree, out byte[] globalMapBefore, out failure))
+        {
+            return false;
+        }
+        MapRules m = _d.Map;
+        uint blockEnd = ((firstFree / 8) * 8) + 32;
+        SortedDictionary<int, byte> clearByOffset = [];
+        List<uint> newlyReserved = [];
+        for (uint p = firstFree; p < blockEnd; p++)
+        {
+            if (!MapPages.TryInlineBit(globalMapBefore, m.GlobalFreeSlot, p, _d, out int offset, out byte mask, out failure))
+            {
+                failure = "the global map 2nd extent reservation: " + failure;
+                return false;
+            }
+            if ((globalMapBefore[offset] & mask) == 0)
+            {
+                if (p >= ExtentPages)
+                {
+                    failure = $"page {p} past file extent {ExtentPages} is already cleared in page 1";
+                    return false;
+                }
+                continue;
+            }
+            clearByOffset[offset] = (byte)(clearByOffset.GetValueOrDefault(offset) | mask);
+            if (p != firstFree)
+            {
+                newlyReserved.Add(p);
+            }
+        }
+        foreach ((int offset, byte clearMask) in clearByOffset)
+        {
+            edits.Add(new PageEdit(m.GlobalMapPage, new BitDelta(offset, 0, clearMask), PageRole.Map));
+        }
+        _handedOut.Add(firstFree);
+        ExtentPages = Math.Max(ExtentPages, firstFree + 1UL);
+        _sessionReservedPages.AddRange(newlyReserved);
+        _newlyReservedExtentPages.AddRange(newlyReserved);
+        page = firstFree;
         failure = null;
         return true;
     }
@@ -162,11 +234,9 @@ public sealed class PageAllocator
             failure = PendingRollbackExtentFailure;
             return null;
         }
-        if (_hadSessionReservedPages)
+        if (_hadSessionReservedPages && _sessionReservedPages.Count > 0)
         {
-            failure = _sessionReservedPages.Count == 0
-                ? "the session's reserved page-1 extent has no pages left (allocating a second 32-page extent in one session is not recorded: r-q37-valrule-put)"
-                : "direct page-1 allocation while a session page-1 extent reservation is active is not recorded (r-q42-field-rule-and)";
+            failure = "direct page-1 allocation while a session page-1 extent reservation is active is not recorded (r-q42-field-rule-and)";
             return null;
         }
         ExtentPages = Math.Max(ExtentPages, ExtentOf(_cache, ExtentPages, seen));

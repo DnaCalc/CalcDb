@@ -2548,6 +2548,9 @@ internal sealed unsafe class FieldObject : DaoObject
         .Get("Attributes", (self, args) => Live(self, f => f.Recordset.Database.InheritedWritable ? DatabaseObject.InheritedWriteRefusal("Field.Attributes") : f.DataUpdatable() is bool u && ColumnFacts.Attributes(f.Column, u) is int a ? Int32(a) : f.CalculatedNamed("Attributes")))
         .Get("AllowZeroLength", (self, args) => Live(self, f => f.Stored("AllowZeroLength", Bool(false))))
         .Get("Required", (self, args) => Live(self, f => f.Stored("Required", Bool(false))))
+        .Get("AppendOnly", (self, args) => Live(self, f => f.Column.TypeCode == NativeTypes.Memo
+            ? CallResult.Fail(Failure.NotModelled("NotModelled.FieldProperties.AppendOnly", $"Field.AppendOnly of Memo column {f.Column.Name} (not recorded)"))
+            : Bool(false)))
         .Get("DefaultValue", (self, args) => Live(self, f => f.Stored("DefaultValue", Text(""))))
         .Get("ValidationRule", (self, args) => Live(self, f => f.Stored("ValidationRule", Text(""))))
         .Get("ValidationText", (self, args) => Live(self, f => f.Stored("ValidationText", Text(""))))
@@ -2647,10 +2650,12 @@ internal sealed unsafe class FieldObject : DaoObject
         }
         if (column.TypeCode == NativeTypes.Ole)
         {
-            // A Null OLE value is 0 (recordset-fields-members-each: TOle); a stored one's length is not recorded.
+            // A Null OLE value is 0 (recordset-fields-members-each: TOle); a stored OLE value returns its byte length
+            // (evidence/r-q54-excl-ddl-ix-cmd/field-meta-and-lockwait-{accdb,mdb}, call 75[19]: 6-byte OLE -> 6).
             FieldResult read = Recordset.Cursor.Read(column);
             return read.Succeeded && read.Value.Kind == NativeKind.Null ? Int32(0)
-                : CallResult.Fail(Failure.NotModelled("NotModelled.FieldSizeOle", "Field.FieldSize of an OLE value that is not Null (not recorded)"));
+                : read.Succeeded && read.Value.Kind == NativeKind.LongBinary ? Int32(read.Value.Bytes?.Length ?? 0)
+                : CallResult.Fail(Failure.NotModelled("NotModelled.FieldSizeOle", $"Field.FieldSize of an OLE value that could not be read ({read.Failure?.ToString() ?? read.Value.Kind.ToString()}; not recorded)"));
         }
         TextFieldRead text = Recordset.Cursor.ReadText(column);
         return text.HasText ? Int32(text.Shape.Units * 2)
@@ -2774,10 +2779,17 @@ internal sealed unsafe class FieldObject : DaoObject
                 : FieldFailure(MutationError.NoEdit, "Update or CancelUpdate without AddNew or Edit.");
         }
         NativeVariant incoming = ByRefValues.Dereference(Args.Cell(value));
-        EditOutcome outcome = frame.Assign(column, incoming, allowEmptyBstrBinaryNull: true);
+        EditOutcome outcome = frame.Assign(column, incoming, allowEmptyBstrBinaryNull: true, allowDaoConversions: true);
         if (outcome.Error is { Number: MutationError.ExtendedDateTimeInvalid })
         {
             return PublishExtendedDateTimeInvalid(recordset.Engine);
+        }
+        if (outcome.Error is { Number: MutationError.MissingArgument })
+        {
+            // evidence/r-q53-conv-abspos-subq-loc/conv-dao-scalars-{accdb,mdb} (calls 471, 567): Missing (VT_ERROR
+            // DISP_E_PARAMNOTFOUND) returns 0x80020004 with null EXCEPINFO strings, no IErrorInfo, and leaves
+            // DBEngine.Errors untouched.
+            return CallResult.Fail(new Failure(FailureKind.Ado, MutationError.MissingArgument, "", "", null, 0) { NullExcepStrings = true });
         }
         return EditPublication.Of(outcome);
     }

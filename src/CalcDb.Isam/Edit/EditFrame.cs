@@ -536,7 +536,8 @@ public sealed class EditFrame : IDisposable
         ColumnDescriptor column,
         in NativeVariant value,
         ExtendedDateTimeWriteMode dt2Mode = ExtendedDateTimeWriteMode.DaoTable,
-        bool allowEmptyBstrBinaryNull = false)
+        bool allowEmptyBstrBinaryNull = false,
+        bool allowDaoConversions = false)
     {
         if (!Updatable)
         {
@@ -567,7 +568,7 @@ public sealed class EditFrame : IDisposable
                 MutationOpen.AutoNumberIncrement,
                 $"an explicit AutoNumber value under non-1 increment ({c.Increment}) is not modelled (qualified.md R-CAT-1 CAT-X / R-FMT-2 Open)");
         }
-        ConversionResult converted = AssignmentConversion.Convert(value, column, _table.Lcid, dt2Mode, allowEmptyBstrBinaryNull);
+        ConversionResult converted = AssignmentConversion.Convert(value, column, _table.Lcid, dt2Mode, allowEmptyBstrBinaryNull, allowDaoConversions);
         if (converted.Error is { } error)
         {
             return new EditOutcome(error);

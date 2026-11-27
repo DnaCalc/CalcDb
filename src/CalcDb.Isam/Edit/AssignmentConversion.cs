@@ -25,6 +25,7 @@ public static unsafe class AssignmentConversion
 {
     private const int DispTypeMismatch = unchecked((int)0x80020005);
     private const int DispOverflow = unchecked((int)0x8002000A);
+    private const int DispParamNotFound = unchecked((int)0x80020004);
 
     /// <summary>Convert <paramref name="incoming"/>, borrowed from the caller, into <paramref name="column"/>'s type under <paramref name="lcid"/>.</summary>
     public static ConversionResult Convert(
@@ -32,14 +33,45 @@ public static unsafe class AssignmentConversion
         ColumnDescriptor column,
         uint lcid,
         ExtendedDateTimeWriteMode dt2Mode = ExtendedDateTimeWriteMode.DaoTable,
-        bool allowEmptyBstrBinaryNull = false)
+        bool allowEmptyBstrBinaryNull = false,
+        bool allowDaoConversions = false)
     {
         VarType vt = incoming.Type;
         if (vt == VarType.Null)
         {
-            // A Yes/No field cannot hold Null (qualified.md R-FMT-2 Ordinary Boolean): what a DAO put of Null into it
-            // leaves in the buffer is not recorded.
-            return column.TypeCode == NativeTypes.Boolean ? Open(MutationOpen.ConversionNotRecorded) : new ConversionResult(NativeValue.Null);
+            // evidence/r-q53-conv-abspos-subq-loc/conv-dao-scalars-{accdb,mdb} (call 378): DAO Field.Value = Null on a
+            // Yes/No column stores False (0) and reads back VT_BOOL 0.
+            if (column.TypeCode == NativeTypes.Boolean)
+            {
+                return allowDaoConversions
+                    ? new ConversionResult(new NativeValue(NativeKind.Boolean) { Boolean = false })
+                    : Open(MutationOpen.ConversionNotRecorded);
+            }
+            return new ConversionResult(NativeValue.Null);
+        }
+        if (allowDaoConversions && vt == VarType.Empty)
+        {
+            // evidence/r-q53-conv-abspos-subq-loc/conv-dao-scalars-{accdb,mdb} (calls 247..361): DAO Field.Value = VT_EMPTY
+            // maps to False (0) on Yes/No and Null on Byte, Integer, Long, Single, Double, Currency, DateTime, Decimal,
+            // Text, Memo, and GUID.
+            if (column.TypeCode == NativeTypes.Boolean)
+            {
+                return new ConversionResult(new NativeValue(NativeKind.Boolean) { Boolean = false });
+            }
+            if (column.TypeCode is NativeTypes.Byte or NativeTypes.Integer or NativeTypes.Long
+                or NativeTypes.Single or NativeTypes.Double or NativeTypes.Currency
+                or NativeTypes.DateTime or NativeTypes.Numeric or NativeTypes.Text
+                or NativeTypes.Memo or NativeTypes.Guid)
+            {
+                return new ConversionResult(NativeValue.Null);
+            }
+            return Open(MutationOpen.ConversionNotRecorded);
+        }
+        if (allowDaoConversions && vt == VarType.Error && (int)incoming.Int64 == DispParamNotFound)
+        {
+            // evidence/r-q53-conv-abspos-subq-loc/conv-dao-scalars-{accdb,mdb} (calls 471, 567): Missing (VT_ERROR
+            // DISP_E_PARAMNOTFOUND) fails 0x80020004 without overwriting DBEngine.Errors.
+            return new ConversionResult(default, new MutationError(MutationError.MissingArgument, MutationErrorSource.Field));
         }
         if (column.TypeCode == NativeTypes.Ole && vt == (VarType.Array | VarType.UI1))
         {
@@ -48,6 +80,11 @@ public static unsafe class AssignmentConversion
         if (column.TypeCode == NativeTypes.Binary)
         {
             return Binary(incoming, column, allowEmptyBstrBinaryNull);
+        }
+        if (allowDaoConversions && column.TypeCode == NativeTypes.Guid && vt == (VarType.Array | VarType.UI1))
+        {
+            // evidence/r-q53-conv-abspos-subq-loc/conv-dao-scalars-{accdb,mdb} (call 585): 16-byte SAFEARRAY into GUID fails 3421.
+            return new ConversionResult(default, new MutationError(MutationError.Conversion, MutationErrorSource.Field));
         }
         if (vt is VarType.Empty or VarType.Error || ((ushort)vt & 0xF000) != 0)
         {
@@ -58,29 +95,29 @@ public static unsafe class AssignmentConversion
         switch (column.TypeCode)
         {
             case NativeTypes.Text or NativeTypes.Memo:
-                return Text(incoming, column);
+                return Text(incoming, column, lcid, allowDaoConversions);
             case NativeTypes.Guid:
-                return Guid(incoming);
+                return Guid(incoming, allowDaoConversions);
             case NativeTypes.Numeric:
-                return Numeric(incoming, column, lcid);
+                return Numeric(incoming, column, lcid, allowDaoConversions);
             case NativeTypes.Boolean:
-                return Scalar(incoming, VarType.Bool, lcid);
+                return Scalar(incoming, VarType.Bool, lcid, allowDaoConversions);
             case NativeTypes.Byte:
-                return Scalar(incoming, VarType.UI1, lcid);
+                return Scalar(incoming, VarType.UI1, lcid, allowDaoConversions);
             case NativeTypes.Integer:
-                return Scalar(incoming, VarType.I2, lcid);
+                return Scalar(incoming, VarType.I2, lcid, allowDaoConversions);
             case NativeTypes.Long:
-                return Scalar(incoming, VarType.I4, lcid);
+                return Scalar(incoming, VarType.I4, lcid, allowDaoConversions);
             case NativeTypes.BigInt:
                 return BigInt(incoming, lcid);
             case NativeTypes.Single:
-                return Scalar(incoming, VarType.R4, lcid);
+                return Scalar(incoming, VarType.R4, lcid, allowDaoConversions);
             case NativeTypes.Double:
-                return Scalar(incoming, VarType.R8, lcid);
+                return Scalar(incoming, VarType.R8, lcid, allowDaoConversions);
             case NativeTypes.Currency:
-                return Scalar(incoming, VarType.Currency, lcid);
+                return Scalar(incoming, VarType.Currency, lcid, allowDaoConversions);
             case NativeTypes.DateTime:
-                return Scalar(incoming, VarType.Date, lcid);
+                return Scalar(incoming, VarType.Date, lcid, allowDaoConversions);
             case NativeTypes.ExtendedDateTime:
                 return ExtendedDateTime(incoming, dt2Mode);
             default:
@@ -163,23 +200,29 @@ public static unsafe class AssignmentConversion
 
     /// <summary>
     /// Assignment into fixed <c>DECIMAL(p, s)</c> (native type <c>0x10</c>; evidence/r-q51-codecs-props-compact/dec-desc-keys-*,
-    /// seek-args-decimal-*): converts through <c>VariantChangeTypeEx(..., VT_DECIMAL)</c>, rescales exact decimal values
-    /// to <c>column.NumericScale</c>, and verifies the magnitude fits <c>column.NumericPrecision</c>. Values requiring
-    /// fractional rounding or exceeding precision stay refused by name until probed.
+    /// seek-args-decimal-*, evidence/r-q53-conv-abspos-subq-loc/conv-dao-scalars-{accdb,mdb}): converts through
+    /// <c>VariantChangeTypeEx(..., VT_DECIMAL)</c>, rescales exact decimal values to <c>column.NumericScale</c>, and
+    /// verifies the magnitude fits <c>column.NumericPrecision</c>. On DAO puts (<paramref name="allowDaoConversions"/>),
+    /// bad text fails 3421, over-scale fails 3759, and over-precision fails 3761.
     /// </summary>
-    private static ConversionResult Numeric(in NativeVariant incoming, ColumnDescriptor column, uint lcid)
+    private static ConversionResult Numeric(in NativeVariant incoming, ColumnDescriptor column, uint lcid, bool allowDaoConversions)
     {
-        // Unrecorded precision/scale or non-decimal direct COM puts (BSTR/R8/Currency) stay ColumnType so ADO
-        // immediate edit preserves 0x80040E21 (AdoImmediateEditTests); SQL INSERT converts literals to VT_DECIMAL first.
+        // Unrecorded precision/scale or non-decimal direct COM puts (BSTR/R8/Currency) on non-DAO routes stay
+        // ColumnType so ADO immediate edit preserves 0x80040E21 (AdoImmediateEditTests); SQL INSERT converts literals
+        // to VT_DECIMAL first.
         if (column.NumericPrecision is 0 or > 28
             || column.NumericScale > column.NumericPrecision
-            || incoming.Type is VarType.Bstr or VarType.R8 or VarType.Currency)
+            || (!allowDaoConversions && incoming.Type is VarType.Bstr or VarType.R8 or VarType.Currency))
         {
             return Open(MutationOpen.ColumnType);
         }
         NativeVariant source = incoming;
-        if (!OwnedVariant.TryChangeScalar(&source, VarType.Decimal, lcid, out NativeVariant result, out _))
+        if (!OwnedVariant.TryChangeScalar(&source, VarType.Decimal, lcid, out NativeVariant result, out int hr))
         {
+            if (allowDaoConversions && hr == DispTypeMismatch && incoming.Type == VarType.Bstr)
+            {
+                return new ConversionResult(default, new MutationError(MutationError.Conversion, MutationErrorSource.Field));
+            }
             return Open(MutationOpen.ConversionNotRecorded);
         }
         DecimalValue dv = OwnedVariant.ReadDecimal(result);
@@ -192,7 +235,9 @@ public static unsafe class AssignmentConversion
         }
         if (scale > column.NumericScale)
         {
-            return Open(MutationOpen.ConversionNotRecorded);
+            return allowDaoConversions
+                ? new ConversionResult(default, new MutationError(MutationError.DecimalScaleTruncation, MutationErrorSource.Field))
+                : Open(MutationOpen.ConversionNotRecorded);
         }
         UInt128 limit = UInt128.One;
         for (int i = 0; i < column.NumericPrecision; i++)
@@ -204,14 +249,18 @@ public static unsafe class AssignmentConversion
         {
             if (magnitude > maxBeforeScale)
             {
-                return Open(MutationOpen.ConversionNotRecorded);
+                return allowDaoConversions
+                    ? new ConversionResult(default, new MutationError(MutationError.DecimalPrecisionTooSmall, MutationErrorSource.Field))
+                    : Open(MutationOpen.ConversionNotRecorded);
             }
             magnitude *= 10;
             scale++;
         }
         if (magnitude >= limit)
         {
-            return Open(MutationOpen.ConversionNotRecorded);
+            return allowDaoConversions
+                ? new ConversionResult(default, new MutationError(MutationError.DecimalPrecisionTooSmall, MutationErrorSource.Field))
+                : Open(MutationOpen.ConversionNotRecorded);
         }
         bool negative = magnitude != 0 && dv.Negative;
         return new ConversionResult(NativeValue.Of(new NativeDecimal(negative, magnitude, column.NumericScale)));
@@ -237,14 +286,14 @@ public static unsafe class AssignmentConversion
         return new ConversionResult(new NativeValue(NativeKind.BigInt) { Integer = result.Int64, Bits = (ulong)result.Int64 });
     }
 
-    private static ConversionResult Scalar(in NativeVariant incoming, VarType target, uint lcid)
+    private static ConversionResult Scalar(in NativeVariant incoming, VarType target, uint lcid, bool allowDaoConversions)
     {
         NativeVariant source = incoming;
         OwnedVariant.TryChangeScalar(&source, target, lcid, out NativeVariant result, out int hr);
-        // A text that does not convert is 3421 from DAO.Field for the targets r-expr-locale records (Double, Currency, Bit,
-        // Date/Time); for Byte, Integer, Long and Single no record shows it, so it stays named below.
+        // A text that does not convert is 3421 from DAO.Field for Double, Currency, Bit, Date/Time (r-expr-locale)
+        // and on DAO puts for Byte, Integer, Long and Single (evidence/r-q53-conv-abspos-subq-loc/conv-dao-scalars-{accdb,mdb}).
         if (hr == DispOverflow || (hr == DispTypeMismatch && incoming.Type == VarType.Bstr
-            && target is VarType.R8 or VarType.Currency or VarType.Bool or VarType.Date))
+            && (allowDaoConversions || target is VarType.R8 or VarType.Currency or VarType.Bool or VarType.Date)))
         {
             return new ConversionResult(default, new MutationError(MutationError.Conversion, MutationErrorSource.Field));
         }
@@ -265,29 +314,68 @@ public static unsafe class AssignmentConversion
         });
     }
 
-    private static ConversionResult Text(in NativeVariant incoming, ColumnDescriptor column)
+    private static ConversionResult Text(in NativeVariant incoming, ColumnDescriptor column, uint lcid, bool allowDaoConversions)
     {
-        if (incoming.Type != VarType.Bstr)
+        string text;
+        if (incoming.Type == VarType.Bstr)
         {
-            // A number put into a Text field converts by the locale; no record shows DAO's form of it yet.
+            ReadOnlySpan<char> units = Bstrs.Chars(incoming.Pointer);
+            // The declared Text length counts bytes, two per UTF-16 unit; 51 units into Text(50) are refused 3163
+            // (qualified.md R-FMT-2 Text grammar, R-SORT-3 UTF-16 boundaries).
+            if (column.TypeCode == NativeTypes.Text && units.Length > column.Length / 2)
+            {
+                return new ConversionResult(default, new MutationError(MutationError.FieldTooSmall, MutationErrorSource.Field));
+            }
+            text = new string(units);
+        }
+        else if (allowDaoConversions && incoming.Type == VarType.Bool)
+        {
+            // evidence/r-q53-conv-abspos-subq-loc/conv-dao-scalars-{accdb,mdb} (calls 171, 230): VT_BOOL -> Text/Memo
+            // formats True as "-1" and False as "0".
+            text = (short)incoming.Int64 != 0 ? "-1" : "0";
+            if (column.TypeCode == NativeTypes.Text && text.Length > column.Length / 2)
+            {
+                return new ConversionResult(default, new MutationError(MutationError.FieldTooSmall, MutationErrorSource.Field));
+            }
+        }
+        else if (allowDaoConversions && incoming.Type is VarType.UI1 or VarType.I2 or VarType.I4 or VarType.I8
+            or VarType.R4 or VarType.R8 or VarType.Currency or VarType.Date or VarType.Decimal)
+        {
+            // evidence/r-q53-conv-abspos-subq-loc/conv-dao-scalars-{accdb,mdb} (calls 88, 94, 177, 224): numeric,
+            // Currency, and Date values format via VariantChangeTypeEx under the session LCID (Date -> "2026/03/15"
+            // under en-ZA 7177).
+            NativeVariant source = incoming;
+            using OwnedVariant? converted = OwnedVariant.ChangeType(&source, VarType.Bstr, lcid, 0, out int hr);
+            if (converted is null || hr != 0)
+            {
+                return Open(MutationOpen.ConversionNotRecorded);
+            }
+            ReadOnlySpan<char> units = Bstrs.Chars(converted.Pointer->Pointer);
+            if (column.TypeCode == NativeTypes.Text && units.Length > column.Length / 2)
+            {
+                return new ConversionResult(default, new MutationError(MutationError.FieldTooSmall, MutationErrorSource.Field));
+            }
+            text = new string(units);
+        }
+        else
+        {
+            // A number put into a Text field on non-DAO routes stays named until probed.
             return Open(MutationOpen.ConversionNotRecorded);
         }
-        ReadOnlySpan<char> units = Bstrs.Chars(incoming.Pointer);
-        // The declared Text length counts bytes, two per UTF-16 unit; 51 units into Text(50) are refused 3163
-        // (qualified.md R-FMT-2 Text grammar, R-SORT-3 UTF-16 boundaries).
-        if (column.TypeCode == NativeTypes.Text && units.Length > column.Length / 2)
-        {
-            return new ConversionResult(default, new MutationError(MutationError.FieldTooSmall, MutationErrorSource.Field));
-        }
-        return new ConversionResult(new NativeValue(NativeKind.Text) { Text = new string(units) });
+        return new ConversionResult(new NativeValue(NativeKind.Text) { Text = text });
     }
 
-    private static ConversionResult Guid(in NativeVariant incoming)
+    private static ConversionResult Guid(in NativeVariant incoming, bool allowDaoConversions)
     {
-        // A GUID accepts only the braced text form; unbraced text and a 16-byte array are refused 3421
-        // (qualified.md R-FMT-2 Dates / GUID, r-q-fmt-sort/scalar-bounds-accdb).
+        // A GUID accepts only the braced text form; unbraced text, I4, and a 16-byte array are refused 3421
+        // (qualified.md R-FMT-2 Dates / GUID, r-q-fmt-sort/scalar-bounds-accdb,
+        // evidence/r-q53-conv-abspos-subq-loc/conv-dao-scalars-{accdb,mdb} calls 573, 579, 585).
         if (incoming.Type != VarType.Bstr)
         {
+            if (allowDaoConversions && incoming.Type == VarType.I4)
+            {
+                return new ConversionResult(default, new MutationError(MutationError.Conversion, MutationErrorSource.Field));
+            }
             return Open(MutationOpen.ConversionNotRecorded);
         }
         ReadOnlySpan<char> text = Bstrs.Chars(incoming.Pointer);
