@@ -90,7 +90,23 @@ function Test-WriterSlot([string] $Repo, [string] $WorktreePath) {
     if ($repoParent -ine $treeParent) { return $false }
     $repoLeaf = Split-Path $repoClean -Leaf
     $treeLeaf = Split-Path $treeClean -Leaf
-    $treeLeaf -match "^$([regex]::Escape($repoLeaf))-w\d+$"
+    $treeLeaf -match "^$([regex]::Escape($repoLeaf))-(w\d+|probe)$"
+}
+
+# Safely remove disposable <slot>\.oracle-runs when detaching a writer/prober slot (task w-store-prune).
+# Never follows a junction or reparse point, and clears ReadOnly attributes on input copies before deleting.
+function Remove-SlotOracleRuns([string] $SlotPath) {
+    $oraRuns = Join-Path $SlotPath ".oracle-runs"
+    if (-not (Test-Path -LiteralPath $oraRuns)) { return }
+    $item = Get-Item -LiteralPath $oraRuns -Force -ErrorAction SilentlyContinue
+    if (-not $item -or -not $item.PSIsContainer) { return }
+    if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { return }
+    Get-ChildItem -LiteralPath $oraRuns -Recurse -Force -ErrorAction SilentlyContinue | ForEach-Object {
+        if (($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -eq 0 -and -not $_.PSIsContainer) {
+            try { $_.Attributes = [IO.FileAttributes]::Normal } catch {}
+        }
+    }
+    Remove-Item -LiteralPath $oraRuns -Recurse -Force -ErrorAction SilentlyContinue
 }
 
 # Land the checked commit on master in the integration checkout and push (task fhqk). Fast-forwards when master has not
@@ -265,8 +281,7 @@ function Cleanup-BranchSlot([string] $Repo, [string] $Branch) {
                     foreach ($l in $swOut) { $details.Add($l) }
                     $cleanupNote = "cleanup skipped (git switch --detach master failed in slot $tree; branch $Branch kept)"
                 } else {
-                    $oraRuns = Join-Path $tree ".oracle-runs"
-                    if (Test-Path $oraRuns) { Remove-Item $oraRuns -Recurse -Force -ErrorAction SilentlyContinue }
+                    Remove-SlotOracleRuns $tree
                     $delOut = @(git -C $Repo branch -d $Branch 2>&1 | ForEach-Object { "$_" })
                     if ($LASTEXITCODE -ne 0) {
                         foreach ($l in $delOut) { $details.Add($l) }

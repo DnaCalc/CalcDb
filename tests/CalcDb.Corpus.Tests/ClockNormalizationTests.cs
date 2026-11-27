@@ -1206,8 +1206,9 @@ public sealed class ClockNormalizationTests
             Assert.False(v.EqualOutsideClock, $"ACE 2010 byte 0x{off:X} in vacated/live MSysObjects row was unexpectedly masked");
         }
 
-        // Neither ACE 2016 (r-fmt-1/create-accdb-bigint) nor ACE 2019 (r-fmt-1/create-accdb-datetime2) repeats show
-        // a vacated MSysObjects copy -> those profiles must leave vacated copies strictly compared.
+        // ACE 2016 (r-q47-bigint-expr-edges/bi-dao-createfield-addnew-accdb, bi-params-ado-cmd-accdb) and ACE 2019
+        // (r-q49-dt2-draftprops/dt2-dao-createfield-addnew-accdb, dt2-params-ado-cmd-accdb) repeats also show vacated
+        // MSysObjects copies (calls.trace revision 14, task t9vc): they normalize the vacated copy's dates too.
         byte[] flippedVacatedDate = (byte[])page17.Clone();
         flippedVacatedDate[0x8C6] ^= 0x01;
         foreach ((string fixtureSha, FileFormat expectedFormat) in new (string, FileFormat)[]
@@ -1217,13 +1218,12 @@ public sealed class ClockNormalizationTests
             Assert.Equal(expectedFormat, otherCtx.Format);
             ClockFieldMap otherMap = AceClockFields.FindInSlice(17 * 4096, page17, otherCtx, out string? otherRefusal)
                 ?? throw new InvalidOperationException(otherRefusal);
-            Assert.DoesNotContain(otherMap.Fields, f => f.Where.Contains("vacated copy", StringComparison.Ordinal));
-            Assert.False(FileImageComparison.CompareSlice(17 * 4096, page17, flippedVacatedDate, otherCtx, otherCtx).EqualOutsideClock);
+            Assert.Contains(otherMap.Fields, f => f.Where.Contains("vacated copy", StringComparison.Ordinal));
+            Assert.True(FileImageComparison.CompareSlice(17 * 4096, page17, flippedVacatedDate, otherCtx, otherCtx).EqualOutsideClock);
         }
     }
 
     [Theory]
-    [InlineData(true, (byte)1, FileFormat.Jet4)]
     [InlineData(false, (byte)3, FileFormat.Ace2010)]
     [InlineData(false, (byte)5, FileFormat.Ace2016)]
     [InlineData(false, (byte)6, FileFormat.Ace2019)]
@@ -1231,8 +1231,8 @@ public sealed class ClockNormalizationTests
         bool jetSignature, byte versionCode, FileFormat expectedFormat)
     {
         // Non-vacuous LongValueStamp rejecting control: ChangedA3 has a real agreeing non-zero chained LVAL stamp
-        // (page 46 offset 0xFC7 and page 47 offset 0x8). Under Jet 4, ACE 2010, ACE 2016, and ACE 2019, Find must
-        // emit zero LongValueStamp fields and flipping both agreeing stamps together must fail comparison.
+        // (page 46 offset 0xFC7 and page 47 offset 0x8). Under ACE 2010, ACE 2016, and ACE 2019 (no non-compiled-plan
+        // chained LVAL stamp repeat), Find must emit zero LongValueStamp fields and flipping both agreeing stamps must fail.
         byte[] ace2007 = Bytes(ChangedA3);
         ClockField[] ace2007Stamps = [.. AceClockFields.Find(ace2007, out _)!.Fields.Where(f => f.Kind == ClockFieldKind.LongValueStamp)];
         Assert.Equal(2, ace2007Stamps.Length);
@@ -1251,9 +1251,9 @@ public sealed class ClockNormalizationTests
         Assert.False(stampVerdict.EqualOutsideClock);
         Assert.StartsWith(ace2007Stamps[0].Location(4096) + " (outside ACE clock fields)", stampVerdict.Difference, StringComparison.Ordinal);
 
-        // Deleted MSysObjects row rejecting control: only ACE 2007 (pair-dao-Aa-aA, delete-querydef-accdb) and Jet 4
-        // (delete-querydef-mdb) have recorded deleted-row repeats; ACE 2010/2016/2019 keep deleted rows strict.
-        if (expectedFormat != FileFormat.Jet4)
+        // Deleted MSysObjects row rejecting control: ACE 2010 has no recorded deleted-row repeat and stays strict
+        // (ACE 2007, Jet 4, ACE 2016, and ACE 2019 all have recorded deleted-row repeats as of revision 14, task t9vc).
+        if (expectedFormat == FileFormat.Ace2010)
         {
             PageClockContext ctx = BuildContextFromImage(WithHeaderProfile(Bytes(CatEmpty), jetSignature, versionCode));
             EvidenceRecord pairRec = LoadRecord(@"evidence\r-q28-schema-write-open\pair-dao-Aa-aA\r-q28-schema-write-open.pair-dao-Aa-aA.ffd0f84f2e.a1.json");
@@ -1600,7 +1600,7 @@ public sealed class ClockNormalizationTests
         Assert.Contains("r-q39-querydef-bytes/action-update-accdb", n.Bounds, StringComparison.Ordinal);
         Assert.Contains("r-q39-querydef-bytes/delete-querydef-mdb", n.Bounds, StringComparison.Ordinal);
         Assert.Contains("Flags", n.RejectingControl, StringComparison.Ordinal);
-        Assert.Contains("outside ACE 2007 and Jet 4", n.RejectingControl, StringComparison.Ordinal);
+        Assert.Contains("ACE 2010", n.RejectingControl, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -1749,6 +1749,146 @@ public sealed class ClockNormalizationTests
             bad[off] ^= 0x01;
             FileImageVerdict v = FileImageComparison.CompareSlice(17 * 4096, finalPage17, bad, finalCtx, finalCtx);
             Assert.False(v.EqualOutsideClock, $"Jet 4 byte {off} (0x{off:X}) in deleted/vacated MSysObjects row was unexpectedly masked");
+        }
+    }
+
+    // calls.trace revision 14 (task t9vc): truncated deleted/vacated MSysObjects rows, ACE 2016/2019 deleted/vacated
+    // rows, freed LVAL tick stamps (ACCDB & Jet 4 MDB), and MSysObjects.Lv/LvExtra compiled query plan LVALs.
+
+    [Fact]
+    public void Revision_14_documents_t9vc_truncated_rows_freed_lval_stamps_and_compiled_plans()
+    {
+        Assert.Equal(14, CallTraceComparison.Rule.Revision);
+        PermittedNormalization n = Assert.Single(CallTraceComparison.Rule.Normalizations, n => n.Name == CallTraceComparison.ClockNormalization);
+        Assert.Contains("revision 14 (task t9vc)", n.Bounds, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("drop-populated-indexed-lval-accdb", n.Bounds, StringComparison.Ordinal);
+        Assert.Contains("ddl-proc-create-exec-drop-accdb", n.Bounds, StringComparison.Ordinal);
+        Assert.Contains("ado-cmd-exec-noparam-accdb", n.Bounds, StringComparison.Ordinal);
+        Assert.Contains("dt2-index-keys-asc-desc-accdb", n.RejectingControl, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("r-q44-ddl-alter-types/dropcon-check-accdb-ado", @"evidence\r-q44-ddl-alter-types\dropcon-check-accdb-ado\r-q44-ddl-alter-types.dropcon-check-accdb-ado.22c7566ea3.a1.json", @"evidence\r-q44-ddl-alter-types\dropcon-check-accdb-ado\r-q44-ddl-alter-types.dropcon-check-accdb-ado.22c7566ea3.a2.json")]
+    [InlineData("r-q44-ddl-alter-types/dropcon-check-mdb-ado", @"evidence\r-q44-ddl-alter-types\dropcon-check-mdb-ado\r-q44-ddl-alter-types.dropcon-check-mdb-ado.8ecb88c5ee.a1.json", @"evidence\r-q44-ddl-alter-types\dropcon-check-mdb-ado\r-q44-ddl-alter-types.dropcon-check-mdb-ado.8ecb88c5ee.a2.json")]
+    [InlineData("r-q45-querydef-stream-rollback/qd-put-name-accdb", @"evidence\r-q45-querydef-stream-rollback\qd-put-name-accdb\r-q45-querydef-stream-rollback.qd-put-name-accdb.3b1208c06a.a1.json", @"evidence\r-q45-querydef-stream-rollback\qd-put-name-accdb\r-q45-querydef-stream-rollback.qd-put-name-accdb.3b1208c06a.a2.json")]
+    [InlineData("r-q45-querydef-stream-rollback/qd-put-name-mdb", @"evidence\r-q45-querydef-stream-rollback\qd-put-name-mdb\r-q45-querydef-stream-rollback.qd-put-name-mdb.7ac1ffb770.a1.json", @"evidence\r-q45-querydef-stream-rollback\qd-put-name-mdb\r-q45-querydef-stream-rollback.qd-put-name-mdb.7ac1ffb770.a2.json")]
+    [InlineData("r-q47-bigint-expr-edges/bi-dao-createfield-addnew-accdb", @"evidence\r-q47-bigint-expr-edges\bi-dao-createfield-addnew-accdb\r-q47-bigint-expr-edges.bi-dao-createfield-addnew-accdb.fd0b95d527.a1.json", @"evidence\r-q47-bigint-expr-edges\bi-dao-createfield-addnew-accdb\r-q47-bigint-expr-edges.bi-dao-createfield-addnew-accdb.fd0b95d527.a2.json")]
+    [InlineData("r-q47-bigint-expr-edges/bi-params-ado-cmd-accdb", @"evidence\r-q47-bigint-expr-edges\bi-params-ado-cmd-accdb\r-q47-bigint-expr-edges.bi-params-ado-cmd-accdb.5400569f97.a1.json", @"evidence\r-q47-bigint-expr-edges\bi-params-ado-cmd-accdb\r-q47-bigint-expr-edges.bi-params-ado-cmd-accdb.5400569f97.a2.json")]
+    [InlineData("r-q47-bigint-expr-edges/bi-params-dao-querydef-accdb", @"evidence\r-q47-bigint-expr-edges\bi-params-dao-querydef-accdb\r-q47-bigint-expr-edges.bi-params-dao-querydef-accdb.20a9cbf2ff.a1.json", @"evidence\r-q47-bigint-expr-edges\bi-params-dao-querydef-accdb\r-q47-bigint-expr-edges.bi-params-dao-querydef-accdb.20a9cbf2ff.a2.json")]
+    [InlineData("r-q47-bigint-expr-edges/bi-select-into-accdb", @"evidence\r-q47-bigint-expr-edges\bi-select-into-accdb\r-q47-bigint-expr-edges.bi-select-into-accdb.6bb2b84cfe.a1.json", @"evidence\r-q47-bigint-expr-edges\bi-select-into-accdb\r-q47-bigint-expr-edges.bi-select-into-accdb.6bb2b84cfe.a2.json")]
+    [InlineData("r-q49-dt2-draftprops/dt2-params-ado-cmd-accdb", @"evidence\r-q49-dt2-draftprops\dt2-params-ado-cmd-accdb\r-q49-dt2-draftprops.dt2-params-ado-cmd-accdb.c6166978f0.a1.json", @"evidence\r-q49-dt2-draftprops\dt2-params-ado-cmd-accdb\r-q49-dt2-draftprops.dt2-params-ado-cmd-accdb.c6166978f0.a2.json")]
+    [InlineData("r-q49-dt2-draftprops/dt2-params-dao-querydef-accdb", @"evidence\r-q49-dt2-draftprops\dt2-params-dao-querydef-accdb\r-q49-dt2-draftprops.dt2-params-dao-querydef-accdb.28265f92f3.a1.json", @"evidence\r-q49-dt2-draftprops\dt2-params-dao-querydef-accdb\r-q49-dt2-draftprops.dt2-params-dao-querydef-accdb.28265f92f3.a2.json")]
+    [InlineData("r-q49-dt2-draftprops/dt2-select-into-accdb", @"evidence\r-q49-dt2-draftprops\dt2-select-into-accdb\r-q49-dt2-draftprops.dt2-select-into-accdb.d2c7448be8.a1.json", @"evidence\r-q49-dt2-draftprops\dt2-select-into-accdb\r-q49-dt2-draftprops.dt2-select-into-accdb.d2c7448be8.a2.json")]
+    [InlineData("r-q49-dt2-draftprops/draft-props-errors-accdb", @"evidence\r-q49-dt2-draftprops\draft-props-errors-accdb\r-q49-dt2-draftprops.draft-props-errors-accdb.066ec0fdba.a1.json", @"evidence\r-q49-dt2-draftprops\draft-props-errors-accdb\r-q49-dt2-draftprops.draft-props-errors-accdb.066ec0fdba.a2.json")]
+    [InlineData("r-q49-dt2-draftprops/draft-props-errors-mdb", @"evidence\r-q49-dt2-draftprops\draft-props-errors-mdb\r-q49-dt2-draftprops.draft-props-errors-mdb.32b0ac2b30.a1.json", @"evidence\r-q49-dt2-draftprops\draft-props-errors-mdb\r-q49-dt2-draftprops.draft-props-errors-mdb.32b0ac2b30.a2.json")]
+    [InlineData("r-q51-codecs-props-compact/prop-errors-accdb", @"evidence\r-q51-codecs-props-compact\prop-errors-accdb\r-q51-codecs-props-compact.prop-errors-accdb.7db702c57a.a1.json", @"evidence\r-q51-codecs-props-compact\prop-errors-accdb\r-q51-codecs-props-compact.prop-errors-accdb.7db702c57a.a2.json")]
+    [InlineData("r-q51-codecs-props-compact/prop-errors-mdb", @"evidence\r-q51-codecs-props-compact\prop-errors-mdb\r-q51-codecs-props-compact.prop-errors-mdb.109574867c.a1.json", @"evidence\r-q51-codecs-props-compact\prop-errors-mdb\r-q51-codecs-props-compact.prop-errors-mdb.109574867c.a2.json")]
+    [InlineData("r-q54-excl-ddl-ix-cmd/qd-deferred-then-ddl-accdb", @"evidence\r-q54-excl-ddl-ix-cmd\qd-deferred-then-ddl-accdb\r-q54-excl-ddl-ix-cmd.qd-deferred-then-ddl-accdb.ba4db4d6a9.a1.json", @"evidence\r-q54-excl-ddl-ix-cmd\qd-deferred-then-ddl-accdb\r-q54-excl-ddl-ix-cmd.qd-deferred-then-ddl-accdb.ba4db4d6a9.a2.json")]
+    [InlineData("r-q54-excl-ddl-ix-cmd/qd-deferred-then-ddl-mdb", @"evidence\r-q54-excl-ddl-ix-cmd\qd-deferred-then-ddl-mdb\r-q54-excl-ddl-ix-cmd.qd-deferred-then-ddl-mdb.6f320ddb98.a1.json", @"evidence\r-q54-excl-ddl-ix-cmd\qd-deferred-then-ddl-mdb\r-q54-excl-ddl-ix-cmd.qd-deferred-then-ddl-mdb.6f320ddb98.a2.json")]
+    [InlineData("r-q54-excl-ddl-ix-cmd/drop-populated-indexed-lval-accdb", @"evidence\r-q54-excl-ddl-ix-cmd\drop-populated-indexed-lval-accdb\r-q54-excl-ddl-ix-cmd.drop-populated-indexed-lval-accdb.7bd1c7fc76.a1.json", @"evidence\r-q54-excl-ddl-ix-cmd\drop-populated-indexed-lval-accdb\r-q54-excl-ddl-ix-cmd.drop-populated-indexed-lval-accdb.7bd1c7fc76.a2.json")]
+    [InlineData("r-q54-excl-ddl-ix-cmd/drop-populated-indexed-lval-mdb", @"evidence\r-q54-excl-ddl-ix-cmd\drop-populated-indexed-lval-mdb\r-q54-excl-ddl-ix-cmd.drop-populated-indexed-lval-mdb.b3af7b2ba3.a1.json", @"evidence\r-q54-excl-ddl-ix-cmd\drop-populated-indexed-lval-mdb\r-q54-excl-ddl-ix-cmd.drop-populated-indexed-lval-mdb.b3af7b2ba3.a2.json")]
+    [InlineData("r-q54-excl-ddl-ix-cmd/ado-cmd-exec-noparam-accdb", @"evidence\r-q54-excl-ddl-ix-cmd\ado-cmd-exec-noparam-accdb\r-q54-excl-ddl-ix-cmd.ado-cmd-exec-noparam-accdb.e0519fa077.a1.json", @"evidence\r-q54-excl-ddl-ix-cmd\ado-cmd-exec-noparam-accdb\r-q54-excl-ddl-ix-cmd.ado-cmd-exec-noparam-accdb.e0519fa077.a2.json")]
+    [InlineData("r-q54-excl-ddl-ix-cmd/ado-cmd-exec-noparam-mdb", @"evidence\r-q54-excl-ddl-ix-cmd\ado-cmd-exec-noparam-mdb\r-q54-excl-ddl-ix-cmd.ado-cmd-exec-noparam-mdb.5cdfb4ca1a.a1.json", @"evidence\r-q54-excl-ddl-ix-cmd\ado-cmd-exec-noparam-mdb\r-q54-excl-ddl-ix-cmd.ado-cmd-exec-noparam-mdb.5cdfb4ca1a.a2.json")]
+    public void T9vc_retained_clock_and_plan_repeats_match_in_both_directions(string caseId, string a1Path, string a2Path)
+    {
+        EvidenceRecord a1 = LoadRecord(a1Path);
+        EvidenceRecord a2 = LoadRecord(a2Path);
+
+        ComparisonRecord t1 = CallTraceComparison.Compare(caseId, a1.RecordId, a1.Capture!, a2.RecordId, a2.Capture!, candidateModule: null,
+            oracleFiles: StoreLookup, candidateFiles: StoreLookup);
+        Assert.True(t1.Status == ComparisonStatus.Matched, $"{caseId} trace a1->a2: {t1.FirstDifference?.Path} {t1.FirstDifference?.Expected} / {t1.FirstDifference?.Actual}");
+        Assert.Empty(t1.Differences);
+
+        ComparisonRecord t2 = CallTraceComparison.Compare(caseId, a2.RecordId, a2.Capture!, a1.RecordId, a1.Capture!, candidateModule: null,
+            oracleFiles: StoreLookup, candidateFiles: StoreLookup);
+        Assert.True(t2.Status == ComparisonStatus.Matched, $"{caseId} trace a2->a1: {t2.FirstDifference?.Path} {t2.FirstDifference?.Expected} / {t2.FirstDifference?.Actual}");
+        Assert.Empty(t2.Differences);
+    }
+
+    [Theory]
+    [InlineData("r-q50-jk44-ddl-vis/ddl-proc-create-exec-drop-accdb", @"evidence\r-q50-jk44-ddl-vis\ddl-proc-create-exec-drop-accdb\r-q50-jk44-ddl-vis.ddl-proc-create-exec-drop-accdb.062b695e35.a1.json", @"evidence\r-q50-jk44-ddl-vis\ddl-proc-create-exec-drop-accdb\r-q50-jk44-ddl-vis.ddl-proc-create-exec-drop-accdb.062b695e35.a2.json", "page 46 offset 0xDF7 (outside ACE clock fields)")]
+    [InlineData("r-q50-jk44-ddl-vis/ddl-proc-create-exec-drop-mdb", @"evidence\r-q50-jk44-ddl-vis\ddl-proc-create-exec-drop-mdb\r-q50-jk44-ddl-vis.ddl-proc-create-exec-drop-mdb.13b38d89df.a1.json", @"evidence\r-q50-jk44-ddl-vis\ddl-proc-create-exec-drop-mdb\r-q50-jk44-ddl-vis.ddl-proc-create-exec-drop-mdb.13b38d89df.a2.json", "page 23 offset 0xDF7 (outside ACE clock fields)")]
+    public void R_q50_ddl_proc_create_exec_drop_final_files_match_outside_clock_and_plan_while_midtrace_msysqueries_lvextra_stays_strict(
+        string caseId, string a1Path, string a2Path, string expectedMidTraceDiff)
+    {
+        EvidenceRecord a1 = LoadRecord(a1Path);
+        EvidenceRecord a2 = LoadRecord(a2Path);
+        byte[] a1Final = Convert.FromHexString(a1.Capture!.Events.OfType<HandleEvent>().Last(h => h.Op == "read" && h.Success && h.Offset == 0 && h.Bytes is not null).Bytes!);
+        byte[] a2Final = Convert.FromHexString(a2.Capture!.Events.OfType<HandleEvent>().Last(h => h.Op == "read" && h.Success && h.Offset == 0 && h.Bytes is not null).Bytes!);
+
+        FileImageVerdict fwd = FileImageComparison.Compare(a1Final, a2Final);
+        Assert.True(fwd.EqualOutsideClock, $"{caseId} final a1->a2: {fwd.Difference} ({fwd.Expected} / {fwd.Actual})");
+        Assert.Contains(fwd.Notes, n => n.StartsWith("CompiledPlanLval (set aside):", StringComparison.Ordinal));
+        FileImageVerdict rev = FileImageComparison.Compare(a2Final, a1Final);
+        Assert.True(rev.EqualOutsideClock, $"{caseId} final a2->a1: {rev.Difference} ({rev.Expected} / {rev.Actual})");
+
+        // Mid-trace MSysQueries Attribute=8 LvExtra word (0xDF7) is not a clock/plan field and remains strictly compared.
+        ComparisonRecord midTrace = CallTraceComparison.Compare(caseId, a1.RecordId, a1.Capture!, a2.RecordId, a2.Capture!, candidateModule: null,
+            oracleFiles: StoreLookup, candidateFiles: StoreLookup);
+        Assert.Equal(ComparisonStatus.Mismatched, midTrace.Status);
+        Assert.Contains(expectedMidTraceDiff, midTrace.FirstDifference!.Actual, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("r-q49-dt2-draftprops/dt2-index-keys-asc-desc-accdb", @"evidence\r-q49-dt2-draftprops\dt2-index-keys-asc-desc-accdb\r-q49-dt2-draftprops.dt2-index-keys-asc-desc-accdb.d751b74600.a1.json", @"evidence\r-q49-dt2-draftprops\dt2-index-keys-asc-desc-accdb\r-q49-dt2-draftprops.dt2-index-keys-asc-desc-accdb.d751b74600.a2.json", "page 46 offset 0x289 (outside ACE clock fields)")]
+    [InlineData("r-q49-dt2-draftprops/dt2-dao-createfield-addnew-accdb", @"evidence\r-q49-dt2-draftprops\dt2-dao-createfield-addnew-accdb\r-q49-dt2-draftprops.dt2-dao-createfield-addnew-accdb.4178ca0758.a1.json", @"evidence\r-q49-dt2-draftprops\dt2-dao-createfield-addnew-accdb\r-q49-dt2-draftprops.dt2-dao-createfield-addnew-accdb.4178ca0758.a2.json", "page 45 offset 0xFFD (outside ACE clock fields)")]
+    public void Uninitialized_DAO_DateTime2_trailing_bytes_are_not_normalized_and_still_differ(string caseId, string a1Path, string a2Path, string expectedLocation)
+    {
+        EvidenceRecord a1 = LoadRecord(a1Path);
+        EvidenceRecord a2 = LoadRecord(a2Path);
+        ComparisonRecord r = CallTraceComparison.Compare(caseId, a1.RecordId, a1.Capture!, a2.RecordId, a2.Capture!, candidateModule: null,
+            oracleFiles: StoreLookup, candidateFiles: StoreLookup);
+        Assert.Equal(ComparisonStatus.Mismatched, r.Status);
+        Assert.NotNull(r.FirstDifference);
+        Assert.Contains(expectedLocation, r.FirstDifference!.Actual, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void T9vc_rejecting_controls_keep_non_clock_bytes_strict_across_truncated_rows_freed_lvals_and_compiled_plans()
+    {
+        // (a) Truncated vacated copy (prop-errors-accdb): only DateCreate [0x8BD..0x8C5) and partial DateUpdate [0x8C5..0x8C9)
+        // are masked; C/Id/ParentId/Type [0x8B1..0x8BD) remain strict.
+        EvidenceRecord propRec = LoadRecord(@"evidence\r-q51-codecs-props-compact\prop-errors-accdb\r-q51-codecs-props-compact.prop-errors-accdb.7db702c57a.a1.json");
+        byte[] propFull = Convert.FromHexString(propRec.Capture!.Events.OfType<HandleEvent>().Last(h => h.Op == "read" && h.Success && h.Offset == 0 && h.Bytes is not null).Bytes!);
+        for (int off = 0x8B1; off < 0x8BD; off++)
+        {
+            byte[] bad = (byte[])propFull.Clone();
+            bad[(17 * 4096) + off] ^= 0x01;
+            Assert.False(FileImageComparison.Compare(propFull, bad).EqualOutsideClock, $"prop-errors-accdb header byte 0x{off:X} was unexpectedly masked");
+        }
+
+        // (b) Truncated deleted row (dropcon-check-accdb-ado): DateCreate/DateUpdate [0x88A..0x89A) masked; Flags [0x89A..0x89E)
+        // and Name bytes [0x89E..0x8A6) remain strict.
+        EvidenceRecord dcRec = LoadRecord(@"evidence\r-q44-ddl-alter-types\dropcon-check-accdb-ado\r-q44-ddl-alter-types.dropcon-check-accdb-ado.22c7566ea3.a1.json");
+        byte[] dcPage17 = KeptPage(dcRec.Capture!, 17 * 4096);
+        PageClockContext dcCtx = BuildContextFromRecord(dcRec);
+        foreach (int off in (int[])[0x87E, 0x880, 0x89A, 0x89E, 0x8A0])
+        {
+            byte[] bad = (byte[])dcPage17.Clone();
+            bad[off] ^= 0x01;
+            Assert.False(FileImageComparison.CompareSlice(17 * 4096, dcPage17, bad, dcCtx, dcCtx).EqualOutsideClock, $"dropcon-check-accdb-ado byte 0x{off:X} was unexpectedly masked");
+        }
+
+        // (c) Freed LVAL tick stamp (drop-populated-indexed-lval-mdb): flipping only one side of the agreeing pair
+        // (p23 0x08 without p25 0xFF3) or flipping a non-stamp byte on p23 must mismatch.
+        EvidenceRecord dropMdbRec = LoadRecord(@"evidence\r-q54-excl-ddl-ix-cmd\drop-populated-indexed-lval-mdb\r-q54-excl-ddl-ix-cmd.drop-populated-indexed-lval-mdb.b3af7b2ba3.a1.json");
+        byte[] dropMdbFull = Convert.FromHexString(dropMdbRec.Capture!.Events.OfType<HandleEvent>().Last(h => h.Op == "read" && h.Success && h.Offset == 0 && h.Bytes is not null).Bytes!);
+        byte[] oneStampOnly = (byte[])dropMdbFull.Clone();
+        oneStampOnly[(23 * 4096) + 8] ^= 0x01;
+        Assert.False(FileImageComparison.Compare(dropMdbFull, oneStampOnly).EqualOutsideClock);
+        byte[] nonStampLval = (byte[])dropMdbFull.Clone();
+        nonStampLval[(23 * 4096) + 20] ^= 0x01;
+        Assert.False(FileImageComparison.Compare(dropMdbFull, nonStampLval).EqualOutsideClock);
+
+        // (d) Compiled-plan Lv/LVAL (ado-cmd-exec-noparam-mdb): Lv descriptor flags (+3) and page pointer (+4..+7) on p17,
+        // and LVAL page kind/marker/rowCount on p25, remain strict.
+        EvidenceRecord adoMdbRec = LoadRecord(@"evidence\r-q54-excl-ddl-ix-cmd\ado-cmd-exec-noparam-mdb\r-q54-excl-ddl-ix-cmd.ado-cmd-exec-noparam-mdb.5cdfb4ca1a.a1.json");
+        byte[] adoMdbFull = Convert.FromHexString(adoMdbRec.Capture!.Events.OfType<HandleEvent>().Last(h => h.Op == "read" && h.Success && h.Offset == 0 && h.Bytes is not null).Bytes!);
+        foreach (int absOff in (int[])[(17 * 4096) + 0xCEB, (17 * 4096) + 0xCED, (25 * 4096) + 0, (25 * 4096) + 4, (25 * 4096) + 12])
+        {
+            byte[] bad = (byte[])adoMdbFull.Clone();
+            bad[absOff] ^= 0x01;
+            Assert.False(FileImageComparison.Compare(adoMdbFull, bad).EqualOutsideClock, $"compiled-plan strict byte at page {absOff / 4096} offset 0x{absOff % 4096:X} was unexpectedly masked");
         }
     }
 }

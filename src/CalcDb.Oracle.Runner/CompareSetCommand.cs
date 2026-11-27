@@ -15,7 +15,7 @@ internal static partial class Program
     /// baseline as committed at REV, or <c>none</c>; the default is the committed baseline. <c>--diff RUN</c> diffs a written
     /// run without running anything. Batch output per question is shown with <c>--verbose</c>.
     /// </summary>
-    private static readonly string[] CompareSetOptions = ["set", "dirs", "deployment", "rerun", "name", "against", "record", "diff", "verbose", "timeout", "worker", "store", "parallel"];
+    private static readonly string[] CompareSetOptions = ["set", "dirs", "deployment", "rerun", "name", "against", "record", "diff", "verbose", "timeout", "worker", "store", "parallel", "keep-candidate-files"];
 
     /// <summary>
     /// Default per-attempt candidate timeout for <c>compare-set</c> (task mfmr): 90 s, giving ~2.6x headroom over the
@@ -64,6 +64,10 @@ internal static partial class Program
         if (options.Has("rerun"))
         {
             environmentOptions.Add("--rerun");
+        }
+        if (options.Has("keep-candidate-files"))
+        {
+            environmentOptions.Add("--keep-candidate-files");
         }
         string moduleSha = SelectImplementation(ImplementationSelection.CalcDbEnvironment, repo, Options.Parse(environmentOptions))!.ModuleSha256;
 
