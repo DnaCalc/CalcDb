@@ -442,6 +442,17 @@ internal sealed unsafe class DatabaseObject : DaoObject
     public static CallResult Open(WorkspaceObject workspace, string name, bool exclusive, bool readOnly, out DatabaseObject? database)
     {
         database = null;
+        if (name.StartsWith(@"\\?\", StringComparison.Ordinal))
+        {
+            if (!exclusive && !readOnly)
+            {
+                // r-q2-cursor-dao/boot-alias-path-open-twice call 20: shared RW extended \\?\ path fails 3043 from DAO.Workspace.
+                return workspace.Fail(3043, "Your network access was interrupted. To continue, close the database, and then open it again.");
+            }
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.ExtendedPathOpenDatabase",
+                $"OpenDatabase with \\\\?\\ extended path (exclusive={exclusive}, readOnly={readOnly}) is not recorded"));
+        }
         string full;
         try
         {
@@ -558,7 +569,9 @@ internal sealed unsafe class DatabaseObject : DaoObject
         bool isOwnWriter = !readOnly;
         bool inheritWritable = readOnly && !pooled.First.ReadOnly && pooled.ActiveWriters > 0;
         FileSessionPool.AddHolder(pooled, isOwnWriter);
-        database = new DatabaseObject(workspace, full, readOnly: readOnly && !inheritWritable, inheritedWritable: inheritWritable, pooled);
+        // r-q2-cursor-dao/boot-alias-path-open-twice calls 12, 36, 48, 67: alias spellings (upper-case, forward slashes, dot segments)
+        // return the canonical path casing of the opened file.
+        database = new DatabaseObject(workspace, pooled.FullPath, readOnly: readOnly && !inheritWritable, inheritedWritable: inheritWritable, pooled);
         return CallResult.Nothing;
     }
 
@@ -850,12 +863,23 @@ internal sealed unsafe class DatabaseObject : DaoObject
     /// <summary>
     /// Refuse unrecorded operations interleaved while a DAO <c>TableDefs.Append</c> deferred TableDef write is pending
     /// on this Database's cache (qualified.md <c>R-FMT-2, R-CRASH-1 r-q41</c>).
+    /// For shared ACCDB <c>TableDef.Fields.Append</c> followed by a SELECT snapshot <c>OpenRecordset</c>
+    /// (<c>r-dao-1b/coll-append-field-existing-rows</c> call 24), flush the deferred TableDef write cleanly.
     /// </summary>
-    internal CallResult? PendingDeferredTableDefRefusal(string name, string operation)
+    internal CallResult? PendingDeferredTableDefRefusal(string name, string operation, bool allowFieldAppendFlush = false)
     {
         if (_workspace.Transactions.TryPeekDeferredCatalogCommit(Cache, out DeferredCatalogCommit? pending)
             && pending is { Kind: DeferredCatalogCommitKind.TableDefAppend })
         {
+            if (allowFieldAppendFlush
+                && !Exclusive
+                && Profile.IsAce
+                && _session.LastDeferredFieldAppendPage == pending.PendingTableDefPage)
+            {
+                _session.LastDeferredFieldAppendPage = null;
+                _workspace.Transactions.FlushDeferredCatalogCommitIfAny(Cache);
+                return null;
+            }
             return CallResult.Fail(Failure.NotModelled(
                 name,
                 $"{operation} while a DAO TableDefs.Append deferred TableDef write (page {pending.PendingTableDefPage}) is pending is not recorded (qualified.md R-FMT-2, R-CRASH-1 r-q41)"));
@@ -874,7 +898,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
         {
             return Fail(3420, DaoErrors.ObjectInvalid);
         }
-        if (PendingDeferredTableDefRefusal("NotModelled.OpenRecordsetWithPendingDeferredTableDef", "OpenRecordset") is { } deferredRefusal)
+        if (PendingDeferredTableDefRefusal("NotModelled.OpenRecordsetWithPendingDeferredTableDef", "OpenRecordset", allowFieldAppendFlush: args.Length > 1 && Args.Int32(args[1], omitted: null) == 4 && Args.Text(args[0]) is { } openSql && openSql.TrimStart().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase)) is { } deferredRefusal)
         {
             return deferredRefusal;
         }
@@ -1121,13 +1145,13 @@ internal sealed unsafe class DatabaseObject : DaoObject
             }
             return CallResult.Fail(Failure.NotModelled("NotModelled.OpenPassThroughConnect", $"OpenRecordset of PassThrough query '{query.Name}' with Connect '{connect}' (only ODBC;DSN=... is recorded in r-cat-1b/qd-passthrough-saved-run)"));
         }
-        if (query.Family != QueryFamily.Select)
+        if (query.Family != QueryFamily.Select && !(query.Family == QueryFamily.Union && type == 4 && options == 0 && Profile.IsAce))
         {
             return CallResult.Fail(Failure.NotImplemented($"OpenRecordset of a saved {query.Family?.ToString() ?? "unclassified"} query (W-06/relational-spill, W-07)"));
         }
         RenderedSql sql = QuerySql.Render(query);
         return sql.Text is { } text
-            ? SelectRoute.Open(this, text, type, options, name: query.Name)
+            ? SelectRoute.Open(this, text, type, options, name: query.Name, queryEntry: query.Entry)
             : CallResult.Fail(Failure.NotModelled("NotModelled.QuerySqlShape", $"the SQL of '{query.Name}': {sql.NotModelled}"));
     }
 
@@ -1594,6 +1618,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
         AcceptOutcome accepted = outcome.Accepted;
         if (workspace.Depth == 0 && outcome.PublishedAny)
         {
+            _session.LastDeferredFieldAppendPage = null;
             if (SchemaPublished(outcome.ExtentPages) is { } stale)
             {
                 return CallResult.Fail(Failure.NotImplemented(stale));
@@ -1681,6 +1706,10 @@ internal sealed unsafe class DatabaseObject : DaoObject
         {
             if (workspace.Depth == 0 && outcome.PublishedAny)
             {
+                _session.LastDeferredFieldAppendPage = _workspace.Transactions.TryPeekDeferredCatalogCommit(Cache, out DeferredCatalogCommit? pendingField)
+                    && pendingField is { Kind: DeferredCatalogCommitKind.TableDefAppend }
+                    ? pendingField.PendingTableDefPage
+                    : null;
                 if (SchemaPublished(outcome.ExtentPages) is { } stale)
                 {
                     return CallResult.Fail(Failure.NotImplemented(stale));
@@ -2261,6 +2290,16 @@ internal sealed unsafe class DatabaseObject : DaoObject
 
         if (name.Length == 0)
         {
+            // r-sql-13b/top-parameter-forms calls 5, 29, 53, 77, 101: temporary CreateQueryDef("", sql) validates
+            // SELECT TOP <parameter> forms and fails 3141 from DAO.Database without IErrorInfo.
+            if (sql.Length > 0 && sql.Contains("TOP", StringComparison.OrdinalIgnoreCase))
+            {
+                using SelectSyntax? parsed = SqlParser.Parse(sql, out SqlFailure? parseFailure);
+                if (parsed is null && parseFailure is { IsNotModelled: false, Number: 3141 })
+                {
+                    return Fail(parseFailure.Number, parseFailure.Message);
+                }
+            }
             var temp = new QueryDefObject(this, QueryDefMode.Temporary, sql);
             CallResult tempResult = Object(temp);
             temp.Release();
@@ -2726,6 +2765,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
         AcceptOutcome accepted = outcome.Accepted;
         if (workspace.Depth == 0 && outcome.PublishedAny)
         {
+            _session.LastDeferredFieldAppendPage = null;
             if (SchemaPublished(outcome.ExtentPages) is { } stale)
             {
                 return CallResult.Fail(Failure.NotImplemented(stale));
@@ -2790,6 +2830,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
         AcceptOutcome accepted = outcome.Accepted;
         if (workspace.Depth == 0 && outcome.PublishedAny)
         {
+            _session.LastDeferredFieldAppendPage = null;
             if (SchemaPublished(outcome.ExtentPages) is { } stale)
             {
                 return CallResult.Fail(Failure.NotImplemented(stale));

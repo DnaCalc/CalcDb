@@ -631,8 +631,9 @@ internal sealed unsafe class QueryDefObject : DaoObject
                     "NotModelled.QueryDefExecuteAfterParameterTypeChange",
                     "opening a QueryDef after QueryDef.SQL changed a surviving parameter's declared type is not recorded (r-cat-1/held-sql-replace)"));
             }
-            result = EffectiveFamily == QueryFamily.Select && plan is not null && QuerySql.Render(_query!).Text is { } text
-                ? SelectRoute.Open(Database, text, type, options.Value, _values, name: _query!.Name)
+            result = (EffectiveFamily == QueryFamily.Select || (EffectiveFamily == QueryFamily.Union && type == 4 && options.Value == 0 && Database.Profile.IsAce))
+                && plan is not null && QuerySql.Render(_query!).Text is { } text
+                ? SelectRoute.Open(Database, text, type, options.Value, _values, name: _query!.Name, queryEntry: _query!.Entry)
                 : Database.OpenSaved(_query!, type, options.Value);
         }
         Opened |= result.Failure is null;

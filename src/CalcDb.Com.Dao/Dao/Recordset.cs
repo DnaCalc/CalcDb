@@ -34,7 +34,7 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         // collection object after Close; subsequent Fields.Count/Item fail 3420 from DAO.Recordset.
         .Get("Fields", (self, args) => Object(((RecordsetObject)self).FieldsCollection))
         .Method("MoveFirst", (self, args) => Moving(self, "MoveFirst", r => r.Moved(r.Cursor.MoveFirst())))
-        .Method("MoveLast", (self, args) => args.Length > 0 && args[0] != 0 ? CallResult.Fail(Failure.NotImplemented("MoveLast with Options")) : Moving(self, "MoveLast", r => r.Moved(r.Cursor.MoveLast())))
+        .Method("MoveLast", (self, args) => args.Length > 0 && args[0] != 0 ? CallResult.Fail(Failure.NotImplemented("MoveLast with Options")) : Moving(self, "MoveLast", r => r.MoveLastTableBoundary()))
         .Method("MoveNext", (self, args) => Moving(self, "MoveNext", r => r.Moved(r.Cursor.MoveNext())))
         .Method("MovePrevious", (self, args) => Moving(self, "MovePrevious", r => r.Moved(r.Cursor.MovePrevious())))
         .Method("Move", (self, args) => { nint rows = args[0], start = args.Length > 1 ? args[1] : 0; return Moving(self, "Move", r => r.Move(rows, start)); })
@@ -101,7 +101,7 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
     /// Tracks an original <see cref="RecordsetObject"/> and all live clones derived from it so Database.Close, Rollback,
     /// DDL holds and transaction-close rules stay coherent while only the root is registered in <see cref="DatabaseObject"/>.
     /// </summary>
-    private sealed class RecordsetFamily
+    internal sealed class RecordsetFamily
     {
         public RecordsetFamily(RecordsetObject root, int? tempSlot, (string Name, string Detail)? bookmarkBaseRefusal)
         {
@@ -159,6 +159,9 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         }
 
         public List<RecordsetObject> Live { get; } = [];
+
+        /// <summary>Derived <see cref="SelectRecordsetObject"/>s opened via <c>Recordset.OpenRecordset()</c> (r-cursor-1b/requery-family).</summary>
+        public List<SelectRecordsetObject>? Derived { get; set; }
 
         public void AddClone(RecordsetObject clone) => Live.Add(clone);
 
@@ -437,7 +440,38 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
 
     public string TableName { get; }
 
-    public IRecordCursor Cursor { get; }
+    public IRecordCursor Cursor { get; private set; }
+
+    /// <summary>
+    /// MoveLast on a table-type or population cursor; if a storage-order depth-0 ACCDB table-type cursor was opened
+    /// on an empty table and rows were subsequently inserted into that table, reopen the <see cref="TableCursor"/>
+    /// against the current extent so MoveLast sees the newly populated pages (<c>r-cursor-1b/requery-empty-to-populated</c> call 26).
+    /// </summary>
+    private CallResult MoveLastTableBoundary()
+    {
+        MoveOutcome outcome = Cursor.MoveLast();
+        if (outcome == MoveOutcome.NoCurrentRecord
+            && Cursor is TableCursor tc
+            && _indexName.Length == 0
+            && Transactions.Depth == 0
+            && Database.Profile.IsAce
+            && tc.Bof
+            && tc.Eof
+            && tc.RecordCount > 0)
+        {
+            var source = new PageSource(Database.Cache, Transactions);
+            ulong extent = PageAllocator.ExtentOf(Database.Cache, Database.PageCount, Transactions.OverlayOf(Database.Cache));
+            TableCursor? fresh = TableCursor.Open(source, Database.Format, tc.Table, extent, (ulong)_entry.Id, out TraversalFailure? failure);
+            if (fresh is null)
+            {
+                return CallResult.Fail(Failure.NotImplemented("MoveLast when the table cannot be traversed: " + failure?.Predicate));
+            }
+            tc.Dispose();
+            Cursor = fresh;
+            outcome = fresh.MoveLast();
+        }
+        return Moved(outcome);
+    }
 
     /// <summary>The field names for Fields lookups, prepared once per recordset (its columns do not change; task fbh8).</summary>
     public CollectionNames FieldNames => _fieldNames ??= new CollectionNames([.. Cursor.Table.Columns.Select(c => c.Name)]);
@@ -2081,7 +2115,20 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
             return pending;
         }
         var spec = new DerivedSourceSpec(TableName, "*", BaseWhere: null, BaseOrderBy: null);
-        return SelectRoute.OpenDerived(Database, this, spec, RecordsetType, _filter, _sort, typeArg, optionsArg);
+        CallResult result = SelectRoute.OpenDerived(Database, this, spec, RecordsetType, _filter, _sort, typeArg, optionsArg);
+        if (result.Failure is null
+            && ReferenceEquals(this, _family.Root)
+            && RecordsetType == 2
+            && _filter.Length == 0
+            && _sort.Length == 0
+            && result.HasScalar
+            && (VarType)result.Scalar.Vt == VarType.Dispatch
+            && ComObject.Recover<SelectRecordsetObject>(result.Scalar.Pointer) is { } derived)
+        {
+            (_family.Derived ??= []).Add(derived);
+            derived.SetParentFamily(_family);
+        }
+        return result;
     }
 
     /// <summary>
@@ -2274,6 +2321,13 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         foreach (RecordsetObject member in _family.Live)
         {
             member._staleEditModeAfterCloneCloseAbort = false;
+        }
+        if (ReferenceEquals(this, _family.Root) && RecordsetType == 2 && _family.Derived is { Count: > 0 } derivedList)
+        {
+            foreach (SelectRecordsetObject derived in derivedList)
+            {
+                derived.MarkParentRequeried();
+            }
         }
         CaptureSeeChangesRow();
         return CallResult.Nothing;

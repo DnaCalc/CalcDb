@@ -460,13 +460,14 @@ public sealed unsafe class DaoSelectMetadataTests : IDisposable
         // evidence/r-q50-jk44-ddl-vis/dao-edit-buf-commit-rb-accdb, dao-edit-buf-nested-partial-accdb);
         // Update without Edit fails DAO 3020 from DAO.Recordset without IErrorInfo
         // (evidence/r-err-1b/asg-update-without-edit rows 5, 10, 32);
-        // CancelUpdate without Edit on a depth-0 SELECT dynaset is unrecorded and refuses by name.
+        // CancelUpdate without Edit on a depth-0 SELECT dynaset fails DAO 3020 from DAO.Recordset without IErrorInfo
+        // (evidence/r-str-ado-act/str-edit-requery call 32).
         Ok(Method(rs, "Edit"));
         Ok(Method(rs, "CancelUpdate"));
         Ok(Method(rs, "AddNew"));
         Ok(Method(rs, "CancelUpdate"));
         AssertDaoError(Method(rs, "Update"), 3020, "DAO.Recordset");
-        AssertNotModelled(Method(rs, "CancelUpdate"), "NotModelled.QueryRecordsetCancelUpdateNoEdit");
+        AssertDaoError(Method(rs, "CancelUpdate"), 3020, "DAO.Recordset");
         // Writable single-table SELECT dynaset admits Delete (r-q54-excl-ddl-ix-cmd/select-dynaset-edit-*).
         Ok(Method(rs, "Delete"));
         Ok(Method(rs, "Close"));

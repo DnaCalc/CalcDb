@@ -82,7 +82,25 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         .Method("Requery", (self, args) => { nint queryDef = args.Length > 0 ? args[0] : 0; return Live(self, r => r.Requery(queryDef)); })
         .Method("Close", (self, args) => Live(self, r => r.Close()))
         .Get("Collect", (self, args) => { nint item = args[0]; return Live(self, r => r.Collect(item)); })
-        .Put("Collect", (self, args) => { nint item = args[0], value = args[^1]; return Live(self, r => r.SetCollect(item, value)); });
+        .Put("Collect", (self, args) => { nint item = args[0], value = args[^1]; return Live(self, r => r.SetCollect(item, value)); })
+        // r-dao-1b/recordset-members-query-snapshot: saved UNION query snapshot (type 4) member inventory.
+        .Get("CacheSize", (self, args) => Live(self, r => r.IsUnionSnapshot ? Int32(0) : CallResult.Fail(Failure.NotModelled("NotModelled.QueryRecordsetCacheSize", $"Recordset.CacheSize on type {r.RecordsetType} SELECT (not recorded)"))))
+        .Get("CacheStart", (self, args) => Live(self, r => r.IsUnionSnapshot ? NullArray : CallResult.Fail(Failure.NotModelled("NotModelled.QueryRecordsetCacheStart", $"Recordset.CacheStart on type {r.RecordsetType} SELECT (not recorded)"))))
+        .Get("Restartable", (self, args) => Live(self, r => r.IsUnionSnapshot ? Bool(true) : CallResult.Fail(Failure.NotModelled("NotModelled.QueryRecordsetRestartable", $"Recordset.Restartable on type {r.RecordsetType} SELECT (not recorded)"))))
+        .Get("ValidationRule", (self, args) => Live(self, r => r.IsUnionSnapshot ? Text("") : CallResult.Fail(Failure.NotModelled("NotModelled.QueryRecordsetValidationRule", $"Recordset.ValidationRule on type {r.RecordsetType} SELECT (not recorded)"))))
+        .Get("ValidationText", (self, args) => Live(self, r => r.IsUnionSnapshot ? Text("") : CallResult.Fail(Failure.NotModelled("NotModelled.QueryRecordsetValidationText", $"Recordset.ValidationText on type {r.RecordsetType} SELECT (not recorded)"))))
+        .Get("Properties", (self, args) => Live(self, r => r.PropertiesCollection()))
+        .Get("BatchCollisionCount", (self, args) => Live(self, r => r.UnionSnapshotNotSupported("BatchCollisionCount")))
+        .Get("BatchCollisions", (self, args) => Live(self, r => r.UnionSnapshotNotSupported("BatchCollisions")))
+        .Get("BatchSize", (self, args) => Live(self, r => r.UnionSnapshotNotSupported("BatchSize")))
+        .Get("Connection", (self, args) => Live(self, r => r.UnionSnapshotNotSupported("Connection")))
+        .Get("DateCreated", (self, args) => Live(self, r => r.UnionSnapshotNotSupported("DateCreated")))
+        .Get("hStmt", (self, args) => Live(self, r => r.UnionSnapshotNotSupported("hStmt")))
+        .Get("Index", (self, args) => Live(self, r => r.UnionSnapshotNotSupported("Index")))
+        .Get("LastUpdated", (self, args) => Live(self, r => r.UnionSnapshotNotSupported("LastUpdated")))
+        .Get("RecordStatus", (self, args) => Live(self, r => r.UnionSnapshotNotSupported("RecordStatus")))
+        .Get("StillExecuting", (self, args) => Live(self, r => r.UnionSnapshotNotSupported("StillExecuting")))
+        .Get("UpdateOptions", (self, args) => Live(self, r => r.UnionSnapshotNotSupported("UpdateOptions")));
 
     /// <summary>
     /// Collect(Item): the value of the column the index names, as Field.Value reads it; an index naming no column (3, -1,
@@ -145,6 +163,10 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
     }
 
     private SelectFieldsObject? _fields;
+    private PropertiesObject? _properties;
+    private readonly CatalogEntry? _queryEntry;
+    private RecordsetObject.RecordsetFamily? _parentFamily;
+    private bool _parentRequeried;
     private CollectionNames? _fieldNames;
     private Dictionary<string, (PropertyBlob? Blob, string? Failure)>? _tableBlobs;
     private readonly ExplicitFrame[] _openLevels;
@@ -221,13 +243,15 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         DerivedSourceSpec? derivedSpec = null,
         bool isDerived = false,
         string? name = null,
-        bool pessimistic = true) : base(Decl, Vtable, database.Engine, "DAO.Recordset")
+        bool pessimistic = true,
+        CatalogEntry? queryEntry = null) : base(Decl, Vtable, database.Engine, "DAO.Recordset")
     {
         Database = database;
         Plan = plan;
         Cursor = cursor;
         RecordsetType = recordsetType;
         _pessimistic = pessimistic;
+        _queryEntry = queryEntry;
         _options = options;
         _joinKeys = joinKeys;
         OpenSequence = openSequence;
@@ -634,9 +658,40 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         _ => CallResult.Fail(Failure.NotModelled("NotModelled.QueryBookmarkable", $"Recordset.Bookmarkable on a type {RecordsetType} query recordset (not recorded)")),
     };
 
+    private bool IsUnionSnapshot => RecordsetType == 4 && Plan.IsUnion && _queryEntry is not null && !IsMdb && _options == 0;
+
+    private static CallResult NullArray => CallResult.OfScalar(VarType.Array | VarType.UI1, 0);
+
+    internal bool ParentRequeried => _parentRequeried;
+
+    internal void SetParentFamily(RecordsetObject.RecordsetFamily family) => _parentFamily = family;
+
+    internal void MarkParentRequeried() => _parentRequeried = true;
+
+    private CallResult UnionSnapshotNotSupported(string member) => IsUnionSnapshot
+        ? Fail(3251, DaoErrors.NotSupportedForType)
+        : CallResult.Fail(Failure.NotModelled($"NotModelled.QueryRecordset{member}", $"Recordset.{member} on type {RecordsetType} SELECT (not recorded)"));
+
+    private CallResult PropertiesCollection()
+    {
+        if (!IsUnionSnapshot || _queryEntry is null)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.QueryRecordsetProperties", $"Recordset.Properties on type {RecordsetType} SELECT (not recorded)"));
+        }
+        PropertyMap? stored = Database.StoredProperties(_queryEntry, out string? failure);
+        if (failure is not null)
+        {
+            return CallResult.Fail(Failure.NotImplemented("Recordset.Properties when the query's property blob cannot be read: " + failure));
+        }
+        _properties ??= new PropertiesObject(this, BuiltInProperties.With(BuiltInProperties.Recordset, stored));
+        return Object(_properties);
+    }
+
     private CallResult Transactions() => RecordsetType == 2
         ? Bool(true)
-        : CallResult.Fail(Failure.NotModelled("NotModelled.QueryRecordsetTransactions", $"Recordset.Transactions on a type {RecordsetType} query recordset (only dynaset is recorded)"));
+        : IsUnionSnapshot
+            ? Bool(false)
+            : CallResult.Fail(Failure.NotModelled("NotModelled.QueryRecordsetTransactions", $"Recordset.Transactions on a type {RecordsetType} query recordset (only dynaset and saved UNION snapshot are recorded)"));
 
     /// <summary>
     /// The catalog MR2 property blob (CAT-P) of a local source table by name, read once per table on this recordset.
@@ -666,6 +721,13 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
     /// </summary>
     private CallResult RecordCount()
     {
+        if (_parentRequeried)
+        {
+            // r-cursor-1b/requery-family call 34: after parent.Requery(), a non-empty derived recordset reports RecordCount 1.
+            return !Cursor.Bof || !Cursor.Eof
+                ? Int32(1)
+                : CallResult.Fail(Failure.NotModelled("NotModelled.DerivedRecordCountAfterParentRequeryEmpty", "RecordCount on an empty derived recordset after parent.Requery() (not recorded)"));
+        }
         if (_appendOnly)
         {
             return _movedSinceOpen
@@ -803,7 +865,11 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         ("FindFirst" or "FindNext", 0) when sourceType != VarType.Bstr =>
             Failure.NotModelled(
                 "NotModelled.FindCriteriaType",
-                $"Recordset.{member.Name} criteria with {sourceType} argument (only BSTR is recorded on derived SELECT recordsets)"),
+                $"Recordset.{member.Name} criteria with {sourceType} argument (only BSTR is recorded on SELECT recordsets)"),
+        ("FindPrevious", 0) when sourceType is not (VarType.Bstr or VarType.Null) =>
+            Failure.NotModelled(
+                "NotModelled.FindCriteriaType",
+                $"Recordset.FindPrevious criteria with {sourceType} argument (only BSTR and Null are recorded on SELECT recordsets)"),
         _ => null,
     };
 
@@ -832,7 +898,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         {
             return Fail(3219, DaoErrors.InvalidOperation);
         }
-        if (!_isSingleTableRowSelect || _appendOnly || RecordsetType is not (2 or 4)
+        if ((!_isSingleTableRowSelect && !IsUnionSnapshot) || _appendOnly || RecordsetType is not (2 or 4)
             || _deletedRows is { Count: > 0 } || _addedRows is { Count: > 0 })
         {
             return CallResult.Fail(Failure.NotModelled(
@@ -903,7 +969,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         {
             return Fail(3219, DaoErrors.InvalidOperation);
         }
-        if (!_isSingleTableRowSelect || _appendOnly || RecordsetType is not (2 or 4))
+        if ((!_isSingleTableRowSelect && !IsUnionSnapshot) || _appendOnly || RecordsetType is not (2 or 4))
         {
             return CallResult.Fail(Failure.NotModelled(
                 "NotModelled.QueryRecordsetAbsolutePosition",
@@ -1273,6 +1339,17 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         {
             return Fail(3219, DaoErrors.InvalidOperation);
         }
+        if (IsUnionSnapshot)
+        {
+            // r-dao-1b/recordset-members-query-snapshot call 12: saved UNION snapshot Bookmark at row 0 is 01000000.
+            if (_selectOrdinal == 0 && !_deletedCurrent && !IsAtBof && !IsAtEof)
+            {
+                return Bytes(BitConverter.GetBytes(1));
+            }
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.QueryRecordsetBookmark",
+                "Recordset.Bookmark on a saved UNION snapshot after movement or without a current row (not recorded)"));
+        }
         if (!_isSingleTableRowSelect || _appendOnly || RecordsetType != 2)
         {
             return CallResult.Fail(Failure.NotModelled(
@@ -1390,9 +1467,11 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
 
     private CallResult LastModified() => _lastModifiedRow is { } bytes
         ? Bytes(bytes)
-        : CallResult.Fail(Failure.NotModelled(
-            "NotModelled.QueryRecordsetLastModified",
-            $"Recordset.LastModified before an edit or on a type {RecordsetType} SELECT recordset (not recorded)"));
+        : IsUnionSnapshot
+            ? Fail(3251, DaoErrors.NotSupportedForType)
+            : CallResult.Fail(Failure.NotModelled(
+                "NotModelled.QueryRecordsetLastModified",
+                $"Recordset.LastModified before an edit or on a type {RecordsetType} SELECT recordset (not recorded)"));
 
     private static CallResult Bytes(byte[] bytes)
     {
@@ -1407,17 +1486,19 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         {
             return Fail(3219, DaoErrors.InvalidOperation);
         }
-        if (RecordsetType != 2 || (!_isSingleTableRowSelect && !_isUpdatableJoin))
+        bool recordedSnapshotFind = _isSingleTableRowSelect && RecordsetType == 4 && _hasOrderBy && !_isLazyUnorderedSnapshot;
+        if (!((_isSingleTableRowSelect && RecordsetType == 2) || recordedSnapshotFind || (_isUpdatableJoin && RecordsetType == 2)))
         {
             return CallResult.Fail(Failure.NotModelled(
                 "NotModelled.QueryRecordsetFind",
-                $"Recordset.Find{direction} on a non-dynaset or complex SELECT recordset (only single-table and keyed 2-table join dynasets are recorded)"));
+                $"Recordset.Find{direction} on a non-dynaset or complex SELECT recordset (only single-table dynaset, ordered single-table snapshot and keyed 2-table join dynasets are recorded)"));
         }
-        if (direction is not (FindDirection.First or FindDirection.Next))
+        if (direction is not (FindDirection.First or FindDirection.Next)
+            && !(direction == FindDirection.Previous && recordedSnapshotFind && !IsOnAddedRow && !IsAtEof))
         {
             return CallResult.Fail(Failure.NotModelled(
                 "NotModelled.QueryRecordsetFindDirection",
-                $"Recordset.Find{direction} on a SELECT recordset (only FindFirst and FindNext are recorded)"));
+                $"Recordset.Find{direction} on this SELECT recordset shape or state (only FindFirst/FindNext, and FindPrevious on ordered single-table snapshots, are recorded)"));
         }
         ReadOnlySpan<char> text = argument != 0 && Args.TypeOf(argument) == VarType.Bstr
             ? Bstrs.Chars(Args.Cell(argument)->Pointer)
@@ -1441,6 +1522,63 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         int savedOrdinal = _selectOrdinal;
         bool savedAtAddedRow = IsOnAddedRow;
         int savedAddedIndex = _addedRowIndex;
+        if (direction == FindDirection.Previous)
+        {
+            if (IsAtBof || _selectOrdinal <= 0)
+            {
+                return CallResult.Fail(Failure.NotModelled(
+                    "NotModelled.QueryRecordsetFindNoMatch",
+                    "Recordset.FindPrevious at BOF/row 0 on a SELECT recordset (not recorded)"));
+            }
+            int prevOrd = _selectOrdinal - 1;
+            MoveOutcome prevOutcome = Cursor.MovePrevious();
+            if (Cursor.FetchFailure is { } fetchPrev)
+            {
+                return CallResult.Fail(fetchPrev.IsNotModelled ? Failure.NotModelled(fetchPrev.NotModelled!, fetchPrev.Message) : Failure.Dao(fetchPrev.Number, Source, fetchPrev.Message));
+            }
+            while (prevOutcome is MoveOutcome.Moved or MoveOutcome.ReachedBoundary && !Cursor.Bof && !Cursor.Eof)
+            {
+                bool skip = false;
+                if (_isSingleTableRowSelect)
+                {
+                    RowId? rid = CurrentCursorSingleTableRowId();
+                    if (rid is { } r && _deletedRows is not null && _deletedRows.Contains(r))
+                    {
+                        skip = true;
+                    }
+                }
+                if (!skip)
+                {
+                    RowTest tested = criteria.Test((IExpressionRow)Cursor);
+                    if (tested == RowTest.Match)
+                    {
+                        _deletedCurrent = false;
+                        _addedRowIndex = -1;
+                        _addedRowEof = false;
+                        _noMatch = false;
+                        _selectOrdinal = prevOrd;
+                        _movedSinceOpen = true;
+                        CaptureSeeChangesRow();
+                        return CallResult.Nothing;
+                    }
+                    if (tested == RowTest.Failed && criteria.LastFailure is { } evalFailure)
+                    {
+                        return evalFailure.IsNotModelled
+                            ? CallResult.Fail(Failure.NotModelled(evalFailure.NotModelled!, evalFailure.Message))
+                            : Fail(evalFailure.Number, evalFailure.Message);
+                    }
+                }
+                prevOutcome = Cursor.MovePrevious();
+                if (Cursor.FetchFailure is { } fetchBack)
+                {
+                    return CallResult.Fail(fetchBack.IsNotModelled ? Failure.NotModelled(fetchBack.NotModelled!, fetchBack.Message) : Failure.Dao(fetchBack.Number, Source, fetchBack.Message));
+                }
+                prevOrd--;
+            }
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.QueryRecordsetFindNoMatch",
+                "Recordset.FindPrevious NoMatch position on a SELECT recordset (not recorded)"));
+        }
         int startOrd = direction == FindDirection.Next
             ? (IsAtEof ? int.MaxValue : IsAtBof ? 0 : _selectOrdinal + 1)
             : 0;
@@ -2005,6 +2143,12 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         {
             return pending;
         }
+        if (_parentRequeried)
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.QueryRecordsetGetRowsAfterParentRequery",
+                "Recordset.GetRows on a derived recordset after parent.Requery() (not recorded)"));
+        }
         if (RecordsetType is not (2 or 4 or 8))
         {
             return CallResult.Fail(Failure.NotModelled(
@@ -2318,6 +2462,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         _openOverlaySnapshot = RecordsetType == 4 && _openOverlay is { } overlay ? CaptureOverlayPages(overlay) : null;
         _openPublishedSerial = Database.Cache.PublishedSerial;
         _movedSinceOpen = false;
+        _parentRequeried = false;
         _deletedCurrent = false;
         _deletedRows = null;
         _deletedJoinChildRows = null;
@@ -3150,8 +3295,9 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
 
     /// <summary>
     /// CancelUpdate on a SELECT dynaset: discards a pending edit and returns <c>EditMode</c> to 0; without a pending Edit,
-    /// join dynasets fail 3020 (<c>r-q50/dao-opt-join-seechanges-*</c>, <c>r-q54-excl-ddl-ix-cmd/join-dynaset-edit-*</c>)
-    /// while single-table dynasets keep <c>NotModelled.QueryRecordsetCancelUpdateNoEdit</c>.
+    /// join dynasets (<c>r-q50/dao-opt-join-seechanges-*</c>, <c>r-q54-excl-ddl-ix-cmd/join-dynaset-edit-*</c>) and
+    /// depth-0 ACCDB single-table dynasets (<c>r-str-ado-act/str-edit-requery</c> call 32) fail 3020 without IErrorInfo,
+    /// while MDB or depth &gt; 0 single-table dynasets keep <c>NotModelled.QueryRecordsetCancelUpdateNoEdit</c>.
     /// </summary>
     private CallResult CancelUpdate(nint typeArg)
     {
@@ -3181,9 +3327,15 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         }
         if (frame.Mode == EditMode.None)
         {
+            if (Database.Workspace.Transactions.Depth == 0 && !IsMdb)
+            {
+                // r-str-ado-act/str-edit-requery call 32: CancelUpdate without a pending Edit on a depth-0 ACCDB SELECT dynaset
+                // fails 3020 ("Update or CancelUpdate without AddNew or Edit.") from DAO.Recordset without IErrorInfo.
+                return Fail(MutationError.NoEdit, "Update or CancelUpdate without AddNew or Edit.");
+            }
             return CallResult.Fail(Failure.NotModelled(
                 "NotModelled.QueryRecordsetCancelUpdateNoEdit",
-                "CancelUpdate without a pending Edit on a depth-0 SELECT dynaset (not recorded)"));
+                "CancelUpdate without a pending Edit on an MDB or depth > 0 SELECT dynaset (not recorded)"));
         }
         CallResult result = EditPublication.Of(frame.CancelUpdate());
         if (result.Failure is null)
@@ -3370,6 +3522,8 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
             Plan.Dispose();
             _snapshotOverlay?.Dispose();
             _snapshotView?.Dispose();
+            _parentFamily?.Derived?.Remove(this);
+            _parentFamily = null;
             Closed = true;
         }
     }
@@ -3380,6 +3534,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         {
             Close();
         }
+        _properties?.Release();
         _fields?.Release();
         Database.Release();
     }
@@ -4518,6 +4673,18 @@ internal sealed unsafe class SelectFieldObject : DaoObject
         if (recordset.TransactionRefusal("Field.Value") is { } refused)
         {
             return refused;
+        }
+        if (recordset.ParentRequeried)
+        {
+            if (fromCollect)
+            {
+                return CallResult.Fail(Failure.NotModelled(
+                    "NotModelled.QueryRecordsetCollectAfterParentRequery",
+                    "Recordset.Collect on a derived recordset after parent.Requery() (not recorded)"));
+            }
+            // r-cursor-1b/requery-family calls 33, 37: after parent.Requery(), reading Field.Value on a derived recordset
+            // fails 3021 ("No current record.") from DAO.Field with IErrorInfo.
+            return CallResult.Fail(Failure.Dao(3021, "DAO.Field", DaoErrors.NoCurrentRecord) with { PublishesErrorInfo = true });
         }
         if (recordset.Cursor.Columns[ordinal] is { Origin: ColumnOrigin.BaseColumn, SourceColumn: { } sc }
             && recordset.FrameForSourceIfEditing(sc.SourceIndex) is { } frame)
