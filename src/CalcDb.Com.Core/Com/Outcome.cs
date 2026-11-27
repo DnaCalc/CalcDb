@@ -94,8 +94,10 @@ public struct ExcepInfo
 /// sets an IErrorInfo only under the failure's <see cref="Failure.PublishesErrorInfo"/> policy. The vtable channel returns
 /// the scode and sets IErrorInfo; what ACE does there is not yet observed (a native vtable caller is open in ACT-ABI).
 /// </summary>
-internal static unsafe partial class ErrorPublication
+public static unsafe partial class ErrorPublication
 {
+    private const int EFail = unchecked((int)0x80004005);
+
     public static int ToExcepInfo(Failure failure, ExcepInfo* info)
     {
         if (failure.PublishesErrorInfo)
@@ -116,21 +118,28 @@ internal static unsafe partial class ErrorPublication
 
     public static int ToErrorInfo(Failure failure, in Guid iid)
     {
+        if (failure.NullExcepStrings)
+        {
+            // r-ado-1b/persist-overwrite-flags #31, r-fix-wire-ado/persist-save-two-parameter #39/#47/#55:
+            // STG_E_FILEALREADYEXISTS publishes an IErrorInfo whose GetGUID returns S_OK (Guid.Empty) and whose
+            // GetSource, GetDescription, GetHelpFile, and GetHelpContext return E_FAIL (0x80004005).
+            var custom = new NullStringsErrorInfo(iid);
+            _ = OleAut.SetErrorInfo(0, custom.Identity);
+            custom.Release();
+            return failure.Scode;
+        }
         if (OleAut.CreateErrorInfo(out nint create) >= 0 && create != 0)
         {
             nint** vt = (nint**)create;
             Guid g = iid;
             ((delegate* unmanaged<nint, Guid*, int>)(*vt)[3])(create, &g);
-            if (!failure.NullExcepStrings)
+            fixed (char* s = failure.Source)
             {
-                fixed (char* s = failure.Source)
-                {
-                    ((delegate* unmanaged<nint, char*, int>)(*vt)[4])(create, s);
-                }
-                fixed (char* d = failure.Description)
-                {
-                    ((delegate* unmanaged<nint, char*, int>)(*vt)[5])(create, d);
-                }
+                ((delegate* unmanaged<nint, char*, int>)(*vt)[4])(create, s);
+            }
+            fixed (char* d = failure.Description)
+            {
+                ((delegate* unmanaged<nint, char*, int>)(*vt)[5])(create, d);
             }
             if (failure.HelpFile is { } file)
             {
@@ -157,4 +166,74 @@ internal static unsafe partial class ErrorPublication
 
     private static void OleAutRelease(nint unknown) => ((delegate* unmanaged<nint, uint>)(*(nint**)unknown)[2])(unknown);
 
+    /// <summary>
+    /// Minimal COM <c>IErrorInfo</c> for failures with <see cref="Failure.NullExcepStrings"/>:
+    /// <c>GetGUID</c> returns <c>S_OK</c> with the configured GUID, while <c>GetSource</c>, <c>GetDescription</c>,
+    /// <c>GetHelpFile</c>, and <c>GetHelpContext</c> return <c>E_FAIL</c> (<c>0x80004005</c>)
+    /// (r-ado-1b/persist-overwrite-flags #31, r-fix-wire-ado/persist-save-two-parameter #39/#47/#55).
+    /// </summary>
+    private sealed class NullStringsErrorInfo : ComObject
+    {
+        private static readonly nint Vtable = BuildVtable();
+        private readonly Guid _guid;
+
+        public NullStringsErrorInfo(in Guid guid) : base(Vtable) => _guid = guid;
+
+        protected override int HeadFor(in Guid iid) => iid == ComIids.IErrorInfo ? 0 : -1;
+
+        private static nint BuildVtable()
+        {
+            nint* table = (nint*)NativeMemory.AllocZeroed(8, (nuint)sizeof(nint));
+            table[0] = (nint)(delegate* unmanaged<nint, Guid*, nint*, int>)&QueryInterfaceEntry;
+            table[1] = (nint)(delegate* unmanaged<nint, uint>)&AddRefEntry;
+            table[2] = (nint)(delegate* unmanaged<nint, uint>)&ReleaseEntry;
+            table[3] = (nint)(delegate* unmanaged<nint, Guid*, int>)&GetGuidEntry;
+            table[4] = (nint)(delegate* unmanaged<nint, nint*, int>)&GetBstrFailEntry;
+            table[5] = (nint)(delegate* unmanaged<nint, nint*, int>)&GetBstrFailEntry;
+            table[6] = (nint)(delegate* unmanaged<nint, nint*, int>)&GetBstrFailEntry;
+            table[7] = (nint)(delegate* unmanaged<nint, uint*, int>)&GetHelpContextFailEntry;
+            return (nint)table;
+        }
+
+        [UnmanagedCallersOnly]
+        private static int QueryInterfaceEntry(nint self, Guid* iid, nint* result) =>
+            result is null ? HResults.E_POINTER : Recover<NullStringsErrorInfo>(self).QueryInterface(*iid, result);
+
+        [UnmanagedCallersOnly]
+        private static uint AddRefEntry(nint self) => Recover<NullStringsErrorInfo>(self).AddRef();
+
+        [UnmanagedCallersOnly]
+        private static uint ReleaseEntry(nint self) => Recover<NullStringsErrorInfo>(self).Release();
+
+        [UnmanagedCallersOnly]
+        private static int GetGuidEntry(nint self, Guid* pGuid)
+        {
+            if (pGuid is null)
+            {
+                return HResults.E_POINTER;
+            }
+            *pGuid = Recover<NullStringsErrorInfo>(self)._guid;
+            return HResults.S_OK;
+        }
+
+        [UnmanagedCallersOnly]
+        private static int GetBstrFailEntry(nint self, nint* pBstr)
+        {
+            if (pBstr is not null)
+            {
+                *pBstr = 0;
+            }
+            return EFail;
+        }
+
+        [UnmanagedCallersOnly]
+        private static int GetHelpContextFailEntry(nint self, uint* pdwHelpContext)
+        {
+            if (pdwHelpContext is not null)
+            {
+                *pdwHelpContext = 0;
+            }
+            return EFail;
+        }
+    }
 }

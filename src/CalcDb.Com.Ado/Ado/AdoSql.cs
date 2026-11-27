@@ -336,10 +336,14 @@ internal static class AdoSqlErrors
         -198839259,
         AdoObject.IidCommand);
 
-    /// <summary>Command.Execute with VT_EMPTY scalar parameter for ? marker (r-q54-excl-ddl-ix-cmd/ado-cmd-exec-params-accdb #152, r-q54-excl-ddl-ix-cmd/ado-cmd-exec-params-mdb #152).</summary>
-    public static MappedProviderError ParameterNoDefaultValue(int oneBasedIndex) => Make(
+    /// <summary>Command.Execute with VT_EMPTY scalar parameter for ? marker or Prepared saved query with missing parameter (r-q54-excl-ddl-ix-cmd/ado-cmd-exec-params-accdb #152, r-ado-1b/param-refresh-after-text-change #52).</summary>
+    public static MappedProviderError ParameterNoDefaultValue(int oneBasedIndex) =>
+        ParameterNoDefaultValue($"?_{oneBasedIndex}");
+
+    /// <summary>Command.Execute with missing/unset parameter by name (r-ado-1b/param-refresh-after-text-change #52: "Parameter pL has no default value.").</summary>
+    public static MappedProviderError ParameterNoDefaultValue(string parameterName) => Make(
         AdoObject.HResultParamNotOptional,
-        $"Parameter ?_{oneBasedIndex} has no default value.",
+        $"Parameter {parameterName} has no default value.",
         5003747,
         "3748",
         -542379020,

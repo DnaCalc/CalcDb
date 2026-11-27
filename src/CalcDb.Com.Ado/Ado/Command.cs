@@ -58,6 +58,8 @@ internal sealed unsafe class CommandObject : AdoObject
 
     internal int CommandTypeValue => _commandType;
 
+    internal bool PreparedValue => _prepared;
+
     internal ConnectionObject? ActiveConnectionObject => _activeConnection;
 
     internal bool HasParametersOrPlaceholders =>
@@ -81,7 +83,11 @@ internal sealed unsafe class CommandObject : AdoObject
         {
             return NotImplemented("Command.CommandType outside CommandTypeEnum (not asked)");
         }
-        _commandType = type.Value;
+        if (_commandType != type.Value)
+        {
+            _commandType = type.Value;
+            _parameters?.OnCommandDefinitionChanged();
+        }
         return CallResult.Nothing;
     }
 
@@ -96,8 +102,13 @@ internal sealed unsafe class CommandObject : AdoObject
         {
             _lastScalarParam?.Dispose();
             _lastScalarParam = null;
+            _commandText = text;
+            _parameters?.OnCommandDefinitionChanged();
         }
-        _commandText = text;
+        else
+        {
+            _commandText = text;
+        }
         return CallResult.Nothing;
     }
 
@@ -298,6 +309,8 @@ internal sealed unsafe class CommandObject : AdoObject
             return CallResult.Fail(emptyErr.ComFailure);
         }
 
+        _parameters?.OnCommandExecuted();
+
         nint recordsAffectedArg = args.Length > 0 ? args[0] : 0;
         if (recordsAffectedArg != 0 && TypedCall.IsMissing(Args.Cell(recordsAffectedArg)))
         {
@@ -438,8 +451,20 @@ internal sealed class ParametersObject : AdoObject
         .Method("Delete", (self, args) => ((ParametersObject)self).Delete(args[0]))
         .Method("Refresh", (self, args) => ((ParametersObject)self).Refresh());
 
+    private enum DerivationState
+    {
+        /// <summary>Not yet derived and no Append has occurred; first Count/Item/Refresh on an open adCmdText/adCmdUnknown Command with ? derives them.</summary>
+        Pending,
+        /// <summary>Parameters were derived from the current CommandText/CommandType.</summary>
+        Derived,
+        /// <summary>A manual Append (succeeded or failed) or a Refresh on already-derived unexecuted parameters froze implicit derivation.</summary>
+        ManualOrCleared,
+    }
+
     private readonly CommandObject _owner;
     private readonly List<ParameterObject> _items = [];
+    private DerivationState _state = DerivationState.Pending;
+    private bool _executedSinceDerive;
 
     public ParametersObject(CommandObject owner) : base(Decl, Vtable, "ADODB.Parameters") => _owner = owner;
 
@@ -455,37 +480,143 @@ internal sealed class ParametersObject : AdoObject
             p.Release();
         }
         _items.Clear();
+        _state = DerivationState.ManualOrCleared;
+        _executedSinceDerive = false;
     }
+
+    /// <summary>
+    /// Changing CommandText or CommandType clears previously derived parameters so the next Count/Item/Refresh
+    /// re-derives for the new definition (r-ado-1b/param-refresh-after-text-change #21-#22, #37-#39, #62-#64).
+    /// Manually appended parameters are preserved (r-ado-1b/cmd-before-connection #18-#20).
+    /// </summary>
+    internal void OnCommandDefinitionChanged()
+    {
+        if (_state == DerivationState.Derived)
+        {
+            ClearAll();
+            _state = DerivationState.Pending;
+        }
+        else if (_state == DerivationState.ManualOrCleared && _items.Count == 0)
+        {
+            _state = DerivationState.Pending;
+            _executedSinceDerive = false;
+        }
+    }
+
+    internal void OnCommandExecuted() => _executedSinceDerive = true;
 
     protected override OperationTable Table => Operations;
 
+    private void EnsureDerivedIfPending()
+    {
+        if (_state != DerivationState.Pending)
+        {
+            return;
+        }
+        if (_owner.ActiveConnectionObject is not { IsOpen: true, IsPersistenceOpen: false, OpenSession: { } session })
+        {
+            return;
+        }
+        string text = _owner.CommandTextValue;
+        if (text.Length == 0)
+        {
+            return;
+        }
+        if (_owner.CommandTypeValue == AdoSqlText.AdCmdStoredProc)
+        {
+            // r-ado-1b/param-refresh-after-text-change #37-#46, r-fix-wire-ado/ado-params-saved-query #17-#27,
+            // r-q-ado-misc/param-saved-declared-order #17: adCmdStoredProc exposes 0 derived parameters.
+            _state = DerivationState.Derived;
+            _executedSinceDerive = false;
+            return;
+        }
+        if (_owner.CommandTypeValue is AdoSqlText.AdCmdText or AdoSqlText.AdCmdUnknown)
+        {
+            DeriveQuestionMarkParameters(session, text);
+            _state = DerivationState.Derived;
+            _executedSinceDerive = false;
+        }
+    }
+
+    private void DeriveQuestionMarkParameters(AdoOpenSession session, string text)
+    {
+        string rewritten = AdoSqlText.RewriteQuestionMarkParameters(text, out int qCount);
+        if (qCount == 0)
+        {
+            return;
+        }
+        // Only derive when the SQL prepares against the open database (r-str-ado-act/ado-params #32-#33: missing table K yields 0).
+        bool preparedOk = false;
+        if (AdoSqlText.IsSelect(rewritten))
+        {
+            using CalcDb.Sql.BoundSelect? plan = CalcDb.Sql.BoundSelect.Prepare(rewritten, session.SqlWithViews, out _);
+            preparedOk = plan is not null;
+        }
+        else if (CalcDb.Sql.ActionParser.IsAction(rewritten))
+        {
+            using CalcDb.Sql.BoundAction? plan = CalcDb.Sql.BoundAction.Prepare(rewritten, session.Sql, out _);
+            preparedOk = plan is not null;
+        }
+        if (!preparedOk)
+        {
+            return;
+        }
+        // r-ado-1b/param-refresh-after-text-change #20/#23/#36, r-fix-wire-ado/ado-params-manual-append #27,
+        // r-oledb-odbc/param-derived d6/d8/d9: each ? derives Name="?", Type=202 (adVarWChar), Direction=1,
+        // Size=510, Precision=255, NumericScale=255, Attributes=64 (adParamNullable), Value=VT_EMPTY.
+        for (int i = 0; i < qCount; i++)
+        {
+            var derived = new ParameterObject("?", 202, 1, 510, precision: 255, numericScale: 255, attributes: 64)
+            {
+                Appended = true,
+            };
+            _items.Add(derived);
+        }
+    }
+
     private CallResult GetCount()
     {
-        if (_items.Count > 0
-            || _owner.ActiveConnectionObject is not { IsOpen: true }
-            || _owner.CommandTextValue.Length == 0
-            || _owner.CommandTypeValue == AdoSqlText.AdCmdStoredProc)
-        {
-            // r-q-ado-misc/param-saved-declared-order #17: empty Parameters.Count returns 0 on an open adCmdStoredProc Command
-            // (and when CommandText is empty or connection is not open).
-            return Int32(_items.Count);
-        }
-        // evidence/r-ado-1b/param-refresh-after-text-change: adCmdText with ? placeholders implicitly derives parameters on first Count access.
-        return NotImplemented("Parameters.Count on an open ActiveConnection with an empty Parameters collection outside adCmdStoredProc (implicit parameter derivation)");
+        EnsureDerivedIfPending();
+        return Int32(_items.Count);
     }
 
     private CallResult Refresh()
     {
-        // evidence/r-ado-1b/cmd-before-connection #37-38: Refresh on an open connection with an appended parameter succeeds and preserves Count.
-        // evidence/r-q47-bigint-expr-edges/bi-params-ado-cmd-accdb #43, r-q49-dt2-draftprops/dt2-params-ado-cmd-accdb #41:
-        // Refresh on an open adCmdStoredProc Command with empty Parameters succeeds and leaves Count == 0.
-        if (_items.Count > 0 || (_owner.CommandTypeValue == AdoSqlText.AdCmdStoredProc && _owner.CommandTextValue.Length > 0))
+        if (_owner.ActiveConnectionObject is not { IsOpen: true } cn)
         {
+            // r-ado-1b/cmd-before-connection #13, #19: Refresh without an open connection succeeds and leaves Parameters unchanged.
             return CallResult.Nothing;
         }
-        return _owner.ActiveConnectionObject is { IsOpen: true }
-            ? NotImplemented("Parameters.Refresh on an open ActiveConnection with an empty Parameters collection (parameterized Command execution belongs to a later stretch)")
-            : CallResult.Nothing;
+        if (cn.IsPersistenceOpen || cn.OpenSession is null)
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.AdoMsPersistCommand",
+                "Parameters.Refresh on an MSPersist Connection is not recorded"));
+        }
+        if (_owner.CommandTypeValue == AdoSqlText.AdCmdStoredProc)
+        {
+            // r-fix-wire-ado/ado-params-saved-query #19, r-ado-1b/param-refresh-after-text-change #44/#79,
+            // r-q47-bigint-expr-edges/bi-params-ado-cmd-accdb #43, r-q49-dt2-draftprops/dt2-params-ado-cmd-accdb #41:
+            // Refresh on an open adCmdStoredProc Command clears Parameters and leaves Count == 0.
+            ClearAll();
+            _state = DerivationState.Derived;
+            _executedSinceDerive = false;
+            return CallResult.Nothing;
+        }
+        if (_state == DerivationState.Derived && !_executedSinceDerive)
+        {
+            // r-fix-wire-ado/ado-params-refresh-only #18/#25, r-oledb-odbc/param-derived d6/d7/d8/d9:
+            // calling Refresh immediately after implicit Count derivation (without Execute or CommandText change)
+            // clears the derived parameters and leaves Count == 0.
+            ClearAll();
+            return CallResult.Nothing;
+        }
+        // r-ado-1b/param-refresh-after-text-change #18 (initial Refresh) & #34 (Refresh after Execute),
+        // r-ado-1b/cmd-before-connection #37 (Refresh replacing manually appended parameter with derived ?):
+        ClearAll();
+        _state = DerivationState.Pending;
+        EnsureDerivedIfPending();
+        return CallResult.Nothing;
     }
 
     private string[] Names => [.. _items.Select(p => p.Name)];
@@ -498,18 +629,29 @@ internal sealed class ParametersObject : AdoObject
         _ => null,
     };
 
-    private CallResult Item(nint index) => AdoLookup.Find(index, Names, out int ordinal) switch
+    private CallResult Item(nint index)
     {
-        AdoLookup.Outcome.Found => Object(_items[ordinal]),
-        AdoLookup.Outcome.NotFound => Fail(AdoErrors.ItemNotFound),
-        _ => NotImplemented("Parameters.Item with this index form (not asked)"),
-    };
+        EnsureDerivedIfPending();
+        return AdoLookup.Find(index, Names, out int ordinal) switch
+        {
+            AdoLookup.Outcome.Found => Object(_items[ordinal]),
+            AdoLookup.Outcome.NotFound => Fail(AdoErrors.ItemNotFound),
+            _ => NotImplemented("Parameters.Item with this index form (not asked)"),
+        };
+    }
 
     private CallResult Append(nint arg)
     {
         if (AdoArgs.ObjectOf<ParameterObject>(arg) is not { } parameter)
         {
             return NotImplemented("Parameters.Append of an object that is not a CalcDb Parameter");
+        }
+        // r-ado-1b/param-create-forms #27-#28, #52-#53, #127-#128, #177-#178: calling Append (even if validation fails
+        // 0x800A0E7C) freezes implicit derivation so a subsequent Count returns 0 instead of deriving ?.
+        // r-fix-wire-ado/ado-params-manual-append #17-#26: if Count already derived parameters, Append keeps them and adds after.
+        if (_state == DerivationState.Pending)
+        {
+            _state = DerivationState.ManualOrCleared;
         }
         if (_items.Contains(parameter) || parameter.Appended)
         {
@@ -565,45 +707,110 @@ internal sealed unsafe class ParameterObject : AdoObject
     private static readonly InterfaceDecl Decl = AdoTypes.Parameter;
     private static readonly nint Vtable = DualEntries.Build(Decl);
     private static readonly OperationTable Operations = new OperationTable(Decl)
-        .Get("Name", (self, args) => Text(((ParameterObject)self).Name))
+        .Get("Name", (self, args) => ((ParameterObject)self).Name is { Length: > 0 } n ? Text(n) : CallResult.OfOwnedBstr(0))
         .Put("Name", (self, args) => ((ParameterObject)self).PutName(args[0]))
         .Get("Type", (self, args) => Int32(((ParameterObject)self).Type))
+        .Put("Type", (self, args) => ((ParameterObject)self).PutType(args[0]))
         .Get("Direction", (self, args) => Int32(((ParameterObject)self)._direction))
+        .Put("Direction", (self, args) => ((ParameterObject)self).PutDirection(args[0]))
         .Get("Size", (self, args) => Int32(((ParameterObject)self).Size))
+        .Put("Size", (self, args) => ((ParameterObject)self).PutSize(args[0]))
         .Get("Precision", (self, args) => CallResult.OfScalar(VarType.UI1, ((ParameterObject)self)._precision))
         .Put("Precision", (self, args) => ((ParameterObject)self).PutByte(args[0], ref ((ParameterObject)self)._precision, "Precision"))
         .Get("NumericScale", (self, args) => CallResult.OfScalar(VarType.UI1, ((ParameterObject)self)._numericScale))
         .Put("NumericScale", (self, args) => ((ParameterObject)self).PutByte(args[0], ref ((ParameterObject)self)._numericScale, "NumericScale"))
-        .Get("Attributes", (self, args) => Int32(0))
+        .Get("Attributes", (self, args) => Int32(((ParameterObject)self)._attributes))
+        .Put("Attributes", (self, args) => ((ParameterObject)self).PutAttributes(args[0]))
         .Get("Value", (self, args) => CallResult.Of(((ParameterObject)self)._value.CopyPreservingReference()))
         .Put("Value", (self, args) => ((ParameterObject)self).SetValue(args[0], (ParameterObject)self));
 
-    private readonly int _direction;
+    private int _direction;
     private byte _precision;
     private byte _numericScale;
+    private int _attributes;
     private OwnedVariant _value = OwnedVariant.Empty();
 
-    public ParameterObject(string name, int type, int direction, int size) : base(Decl, Vtable, "ADODB.Parameter")
+    public ParameterObject(string name, int type, int direction, int size, byte precision = 0, byte numericScale = 0, int attributes = 0)
+        : base(Decl, Vtable, "ADODB.Parameter")
     {
         Name = name;
         Type = type;
         _direction = direction;
         Size = size;
+        _precision = precision;
+        _numericScale = numericScale;
+        _attributes = attributes;
     }
 
     public string Name { get; private set; }
 
-    public int Type { get; }
+    public int Type { get; private set; }
 
     public int Direction => _direction;
 
-    public int Size { get; }
+    public int Size { get; private set; }
 
     public bool Appended { get; set; }
 
     internal OwnedVariant ValueVariant => _value;
 
     protected override OperationTable Table => Operations;
+
+    private CallResult PutType(nint arg)
+    {
+        int? type = AdoArgs.Int32(arg);
+        if (type is null)
+        {
+            return NotImplemented("Parameter.Type = a value that is not a number");
+        }
+        if (!AdoTypes.DataTypeEnumDecl.Constants.Any(c => c.Value == type.Value))
+        {
+            return Fail(AdoErrors.ArgumentsWrongType);
+        }
+        // r-ado-1b/param-mutate-after-append #40: Type is mutable after Append.
+        Type = type.Value;
+        return CallResult.Nothing;
+    }
+
+    private CallResult PutDirection(nint arg)
+    {
+        int? dir = AdoArgs.Int32(arg);
+        if (dir is null)
+        {
+            return NotImplemented("Parameter.Direction = a value that is not a number");
+        }
+        if (dir.Value is < 0 or > 4)
+        {
+            return Fail(AdoErrors.ArgumentsWrongType);
+        }
+        // r-ado-1b/param-mutate-after-append #77, #88: Direction is mutable after Append.
+        _direction = dir.Value;
+        return CallResult.Nothing;
+    }
+
+    private CallResult PutSize(nint arg)
+    {
+        int? size = AdoArgs.Int32(arg);
+        if (size is null)
+        {
+            return NotImplemented("Parameter.Size = a value that is not a number");
+        }
+        // r-ado-1b/param-mutate-after-append #41: Size is mutable after Append.
+        Size = size.Value;
+        return CallResult.Nothing;
+    }
+
+    private CallResult PutAttributes(nint arg)
+    {
+        int? attrs = AdoArgs.Int32(arg);
+        if (attrs is null)
+        {
+            return NotImplemented("Parameter.Attributes = a value that is not a number");
+        }
+        // r-ado-1b/param-mutate-after-append #110, #112: Attributes is mutable after Append (64, 16).
+        _attributes = attrs.Value;
+        return CallResult.Nothing;
+    }
 
     private CallResult PutByte(nint arg, ref byte field, string member)
     {
@@ -678,14 +885,26 @@ internal sealed unsafe class ParameterObject : AdoObject
         }
         if (given == VarType.Empty)
         {
-            return NotImplemented("Parameter.Value = Empty (not asked)");
+            // r-ado-1b/param-mutate-after-append #99, r-ado-1b/param-value-tag-matrix #196:
+            // assigning VT_EMPTY clears a typed parameter's Value to VT_EMPTY.
+            Replace(OwnedVariant.Empty());
+            return CallResult.Nothing;
         }
         OwnedVariant? converted = OwnedVariant.ChangeType(cell, target, SessionLocale.Lcid, out int hr);
         if (converted is null)
         {
-            return hr == unchecked((int)0x8002000A)
-                ? NotImplemented("Parameter.Value out of the type's range (its ADO error is not captured)")
-                : source.Fail(AdoErrors.WrongValueType);
+            if (hr == HResults.DISP_E_OVERFLOW)
+            {
+                // r-fix-wire-ado/ado-command-parameters-fresh #23/#47/#71/#95:
+                // Parameter.Value overflow (I4 -> adSmallInt(2), R8 -> adInteger(3)) fails 0x8002000A Provider
+                // "Out of present range." (helpContext 1240640, IErrorInfo = _Parameter IID) and keeps previous Value.
+                if (ReferenceEquals(source, this) && ((Type == 2 && given == VarType.I4) || (Type == 3 && given == VarType.R8)))
+                {
+                    return CallResult.Fail(AdoObject.ProviderFailure(AdoObject.HResultOutOfRange, "Out of present range.", source.Declaration.Iid));
+                }
+                return NotImplemented("Parameter.Value out of the type's range (its ADO error is not captured)");
+            }
+            return source.Fail(AdoErrors.WrongValueType);
         }
         if (Type == 17 && converted.Type == VarType.UI1)
         {
@@ -729,7 +948,9 @@ internal static unsafe class AdoCommandParameters
         IReadOnlyList<AdoCommandParam>? supplied,
         bool isSavedQuery,
         out MappedProviderError? providerError,
-        out Failure? refusal)
+        out Failure? refusal,
+        bool prepared = false,
+        string? effectiveSql = null)
     {
         providerError = null;
         refusal = null;
@@ -739,6 +960,13 @@ internal static unsafe class AdoCommandParameters
         }
         if (supplied is null || supplied.Count < expected.Count)
         {
+            if (isSavedQuery && prepared && (supplied is null || supplied.Count == 0))
+            {
+                // r-ado-1b/param-refresh-after-text-change #47/#52: Prepared=True saved query executed with 0 parameters
+                // fails 0x80040E10 "Parameter <name> has no default value." (SQLState 3748, NativeError -542379020).
+                providerError = AdoSqlErrors.ParameterNoDefaultValue(expected[0].Name);
+                return null;
+            }
             providerError = isSavedQuery
                 ? AdoSqlErrors.TooFewSavedParameters(expected.Count)
                 : AdoSqlErrors.MissingAdHocParameters();
@@ -787,10 +1015,75 @@ internal static unsafe class AdoCommandParameters
             }
             else
             {
-                bound[i] = CopyVariant(in incoming);
+                if (!isSavedQuery && (VarType)incoming.Vt == VarType.Bstr && effectiveSql is not null
+                    && TryCoerceBstrForLongColumnComparison(session, effectiveSql, qp.Name, in incoming, out NativeVariant coercedLong))
+                {
+                    bound[i] = coercedLong;
+                }
+                else
+                {
+                    bound[i] = CopyVariant(in incoming);
+                }
             }
         }
         return bound;
+    }
+
+    /// <summary>
+    /// r-ado-1b/cmd-execute-args #26, r-ado-1b/param-mutate-after-append #45:
+    /// an ad-hoc <c>SELECT ... FROM &lt;table&gt; WHERE &lt;LongCol&gt; = ?</c> binds a numeric <c>VT_BSTR</c>
+    /// (such as <c>"20"</c>) as <c>VT_I4</c> against the target Long column.
+    /// </summary>
+    private static bool TryCoerceBstrForLongColumnComparison(
+        AdoOpenSession session,
+        string effectiveSql,
+        string paramName,
+        in NativeVariant incoming,
+        out NativeVariant coerced)
+    {
+        coerced = default;
+        string paramKey = paramName is ['[', .., ']'] ? paramName[1..^1] : paramName;
+        using CalcDb.Sql.SelectSyntax? syntax = CalcDb.Sql.SqlParser.Parse(effectiveSql, out _);
+        if (syntax is not { From.Count: 1, Where: { } where }
+            || syntax.From[0] is not CalcDb.Sql.NamedSource ts
+            || where.Syntax.Root is not { Kind: CalcDb.Expressions.SyntaxKind.Binary, Operation: CalcDb.Values.Scalar.ScalarOperation.Equal, Left: { Kind: CalcDb.Expressions.SyntaxKind.Name } left, Right: { Kind: CalcDb.Expressions.SyntaxKind.Name } right })
+        {
+            return false;
+        }
+        string? colName = null;
+        if (string.Equals(right.Text, paramKey, StringComparison.OrdinalIgnoreCase))
+        {
+            colName = left.Text;
+        }
+        else if (string.Equals(left.Text, paramKey, StringComparison.OrdinalIgnoreCase))
+        {
+            colName = right.Text;
+        }
+        if (colName is null || session.Sql.Table(ts.Name) is not { } table)
+        {
+            return false;
+        }
+        bool isLongCol = false;
+        foreach (CalcDb.Format.ColumnDescriptor col in table.Columns)
+        {
+            if (string.Equals(col.Name, colName, StringComparison.OrdinalIgnoreCase))
+            {
+                isLongCol = col.TypeCode == CalcDb.Format.NativeTypes.Long;
+                break;
+            }
+        }
+        if (!isLongCol)
+        {
+            return false;
+        }
+        NativeVariant src = incoming;
+        NativeVariant dst = default;
+        if (OleAut.VariantChangeTypeEx(&dst, &src, SessionLocale.Lcid, 0, (ushort)VarType.I4) < 0)
+        {
+            return false;
+        }
+        coerced = dst;
+        return true;
     }
 
     public static void Release(NativeVariant?[]? values)
