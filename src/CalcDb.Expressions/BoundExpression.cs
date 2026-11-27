@@ -95,17 +95,35 @@ public interface IExpressionRow
 }
 
 /// <summary>
+/// How a Text or Memo column's leading indexes govern SQL query <c>LIKE</c> semantics
+/// (qualified.md R-SORT-3 LIKE-RANGE-01/05).
+/// </summary>
+public enum IndexedTextLikeKind : byte
+{
+    /// <summary>No leading index, or only single-column non-unique descending non-IgnoreNulls index(es): unit-by-unit LIKE.</summary>
+    None,
+
+    /// <summary>At least one single-column non-unique ascending non-IgnoreNulls Text index, and no unique/compound/IgnoreNulls leading index: collation-range prefix LIKE.</summary>
+    AscendingSingleNonUnique,
+
+    /// <summary>Unrecorded index shape (unique, compound, IgnoreNulls, or indexed Memo): refuse with <c>NotModelled.IndexedLike</c>.</summary>
+    Unrecorded,
+}
+
+/// <summary>
 /// The names an expression may use, with the facts its binding needs (II-10 §2 BoundName.Field). The table form serves a
 /// Find criteria; the SQL binder derives its scope of several sources, aliases and group slots from it.
 /// </summary>
 public class ExpressionSchema
 {
+    private readonly TableDefinition? _table;
     private readonly Dictionary<string, ColumnDescriptor> _columns;
     private readonly HashSet<int> _indexedFirst;
 
     /// <summary>The columns of a table and which of them lead an index (CUR-FIND indexed Text).</summary>
     public ExpressionSchema(TableDefinition table)
     {
+        _table = table;
         _columns = new Dictionary<string, ColumnDescriptor>(StringComparer.OrdinalIgnoreCase);
         foreach (ColumnDescriptor c in table.Columns)
         {
@@ -117,6 +135,7 @@ public class ExpressionSchema
     /// <summary>A scope that resolves its names itself.</summary>
     protected ExpressionSchema()
     {
+        _table = null;
         _columns = [];
         _indexedFirst = [];
     }
@@ -124,6 +143,46 @@ public class ExpressionSchema
     /// <summary>The physical numbers of the columns that lead an index of <paramref name="table"/>.</summary>
     public static HashSet<int> IndexLeaders(TableDefinition table) =>
         [.. table.PhysicalIndexes.Where(p => p.Columns.Count > 0).Select(p => p.Columns[0].PhysicalNumber)];
+
+    /// <summary>
+    /// Classify how <paramref name="table"/>'s indexes leading with <paramref name="column"/> affect SQL <c>LIKE</c>
+    /// (qualified.md R-SORT-3 LIKE-RANGE-01/05; evidence/r-q-fmt-sort/like-index-accdb, r-sort-3/like-prefix-accdb,
+    /// r-sort-3b/lg-like-vs-range, r-sort-3b/lu-like-vs-range, r-cursor-1b/filter-expression-forms).
+    /// </summary>
+    public static IndexedTextLikeKind ClassifyIndexedTextLike(TableDefinition table, ColumnDescriptor column)
+    {
+        if (column.TypeCode is not (NativeTypes.Text or NativeTypes.Memo))
+        {
+            return IndexedTextLikeKind.None;
+        }
+        IndexDescriptorRules idxRules = FormatDescriptor.Jet4Family.IndexDescriptor;
+        bool hasAny = false;
+        bool hasAscending = false;
+        foreach (PhysicalIndex pi in table.PhysicalIndexes)
+        {
+            if (pi.Columns.Count == 0 || pi.Columns[0].PhysicalNumber != column.PhysicalNumber)
+            {
+                continue;
+            }
+            hasAny = true;
+            if (column.TypeCode == NativeTypes.Memo
+                || pi.Columns.Count > 1
+                || pi.Unique(idxRules)
+                || pi.IgnoreNulls(idxRules))
+            {
+                return IndexedTextLikeKind.Unrecorded;
+            }
+            if (pi.Columns[0].Ascending)
+            {
+                hasAscending = true;
+            }
+        }
+        if (!hasAny)
+        {
+            return IndexedTextLikeKind.None;
+        }
+        return hasAscending ? IndexedTextLikeKind.AscendingSingleNonUnique : IndexedTextLikeKind.None;
+    }
 
     public ColumnDescriptor? Find(string name) => _columns.GetValueOrDefault(name);
 
@@ -149,6 +208,10 @@ public class ExpressionSchema
     /// <summary>Whether an index of the field's table has this column first.</summary>
     public virtual bool LeadsIndex(ColumnBinding field) => _indexedFirst.Contains(field.Column.PhysicalNumber);
 
+    /// <summary>How a field's leading indexes govern SQL query <c>LIKE</c> (R-SORT-3 LIKE-RANGE-01/05).</summary>
+    public virtual IndexedTextLikeKind QueryIndexedLike(ColumnBinding field) =>
+        _table is null ? IndexedTextLikeKind.None : ClassifyIndexedTextLike(_table, field.Column);
+
     /// <summary>Bind an embedded SQL subquery node in this scope; returns null with <paramref name="failure"/> when unsupported or invalid.</summary>
     public virtual SubqueryBinding? BindSubquery(SyntaxNode node, OperandContract leftContract, out ExpressionFailure? failure)
     {
@@ -170,6 +233,9 @@ public sealed unsafe partial class BoundExpression : IDisposable
     private readonly Instruction[] _program;
     private readonly NativeVariant[] _constants;
     private readonly LikePattern?[] _patterns;
+    private readonly string[] _collationLikePrefixes;
+    private CollationLikePrefix?[]? _compiledCollationLikePrefixes;
+    private char[]? _likeSubjectScratch;
     private readonly ScalarDescriptor[] _descriptors;
     private readonly ColumnBinding[] _fields;
     private readonly bool _usesSlots;
@@ -189,6 +255,7 @@ public sealed unsafe partial class BoundExpression : IDisposable
         _program = [.. b.Program];
         _constants = [.. b.Constants];
         _patterns = [.. b.Patterns];
+        _collationLikePrefixes = [.. b.CollationLikePrefixes];
         _descriptors = [.. b.Descriptors];
         _fields = [.. b.Fields];
         _usesSlots = b.UsesSlots;
@@ -273,6 +340,9 @@ public sealed unsafe partial class BoundExpression : IDisposable
         LikeConstant,
         LikeValue,
 
+        /// <summary>Indexed Text <c>K LIKE '&lt;prefix&gt;*'</c> collation-order prefix match (R-SORT-3 LIKE-RANGE-01/05).</summary>
+        LikeCollationPrefix,
+
         /// <summary>x In (n values): Equal per value, combined with Or.</summary>
         In,
 
@@ -336,7 +406,7 @@ public sealed unsafe partial class BoundExpression : IDisposable
         {
             return null;
         }
-        var b = new Builder(schema, context.Use);
+        var b = new Builder(schema, context.Use, context.DatabaseOrder);
         StaticType type;
         try
         {
@@ -367,7 +437,7 @@ public sealed unsafe partial class BoundExpression : IDisposable
     /// </summary>
     public static BoundExpression? Bind(SyntaxNode root, ExpressionSchema schema, ExpressionContext context, bool allowBareBinary, out ExpressionFailure? failure, bool allowBareGuid = false)
     {
-        var b = new Builder(schema, context.Use);
+        var b = new Builder(schema, context.Use, context.DatabaseOrder);
         StaticType type;
         try
         {
@@ -584,6 +654,15 @@ public sealed unsafe partial class BoundExpression : IDisposable
                     Release(ref stack[sp - 1]);
                     Release(ref stack[sp - 2]);
                     sp -= 2;
+                    break;
+                case Op.LikeCollationPrefix:
+                    if (!EvalLikeCollationPrefix(stack[sp - 1].Value, ins.Operand, out r))
+                    {
+                        Unwind(sp);
+                        return false;
+                    }
+                    Release(ref stack[sp - 1]);
+                    sp--;
                     break;
                 case Op.In:
                     r = In(ref sp, ins);
@@ -1204,6 +1283,54 @@ public sealed unsafe partial class BoundExpression : IDisposable
     }
 
     /// <summary>
+    /// Evaluate indexed Text <c>K LIKE '&lt;prefix&gt;*'</c> using the database's General-family collation prefix
+    /// (qualified.md R-SORT-3 LIKE-RANGE-01/05).
+    /// </summary>
+    private bool EvalLikeCollationPrefix(in NativeVariant subject, int prefixIndex, out ScalarOutcome result)
+    {
+        result = default;
+        if (_active.DatabaseOrder is not DatabaseCollation collation)
+        {
+            LastFailure = ExpressionFailure.Open(ExpressionPhase.Evaluate, "NotModelled.IndexedLike", "indexed Text LIKE prefix without a General-family DatabaseCollation");
+            return false;
+        }
+        _compiledCollationLikePrefixes ??= new CollationLikePrefix?[_collationLikePrefixes.Length];
+        CollationLikePrefix? compiled = _compiledCollationLikePrefixes[prefixIndex];
+        if (compiled is null || !ReferenceEquals(compiled.Sort, collation.Sort))
+        {
+            compiled = CollationLikePrefix.TryCompile(collation.Sort, _collationLikePrefixes[prefixIndex]);
+            if (compiled is null)
+            {
+                LastFailure = ExpressionFailure.Open(ExpressionPhase.Evaluate, "NotModelled.IndexedLike", "indexed Text LIKE prefix with unrecorded sort family or prefix characters");
+                return false;
+            }
+            _compiledCollationLikePrefixes[prefixIndex] = compiled;
+        }
+        if (subject.Vt == (ushort)VarType.Null)
+        {
+            result = ScalarOutcome.Of(new NativeVariant { Vt = (ushort)VarType.Null });
+            return true;
+        }
+        if (subject.Vt != (ushort)VarType.Bstr)
+        {
+            LastFailure = ExpressionFailure.Open(ExpressionPhase.Evaluate, "NotModelled.IndexedLike", "indexed Text LIKE prefix over a non-Text runtime value");
+            return false;
+        }
+        ReadOnlySpan<char> chars = Bstrs.Chars(subject.Pointer);
+        int len = Math.Min(chars.Length, 255);
+        _likeSubjectScratch ??= new char[255];
+        chars[..len].CopyTo(_likeSubjectScratch);
+        bool? matched = compiled.TryMatch(_likeSubjectScratch.AsMemory(0, len));
+        if (matched is null)
+        {
+            LastFailure = ExpressionFailure.Open(ExpressionPhase.Evaluate, "NotModelled.IndexedLike", "indexed Text LIKE multi-char or expansion prefix against a subject with an interior positional character");
+            return false;
+        }
+        result = ScalarOutcome.Of(new NativeVariant { Vt = (ushort)VarType.Bool, Int64 = matched.Value ? -1 : 0 });
+        return true;
+    }
+
+    /// <summary>
     /// The current row's value of field <paramref name="index"/>, as the DAO read path projects it (R-ORACLE-1
     /// FMT1-FAMILIES): Null, Yes/No as VT_BOOL, Byte UI1, Integer I2, Long I4, Currency CY, Single R4, Double R8, Date
     /// DATE, Decimal DECIMAL, Text and Memo as text, and bare-projected Binary and OLE as 0-based VT_ARRAY|VT_UI1 (or
@@ -1394,13 +1521,15 @@ public sealed unsafe partial class BoundExpression : IDisposable
     /// <summary>A bound node's result: its static type, its operand contract and the stack depth it needs.</summary>
     private readonly record struct Bound(StaticType Type, OperandContract Contract, int Depth);
 
-    private sealed class Builder(ExpressionSchema schema, ExpressionUse use)
+    private sealed class Builder(ExpressionSchema schema, ExpressionUse use, TextCollation? databaseOrder)
     {
         public List<Instruction> Program { get; } = [];
 
         public List<NativeVariant> Constants { get; } = [];
 
         public List<LikePattern?> Patterns { get; } = [];
+
+        public List<string> CollationLikePrefixes { get; } = [];
 
         public List<ScalarDescriptor> Descriptors { get; } = [];
 
@@ -1564,7 +1693,10 @@ public sealed unsafe partial class BoundExpression : IDisposable
                 // 0; Find Q <> Null finds the rows where Q is not Null).
                 return IsNull(node.Left!, negated: true, node.Offset, at);
             }
-            CheckIndexedText(node.Left!, node.Right!, like: false);
+            if (!Query)
+            {
+                CheckIndexedText(node.Left!, node.Right!, like: false);
+            }
             Bound left = Bind(node.Left!, at);
             Bound right = Bind(node.Right!, at + 1);
             Program.Add(new Instruction(Op.Binary, 0, Descriptor(node.Operation, node.Offset, 2, left.Contract, right.Contract)));
@@ -1588,25 +1720,62 @@ public sealed unsafe partial class BoundExpression : IDisposable
         private Bound Like(SyntaxNode node, int at)
         {
             SyntaxNode pattern = node.Right!;
-            CheckIndexedText(node.Left!, pattern, like: true);
-            bool indexed = node.Left is { Kind: SyntaxKind.Name } name && Indexed(name) is { } column && IsIndexedText(column);
-            if (indexed && Query)
+            if (!Query)
             {
-                // qualified.md R-SORT-3 LIKE-RANGE-01/05: with an ascending index on the column a query's LIKE row set is a
-                // collation-order range, not the unit-by-unit match; which patterns take the range is not identified.
-                throw Open("NotModelled.IndexedLike", "LIKE on a Text field that leads an index, in a query");
+                CheckIndexedText(node.Left!, pattern, like: true);
             }
+            ColumnBinding? likeColumn = node.Left is { Kind: SyntaxKind.Name } name ? Indexed(name) : null;
+            bool findIndexed = !Query && likeColumn is { } findCol && IsIndexedText(findCol);
+            IndexedTextLikeKind queryIndexed = Query && likeColumn is { } queryCol
+                ? schema.QueryIndexedLike(queryCol)
+                : IndexedTextLikeKind.None;
+
+            if (queryIndexed == IndexedTextLikeKind.Unrecorded)
+            {
+                // qualified.md R-SORT-3 LIKE-RANGE-01/05 Open: unique indexes, compound indexes, IgnoreNulls indexes, and indexed Memo.
+                throw Open("NotModelled.IndexedLike", "LIKE on a Text/Memo field that leads a unique, compound, IgnoreNulls, or Memo index, in a query");
+            }
+            if (queryIndexed == IndexedTextLikeKind.AscendingSingleNonUnique)
+            {
+                if (node.Negated)
+                {
+                    throw Open("NotModelled.IndexedLike", "NOT LIKE on a Text field that leads an ascending index, in a query");
+                }
+                if (pattern is not { Kind: SyntaxKind.Literal, Literal: LiteralKind.Text, Text: { } literalText })
+                {
+                    throw Open("NotModelled.IndexedLike", "LIKE with a non-literal pattern on a Text field that leads an ascending index, in a query");
+                }
+                if (literalText.Contains("**", StringComparison.Ordinal))
+                {
+                    throw Open("NotModelled.IndexedLike", "LIKE with consecutive '*' wildcards on a Text field that leads an ascending index, in a query");
+                }
+                if (IsCollationPrefixPattern(literalText, out string prefix))
+                {
+                    if (databaseOrder is not DatabaseCollation collation || !CollationLikePrefix.IsSupportedPrefix(collation.Sort, prefix))
+                    {
+                        throw Open("NotModelled.IndexedLike", "LIKE prefix on an indexed Text field with unrecorded collation or prefix characters, in a query");
+                    }
+                    Bound indexedSubject = Bind(node.Left!, at);
+                    Program.Add(new Instruction(Op.LikeCollationPrefix, CollationLikePrefixes.Count, Descriptor(ScalarOperation.Like, node.Offset, 2, indexedSubject.Contract, OperandContract.Literal)));
+                    CollationLikePrefixes.Add(prefix);
+                    return new Bound(StaticType.Boolean, BooleanExpression, indexedSubject.Depth);
+                }
+                // All other recorded constant literal patterns on an ascending single-column non-unique Text index
+                // ('*', no-wildcard literals, 'a?', '?a', '*e*', 'a[a-b]*', 'a*b', '[a-c]*', '[!a-c]*') match unit-by-unit
+                // (evidence/r-q-fmt-sort/like-index-accdb, r-sort-3/like-prefix-accdb, r-sort-3b/lg-like-vs-range, lu-like-vs-range).
+            }
+
             Bound subject = Bind(node.Left!, at);
             int depth = subject.Depth;
             if (pattern is { Kind: SyntaxKind.Literal, Literal: LiteralKind.Text })
             {
-                Program.Add(new Instruction(Op.LikeConstant, Patterns.Count, Descriptor(ScalarOperation.Like, node.Offset, 2, subject.Contract, OperandContract.Literal), indexed));
+                Program.Add(new Instruction(Op.LikeConstant, Patterns.Count, Descriptor(ScalarOperation.Like, node.Offset, 2, subject.Contract, OperandContract.Literal), findIndexed));
                 Patterns.Add(LikePattern.Compile(pattern.Text));
             }
             else
             {
                 Bound p = Bind(pattern, at + 1);
-                Program.Add(new Instruction(Op.LikeValue, 0, Descriptor(ScalarOperation.Like, node.Offset, 2, subject.Contract, p.Contract), indexed));
+                Program.Add(new Instruction(Op.LikeValue, 0, Descriptor(ScalarOperation.Like, node.Offset, 2, subject.Contract, p.Contract), findIndexed));
                 depth = Math.Max(depth, p.Depth + 1);
             }
             if (node.Negated)
@@ -1614,6 +1783,19 @@ public sealed unsafe partial class BoundExpression : IDisposable
                 Program.Add(new Instruction(Op.Unary, 0, Descriptor(ScalarOperation.Not, node.Offset, 1, OperandContract.Expression, default)));
             }
             return new Bound(StaticType.Boolean, BooleanExpression, depth);
+        }
+
+        private static bool IsCollationPrefixPattern(string pattern, out string prefix)
+        {
+            if (pattern.Length >= 2
+                && pattern[^1] == '*'
+                && pattern.AsSpan(0, pattern.Length - 1).IndexOfAny("*?#[") < 0)
+            {
+                prefix = pattern[..^1];
+                return true;
+            }
+            prefix = "";
+            return false;
         }
 
         private Bound In(SyntaxNode node, int at)

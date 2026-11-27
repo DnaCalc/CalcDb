@@ -99,6 +99,9 @@ public sealed class SourceSlot
 
     internal HashSet<int> IndexLeaders { get; }
 
+    internal IndexedTextLikeKind QueryIndexedLike(ColumnDescriptor column) =>
+        Table is null ? IndexedTextLikeKind.None : ExpressionSchema.ClassifyIndexedTextLike(Table, column);
+
     public ColumnDescriptor? Column(string name) => _columns.GetValueOrDefault(name);
 
     internal int SubqueryColumn(string name)
@@ -1551,6 +1554,9 @@ public sealed class BoundSelect : IDisposable
         }
 
         public override bool LeadsIndex(ColumnBinding field) => InWhere && sources[field.Source].IndexLeaders.Contains(field.Column.PhysicalNumber);
+
+        public override IndexedTextLikeKind QueryIndexedLike(ColumnBinding field) =>
+            InWhere ? sources[field.Source].QueryIndexedLike(field.Column) : IndexedTextLikeKind.None;
     }
 
     /// <summary>
