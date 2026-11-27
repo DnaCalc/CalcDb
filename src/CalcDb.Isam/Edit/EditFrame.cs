@@ -741,17 +741,21 @@ public sealed class EditFrame : IDisposable
                             && _workspace.OverlayOf(refuseWriter.File) is null
                             && refuseWriter.IsAccdb(null)
                             && refPhys > 0;
-                        bool allowNonPkStatementAccdb = _workspace.InAutocommitFailOnErrorStatementLevel
-                            && refuseWriter.IsAccdb(_workspace.OverlayOf(refuseWriter.File))
-                            && refPhys > 0
-                            && !_workspace.HasStatementGlobalMapAllocation(refuseWriter.File);
+                        bool allowNonPkStatement = (_workspace.InAutocommitFailOnErrorStatementLevel
+                                && (refuseWriter.IsAccdb(_workspace.OverlayOf(refuseWriter.File))
+                                    || refuseWriter.IsJet4Mdb(_workspace.OverlayOf(refuseWriter.File)))
+                                && refPhys > 0)
+                            || (_workspace.InExplicitTxnFailOnErrorStatementLevel
+                                && refuseWriter.IsAccdb(_workspace.OverlayOf(refuseWriter.File))
+                                && refPhys > 0
+                                && !_workspace.HasStatementGlobalMapAllocation(refuseWriter.File));
                         if (CheckExplicitAutoNumberReseed(
                                 s.TableName,
                                 candidateValues[autoCol.Ordinal].Integer,
                                 _table.Counter,
                                 refusingIsPrimary,
                                 IsKeyOf(refPhys, autoCol),
-                                allowNonPkSingleRowAccdb || allowNonPkStatementAccdb) is { } reseedOpen)
+                                allowNonPkSingleRowAccdb || allowNonPkStatement) is { } reseedOpen)
                         {
                             return reseedOpen;
                         }
@@ -819,12 +823,13 @@ public sealed class EditFrame : IDisposable
                     if (_workspace.InStatement)
                     {
                         // Jet 4 MDB statement Rollback 3022 side effects are recorded without an AutoNumber column on
-                        // existing or new pages (noan-dup-row2-mdb-existing, noan-dup-row2-mdb-newpage) and with a
-                        // generated unit-increment AutoNumber taking a new page (ins-dup-fail-mdb); MDB with a
-                        // generated AutoNumber on an existing page and MDB explicit AutoNumbers remain Open.
+                        // existing or new pages (noan-dup-row2-mdb-existing, noan-dup-row2-mdb-newpage), with an
+                        // explicit unit-increment AutoNumber on existing or new pages (cxb6: rb-exp-an-existing-mdb,
+                        // rb-exp-an-newpage-mdb), and with a generated unit-increment AutoNumber taking a new page
+                        // (ins-dup-fail-mdb); MDB with a generated AutoNumber on an existing page remains Open.
                         bool allowJet4MdbSideEffect = _workspace.InAutocommitFailOnErrorStatementLevel
-                            && !reseedRefuseAuto
                             && (s.AutoNumber is null
+                                || (reseedRefuseAuto && _table.Counter is { Increment: 1 })
                                 || (_workspace.HasStatementGlobalMapAllocation(refuseWriter.File) && _table.Counter is { Increment: 1 }));
                         (open, detail) = _workspace.RecordStatementSideEffect(
                             refuseWriter.File,
@@ -881,12 +886,19 @@ public sealed class EditFrame : IDisposable
                     if (autoFloor is { } floorVal && _workspace.Depth > 0)
                     {
                         // Generated AutoNumber on a refused row inside an explicit ACCDB transaction's plain SQL INSERT is
-                        // persisted by Rollback (evidence/r-q27-autonumber-txn/ins-dup-plain-txn-rb); explicit reseed,
-                        // MDB, or non-1 increment stays unrecorded.
-                        string? unrecorded = !reseedRefuseAuto
-                            && _workspace.InStatement
+                        // persisted by Rollback (evidence/r-q27-autonumber-txn/ins-dup-plain-txn-rb); explicit unit-increment
+                        // AutoNumber refused 3022 on an existing ACCDB page inside depth-1 BeginTrans is also persisted by
+                        // outer Rollback (cxb6: evidence/r-q45-querydef-stream-rollback/rb-exp-an-begintrans-rollback-accdb).
+                        bool recordedExplicitTxnRefusal = reseedRefuseAuto
+                            && _workspace.InExplicitTxnFailOnErrorStatementLevel
                             && refuseCounter.Increment == 1
                             && refuseWriter.IsAccdb(_workspace.OverlayOf(refuseWriter.File))
+                            && !_workspace.HasStatementGlobalMapAllocation(refuseWriter.File);
+                        string? unrecorded = ((!reseedRefuseAuto
+                                && _workspace.InStatement
+                                && refuseCounter.Increment == 1
+                                && refuseWriter.IsAccdb(_workspace.OverlayOf(refuseWriter.File)))
+                            || recordedExplicitTxnRefusal)
                             ? null
                             : "a refused row";
                         _workspace.RecordConsumedAutoNumber(refuseWriter.File, s.Table.FirstPage, floorVal, refuseCounter.Increment, reseedRefuseAuto, unrecorded, isExplicit: reseedRefuseAuto);
@@ -990,9 +1002,19 @@ public sealed class EditFrame : IDisposable
                 }
                 if (!_workspace.HasStatementAcceptedChanges)
                 {
-                    return new UpdateOutcome(null, MutationOpen.CounterWrite, $"first-row refusal {reqErrNum} on {s.TableName} is not recorded (qualified.md R-TXN-1 TXN-STMT Open)");
+                    if (s.AutoNumber is null)
+                    {
+                        // R-TXN-1 TXN-STMT (cxb6; evidence/r-q45-querydef-stream-rollback/rb-row1-3314-empty-accdb,
+                        // rb-row1-3314-existing-accdb, rb-row1-3316-empty-accdb, rb-row1-3316-existing-accdb):
+                        // row-1 3314/3316 on an ACCDB non-AutoNumber table (empty or populated) writes 0 bytes
+                        // across Execute, pause, and Close.
+                    }
+                    else
+                    {
+                        return new UpdateOutcome(null, MutationOpen.CounterWrite, $"first-row refusal {reqErrNum} on {s.TableName} is not recorded (qualified.md R-TXN-1 TXN-STMT Open)");
+                    }
                 }
-                if (s.AutoNumber is { } reqAuto)
+                else if (s.AutoNumber is { } reqAuto)
                 {
                     if (_cells[reqAuto.Ordinal].Assigned)
                     {
@@ -1181,19 +1203,26 @@ public sealed class EditFrame : IDisposable
         }
 
         // R-FMT-2 Generated values (evidence/r-q27-autonumber-txn/exp-gap-5, exp-gap-10;
-        // evidence/r-q29-stmt-rollback-counters/exp-sel-below-dup2-existing, exp-sel-below-pk-dup2-existing): downward
-        // explicit AutoNumber reseed on an accepted insert is recorded for single-row autocommit ACCDB SQL INSERT and
-        // on an existing ACCDB page inside an autocommit dbFailOnError statement level; recordset AddNew, BeginTrans,
-        // MDB, and new-page statement-level downward reseeds are refused by name before modifying disk or the counter.
+        // evidence/r-q29-stmt-rollback-counters/exp-sel-below-dup2-existing, exp-sel-below-pk-dup2-existing;
+        // cxb6: evidence/r-q45-querydef-stream-rollback/rb-exp-an-begintrans-commit-accdb,
+        // rb-exp-an-begintrans-rollback-accdb, rb-exp-an-existing-mdb): downward explicit AutoNumber reseed on an
+        // accepted insert is recorded for single-row autocommit ACCDB SQL INSERT, existing-page autocommit statement
+        // INSERT (ACCDB and Jet 4 MDB), and existing-page depth-1 BeginTrans statement INSERT (ACCDB); recordset
+        // AddNew, new-page downward reseeds, nested depth >= 2, and BeginTrans MDB stay refused by name.
         bool allowDownwardReseedSingleRow = _workspace.InStatement
             && _workspace.Depth == 0
             && _table.Writer is { } reseedCheckWriter
             && _workspace.OverlayOf(reseedCheckWriter.File) is null
             && reseedCheckWriter.IsAccdb(null);
-        bool allowDownwardReseedStmtLevel = _workspace.InAutocommitFailOnErrorStatementLevel
-            && _table.Writer is { } stmtReseedWriter
-            && stmtReseedWriter.IsAccdb(_workspace.OverlayOf(stmtReseedWriter.File))
-            && !_workspace.HasStatementGlobalMapAllocation(stmtReseedWriter.File);
+        bool allowDownwardReseedStmtLevel = (_workspace.InAutocommitFailOnErrorStatementLevel
+                && _table.Writer is { } stmtReseedWriter
+                && (stmtReseedWriter.IsAccdb(_workspace.OverlayOf(stmtReseedWriter.File))
+                    || stmtReseedWriter.IsJet4Mdb(_workspace.OverlayOf(stmtReseedWriter.File)))
+                && !_workspace.HasStatementGlobalMapAllocation(stmtReseedWriter.File))
+            || (_workspace.InExplicitTxnFailOnErrorStatementLevel
+                && _table.Writer is { } txnReseedWriter
+                && txnReseedWriter.IsAccdb(_workspace.OverlayOf(txnReseedWriter.File))
+                && !_workspace.HasStatementGlobalMapAllocation(txnReseedWriter.File));
         bool allowDownwardReseed = allowDownwardReseedSingleRow || allowDownwardReseedStmtLevel;
         if (Mode == EditMode.AddNew
             && s.AutoNumber is { } explicitAuto
@@ -1276,8 +1305,9 @@ public sealed class EditFrame : IDisposable
                 _workspace.OverlayOf(insertWriter.File),
                 reseedAutoNumber: reseedAcceptedAuto,
                 deferTableDefCountUpdate: deferInsertCounts,
-                sessionReservedPages: _workspace.SessionReservedPages(insertWriter.File),
-                reusableExtentSession: _workspace.HasReusableExtentSession(insertWriter.File));
+                sessionReservedPages: _workspace.SessionReservedPages(insertWriter.File, includeSharedRollbackExtent: _workspace.InStatement),
+                reusableExtentSession: _workspace.HasReusableExtentSession(insertWriter.File),
+                allowNonContiguousReserved: _workspace.InStatement && _workspace.AllowNonContiguousReserved(insertWriter.File));
         }
         else
         {
@@ -1364,7 +1394,12 @@ public sealed class EditFrame : IDisposable
                 // AddNew stays refused on Rollback (MutationOpen.AutoNumberIncrement); unit-increment recordset AddNew
                 // (rs-addnew-txn-rb-existing, rs-addnew-txn-rb-newpage) and positive non-1 increment ACCDB SQL INSERT
                 // taking a new page (ins-txn-rb-counter-100-5) are decided by PlanRolledBackAutoNumbers.
-                string? unrecorded = assigned[auto.Ordinal] ? "an explicit AutoNumber"
+                bool recordedExplicitTxnAccept = assigned[auto.Ordinal]
+                    && _workspace.InExplicitTxnFailOnErrorStatementLevel
+                    && counter.Increment == 1
+                    && acceptWriter.IsAccdb(_workspace.OverlayOf(acceptWriter.File))
+                    && !_workspace.HasStatementGlobalMapAllocation(acceptWriter.File);
+                string? unrecorded = assigned[auto.Ordinal] && !recordedExplicitTxnAccept ? "an explicit AutoNumber"
                     : !_workspace.InStatement && counter.Increment != 1 ? $"increment {counter.Increment} on recordset AddNew"
                     : null;
                 _workspace.RecordConsumedAutoNumber(acceptWriter.File, s.Table.FirstPage, floorVal, counter.Increment, reseed: reseedAcceptedAuto, unrecorded, isExplicit: assigned[auto.Ordinal]);

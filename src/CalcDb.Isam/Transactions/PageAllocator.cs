@@ -100,7 +100,7 @@ public sealed class PageAllocator
     public bool TryAllocateFromReserved(PrivateOverlay? seen, out uint page, out string? failure)
     {
         page = 0;
-        if (!_allowPendingRollbackExtent && _cache.HasPendingRollbackExtent)
+        if (!_allowPendingRollbackExtent && _cache.HasPendingRollbackExtent && !SharedRollbackExtent.IsActiveShared(_cache))
         {
             failure = PendingRollbackExtentFailure;
             return false;
