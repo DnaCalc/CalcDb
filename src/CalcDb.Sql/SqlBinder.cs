@@ -765,6 +765,9 @@ public sealed class BoundSelect : IDisposable
         return false;
     }
 
+    /// <summary>Whether the statement carried trailing <c>WITH OWNERACCESS OPTION</c>.</summary>
+    internal bool WithOwnerAccess => _syntax.WithOwnerAccess;
+
     /// <summary>Parse and bind a statement.</summary>
     public static BoundSelect? Prepare(string sql, ISqlDatabase database, out SqlFailure? failure)
     {

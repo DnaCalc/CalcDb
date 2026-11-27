@@ -267,7 +267,7 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
 
     internal static SelectCursor? Open(BoundSelect plan, ISqlDatabase database, ResultKind kind, IReadOnlyList<NativeVariant?>? parameters, bool[]? observableColumns, out SqlFailure? failure)
     {
-        if (plan.Syntax.WithOwnerAccess)
+        if (plan.WithOwnerAccess)
         {
             // r-q50-jk44-ddl-vis/ddl-view-create-drop-accdb, ddl-view-create-drop-mdb only inspect QueryDef metadata
             // (Type/SQL/Parameters) on WITH OWNERACCESS OPTION views; executing a SELECT with WITH OWNERACCESS OPTION is unrecorded.
