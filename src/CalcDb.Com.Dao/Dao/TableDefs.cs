@@ -52,7 +52,7 @@ internal sealed unsafe class DefinitionCollection : DaoObject, IDaoEnumerableCol
     public bool ContainsName(string name) => _lookup.Find(name) is not null;
 
     /// <summary>List the members again from <see cref="Membership"/>; held member wrappers stay valid for their clients.</summary>
-    public string? Relist()
+    public string? Relist(bool appendNew = false)
     {
         if (Membership is { } membership)
         {
@@ -61,7 +61,7 @@ internal sealed unsafe class DefinitionCollection : DaoObject, IDaoEnumerableCol
             {
                 return failure;
             }
-            if (AppendNewOnRelist && _names.Count > 0)
+            if (appendNew && _names.Count > 0)
             {
                 var newIndexByName = new Dictionary<string, int>(names.Count, StringComparer.OrdinalIgnoreCase);
                 for (int i = 0; i < names.Count; i++)
@@ -306,7 +306,7 @@ internal sealed unsafe class DefinitionCollection : DaoObject, IDaoEnumerableCol
     private CallResult Refresh()
     {
         IReadOnlyList<(string Name, DaoObject Wrapper)> held = Refreshed is null ? [] : SnapshotHeld();
-        if (Relist() is { } fail)
+        if (Relist(appendNew: AppendNewOnRelist) is { } fail)
         {
             return CallResult.Fail(Failure.NotImplemented(fail));
         }

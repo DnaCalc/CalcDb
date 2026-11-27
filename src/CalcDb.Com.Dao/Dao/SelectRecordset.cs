@@ -107,6 +107,10 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
     /// </summary>
     private CallResult SetCollect(nint item, nint value)
     {
+        if (RecordsetType != 2)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.QueryRecordsetEdit", $"Collect put on a type {RecordsetType} query recordset (not recorded)"));
+        }
         int? ordinal = CollectionLookup.Find(item, FieldNames, out bool objectIndex);
         if (objectIndex)
         {
@@ -118,6 +122,10 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         }
         if (_frame is { Mode: not EditMode.None } frame)
         {
+            if (frame.Mode != EditMode.Edit)
+            {
+                return CallResult.Fail(Failure.NotModelled("NotModelled.QueryRecordsetEditCollectPut", "Collect put during AddNew on a SELECT recordset (not recorded)"));
+            }
             if (!_isSingleTableRowSelect
                 || Cursor.Columns[i] is not { Origin: ColumnOrigin.BaseColumn, SourceColumn: { SourceIndex: 0 } sc })
             {
@@ -125,15 +133,15 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
             }
             NativeVariant incoming = ByRefValues.Dereference(Args.Cell(value));
             EditOutcome outcome = frame.Assign(sc.Column, incoming, ExtendedDateTimeWriteMode.SqlUpdateOrDynaset);
-            if (outcome.Error is { Number: MutationError.ExtendedDateTimeInvalid })
+            if (!outcome.Succeeded)
             {
-                return FieldObject.PublishExtendedDateTimeInvalid(Engine);
+                return CallResult.Fail(Failure.NotModelled(
+                    "NotModelled.QueryRecordsetEditCollectPutFailure",
+                    $"Collect put failure during Edit on a SELECT recordset ({outcome.Error?.Number.ToString() ?? outcome.Detail ?? outcome.Open.ToString()}; not recorded)"));
             }
-            return EditPublication.Of(outcome);
+            return CallResult.Nothing;
         }
-        return RecordsetType == 2
-            ? CallResult.Fail(Failure.Dao(3020, "DAO.Field", "Update or CancelUpdate without AddNew or Edit."))
-            : CallResult.Fail(Failure.NotModelled("NotModelled.QueryRecordsetEdit", $"Collect put on a type {RecordsetType} query recordset (not recorded)"));
+        return CallResult.Fail(Failure.Dao(3020, "DAO.Field", "Update or CancelUpdate without AddNew or Edit."));
     }
 
     private SelectFieldsObject? _fields;
@@ -2218,9 +2226,9 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
                 "Recordset.Requery with a NewQueryDef argument on a SELECT recordset (not recorded)"));
         }
         // r-def-cursor-dao/field-value-trio-other-writer (call 34): Requery on a writable single-table ACCDB SELECT
-        // dynaset without ORDER BY inside depth-1 BeginTrans with a pending edit (after 3197) discards the edit buffer
+        // dynaset without ORDER BY inside depth-1 BeginTrans with a pending Edit (after 3197) discards the edit buffer
         // and re-reads the current row.
-        bool allowNoOrderByDynasetAfterEdit = !IsMdb && !Database.ReadOnly && RecordsetType == 2 && _isSingleTableRowSelect && _openLevels.Length == 1 && HasPendingEdit;
+        bool allowNoOrderByDynasetAfterEdit = !IsMdb && !Database.ReadOnly && RecordsetType == 2 && _isSingleTableRowSelect && !_hasOrderBy && _openLevels.Length == 1 && _frame is { Mode: EditMode.Edit };
         if (_appendOnly
             || (IsMdb && !(Database.ReadOnlyFirst && Database.ReadOnly && RecordsetType == 2 && _openLevels.Length == 0))
             || RecordsetType is not (2 or 4)
@@ -2234,13 +2242,9 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
                 "NotModelled.QueryRecordsetRequery",
                 "Requery on this SELECT recordset shape, cursor type, format or transaction depth is not recorded (CUR-POP)"));
         }
-        if (HasPendingEdit)
+        if (HasPendingEdit && !allowNoOrderByDynasetAfterEdit)
         {
-            if (!allowNoOrderByDynasetAfterEdit)
-            {
-                return EditPending("Requery")!.Value;
-            }
-            _frame?.Discard();
+            return EditPending("Requery")!.Value;
         }
         SelectCursor? next = SelectRoute.OpenCursor(
             Database, Plan, RecordsetType, _isSingleTableRowSelect, _hasOrderBy,
@@ -2261,6 +2265,11 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
             return CallResult.Fail(Failure.NotModelled(
                 "NotModelled.QueryRecordsetRequeryFailure",
                 $"Recordset.Requery failed with ACE {failure.Number} ({failure.Message}); error Source and post-failure cursor state are not recorded"));
+        }
+        if (allowNoOrderByDynasetAfterEdit)
+        {
+            _frame?.Discard();
+            _editReader?.Position(null);
         }
         SelectCursor previousCursor = Cursor;
         PrivateOverlay? previousSnapshotOverlay = _snapshotOverlay;
@@ -4325,9 +4334,19 @@ internal sealed unsafe class SelectFieldObject : DaoObject
         if (recordset.Cursor.Columns[ordinal] is { Origin: ColumnOrigin.BaseColumn, SourceColumn: { } sc }
             && recordset.FrameForSourceIfEditing(sc.SourceIndex) is { } frame)
         {
-            if (fromCollect && !(recordset.IsSingleTableRowSelect && sc.SourceIndex == 0))
+            if (fromCollect)
             {
-                return CallResult.Fail(Failure.NotModelled("NotModelled.CollectDuringEdit", "Recordset.Collect while an edit is pending on a joined SELECT recordset (not recorded)"));
+                if (!(recordset.IsSingleTableRowSelect && sc.SourceIndex == 0 && frame.Mode == EditMode.Edit))
+                {
+                    return CallResult.Fail(Failure.NotModelled("NotModelled.CollectDuringEdit", "Recordset.Collect while an edit is pending outside single-table Edit on a SELECT recordset (not recorded)"));
+                }
+                FieldResult buffered = frame.Read(sc.Column);
+                if (!buffered.Succeeded
+                    || (sc.Column.TypeCode == NativeTypes.Numeric && sc.Column.CalculatedResultType is null && sc.Column.NumericPrecision == 38 && buffered.Value.Kind != NativeKind.Null))
+                {
+                    return CallResult.Fail(Failure.NotModelled("NotModelled.CollectDuringEditFailure", $"Recordset.Collect read failure during Edit on column {sc.Column.Name} (not recorded)"));
+                }
+                return FieldObject.Published(buffered, sc.Column);
             }
             return FieldObject.Published(frame.Read(sc.Column), sc.Column);
         }

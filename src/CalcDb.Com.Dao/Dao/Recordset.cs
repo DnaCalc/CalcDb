@@ -195,6 +195,7 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
     private readonly int _options;
     private readonly bool _readOnlyByLockEdit;
     private bool _pessimistic;
+    private bool _lockEditsChangedDuringEdit;
     private readonly ExplicitFrame[] _openLevels;
     private EditFrame? _frame;
     private bool _staleEditModeAfterCloneCloseAbort;
@@ -942,6 +943,7 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
             return unpublished;
         }
         RecordMoveAfterEdit("Find");
+        _lockEditsChangedDuringEdit = false;
         _frame?.Discard(); // FindFirst and its siblings discard a pending edit (CUR-EDIT)
         _staleEditModeAfterCloneCloseAbort = false;
         FindResult result = criteria is null ? cursor.CriteriaFailed(direction) : cursor.Find(direction, criteria);
@@ -1010,6 +1012,7 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         {
             return CallResult.Fail(Failure.NotModelled("NotModelled.CloneRequeryMove", $"{member} on a clone after the clone called Requery (not recorded)"));
         }
+        r._lockEditsChangedDuringEdit = false;
         r._frame?.Discard();
         r._staleEditModeAfterCloneCloseAbort = false;
         if (r.UnpublishedRead(member) is { } unpublished)
@@ -1108,9 +1111,17 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         {
             return Fail(3251, DaoErrors.NotSupportedForType);
         }
+        if (_frame is { Mode: EditMode.AddNew })
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.Edit.LockEditsDuringAddNew", "LockEdits put during AddNew (not recorded)"));
+        }
         if (Args.Bool(value, omitted: true) is not bool pessimistic)
         {
             return CallResult.Fail(Failure.NotImplemented("LockEdits put of a value that is not Boolean"));
+        }
+        if (_frame is { Mode: EditMode.Edit } && pessimistic != _pessimistic)
+        {
+            _lockEditsChangedDuringEdit = true;
         }
         _pessimistic = pessimistic;
         if (_frame is { } frame)
@@ -1208,8 +1219,9 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
     /// row read (EOF when the rows ran out, r-cursor-1b/getrows-beyond-eof: GetRows(21) of 20 rows returns 20). NumRows
     /// omitted or Missing is 1; it converts as a Long ("3", 2.5 as 2, I2), 0, -1, True and Empty are 3001, Null and "abc"
     /// 3421, all from DAO.Recordset without an IErrorInfo (getrows-count-arguments). At EOF, or on an empty recordset, 3021.
-    /// A pending Edit or AddNew gives the first row from its buffer and is discarded (getrows-edit-buffer). A current row another call deleted gives ACE's degenerate
-    /// array, which is named (its shape is not identified beyond one record).
+    /// A pending Edit or AddNew gives the first row from its buffer and is discarded (getrows-edit-buffer). On table-type (1)
+    /// and dynaset (2) cursors, GetRows starting on a deleted row stops without advancing and returns the degenerate
+    /// [0+0, 0+colCount] array (r-q2-cursor-dao/bulk-getrows-cursor-on-deleted-row).
     /// </summary>
     private CallResult GetRows(nint countArg)
     {
@@ -1283,6 +1295,12 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
                         }
                         if (failure.Number == 3167)
                         {
+                            if (RecordsetType is not (1 or 2))
+                            {
+                                return CallResult.Fail(Failure.NotModelled(
+                                    "NotModelled.GetRowsDeletedRowType",
+                                    $"GetRows on a deleted row of a type {RecordsetType} table recordset (only table-type 1 and dynaset 2 are recorded in r-q2-cursor-dao/bulk-getrows-cursor-on-deleted-row)"));
+                            }
                             if (rows > 0)
                             {
                                 return CallResult.Fail(Failure.NotModelled(
@@ -1308,6 +1326,7 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
                 {
                     break;
                 }
+                _lockEditsChangedDuringEdit = false;
                 _frame?.Discard(); // the move discards the edit (EditMode 0 after, CancelUpdate 3020)
                 rows++;
                 if (Cursor.MoveNext() is not (MoveOutcome.Moved or MoveOutcome.ReachedBoundary))
@@ -1432,6 +1451,10 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         }
         int type = Args.Int32(typeArg, omitted: 1) ?? 1;
         bool force = Args.Bool(forceArg, omitted: false) ?? false;
+        if (frame.Mode == EditMode.Edit && _lockEditsChangedDuringEdit)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.Edit.UpdateAfterLockEditsChange", "Update after changing LockEdits during a pending Edit (not recorded; r-def-cursor-dao/lockedits-put-after-open ends with CancelUpdate)"));
+        }
         if (frame.Updatable && frame.Mode != EditMode.None && UnpublishedRead("Update", frame.Table.Semantics) is { } unpublished)
         {
             return unpublished;
@@ -1916,6 +1939,7 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
     private CallResult CancelUpdate(nint typeArg)
     {
         _staleEditModeAfterCloneCloseAbort = false;
+        _lockEditsChangedDuringEdit = false;
         if (Args.Int32(typeArg, omitted: 1) is not 1)
         {
             return CallResult.Fail(Failure.NotModelled("NotModelled.Edit.CancelUpdateType", "CancelUpdate with an UpdateType other than dbUpdateRegular (batch updates are not recorded)"));
