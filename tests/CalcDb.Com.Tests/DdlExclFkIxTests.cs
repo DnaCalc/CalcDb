@@ -66,12 +66,13 @@ public sealed unsafe class DdlExclFkIxTests
                 Assert.Null(Call(cnExcl, "Close").Failure);
                 Release(cnExcl);
 
-                // 2. ADO ALTER TABLE ADD COLUMN without DEFAULT (nullable TEXT/LONG/MEMO + NOT NULL) & r-ado-1b/rs-source-kinds adCmdStoredProc 3732
+                // 2. ADO ALTER TABLE ADD COLUMN without DEFAULT (nullable TEXT/LONG/MEMO) & r-ado-1b/rs-source-kinds adCmdStoredProc 3732
                 nint cn = OpenAceConnection(dbPath);
-                Assert.Null(Call(cn, "Execute", "ALTER TABLE T ADD COLUMN X TEXT(20)", Missing, 129).Failure);
-                Assert.Null(Call(cn, "Execute", "INSERT INTO T (ID, A, B, D) VALUES (1, 10, 'b1', 1)", Missing, 129).Failure);
-                Assert.Null(Call(cn, "Execute", "ALTER TABLE T ADD COLUMN Z LONG", Missing, 129).Failure);
-                Assert.Null(Call(cn, "Execute", "ALTER TABLE T ADD COLUMN M2 MEMO", Missing, 129).Failure);
+                Assert.Null(Call(cn, "Execute", "CREATE TABLE TP (ID LONG CONSTRAINT PK_TP PRIMARY KEY, N LONG)", Missing, 129).Failure);
+                Assert.Null(Call(cn, "Execute", "INSERT INTO TP (ID, N) VALUES (1, 10)", Missing, 129).Failure);
+                Assert.Null(Call(cn, "Execute", "ALTER TABLE TP ADD COLUMN X TEXT(20)", Missing, 129).Failure);
+                Assert.Null(Call(cn, "Execute", "ALTER TABLE TP ADD COLUMN Z LONG", Missing, 129).Failure);
+                Assert.Null(Call(cn, "Execute", "ALTER TABLE TP ADD COLUMN M2 MEMO", Missing, 129).Failure);
 
                 // evidence/r-ado-1b/rs-source-kinds call 190: Recordset.Open("SELECT ID FROM T", cn, 1, 1, 4 /* adCmdStoredProc */)
                 // must fail 0x80040E14 / helpContext 5003732 ("Expected query name after EXECUTE.").
