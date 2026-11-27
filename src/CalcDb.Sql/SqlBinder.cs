@@ -1395,7 +1395,7 @@ public sealed class BoundSelect : IDisposable
             {
                 sources[0].ReferencedColumns![colIndex] = true;
                 bool isBool = col!.FieldType == 1 || col.Program.Type == StaticType.Boolean;
-                return new SlotBinding(DerivedSlot0 + colIndex, isBool ? VarType.Bool : DeclaredVarTypeOfFieldType(col.FieldType), isBool ? StaticType.Boolean : StaticType.Value, OperandOrigin.Derived, col.FieldType == 26);
+                return new SlotBinding(DerivedSlot0 + colIndex, isBool ? VarType.Bool : DeclaredVarTypeOfFieldType(col.FieldType), isBool ? StaticType.Boolean : StaticType.Value, OperandOrigin.Derived, col.FieldType == 26, IsGuid: col.FieldType == 15);
             }
             if (outerChain is not null)
             {
@@ -1933,6 +1933,10 @@ public sealed class BoundSelect : IDisposable
                 if (c.Program.BareField is { } g && g.Column.TypeCode is NativeTypes.Ole or NativeTypes.Binary)
                 {
                     return Open("NotModelled.DistinctLongBinary", "DISTINCT over an OLE or Binary field (3114, its text not read)");
+                }
+                if (c.Program.BareField is { } guidField && guidField.Column.TypeCode == NativeTypes.Guid)
+                {
+                    return Open("NotModelled.DistinctGuid", "DISTINCT over a GUID field");
                 }
             }
             foreach (OrderItem o in syntax.OrderBy)
@@ -2724,12 +2728,12 @@ public sealed class BoundSelect : IDisposable
             _ => 100 + c.TypeCode,
         };
 
-        private SqlFailure? Program(Fragment fragment, ExpressionSchema scope, out BoundExpression? program, bool allowBareBinary = false) =>
-            Program(fragment.Syntax.Root!, fragment, scope, out program, allowBareBinary);
+        private SqlFailure? Program(Fragment fragment, ExpressionSchema scope, out BoundExpression? program, bool allowBareBinary = false, bool allowBareGuid = false) =>
+            Program(fragment.Syntax.Root!, fragment, scope, out program, allowBareBinary, allowBareGuid);
 
-        private SqlFailure? Program(SyntaxNode node, Fragment fragment, ExpressionSchema scope, out BoundExpression? program, bool allowBareBinary = false)
+        private SqlFailure? Program(SyntaxNode node, Fragment fragment, ExpressionSchema scope, out BoundExpression? program, bool allowBareBinary = false, bool allowBareGuid = false)
         {
-            program = BoundExpression.Bind(node, scope, _context, allowBareBinary, out ExpressionFailure? failure);
+            program = BoundExpression.Bind(node, scope, _context, allowBareBinary, out ExpressionFailure? failure, allowBareGuid);
             if (failure is null)
             {
                 return null;
@@ -2752,7 +2756,7 @@ public sealed class BoundSelect : IDisposable
                     }
                     continue;
                 }
-                if (Program(item.Expression!, _scope, out BoundExpression? program, allowBareBinary: true) is { } f)
+                if (Program(item.Expression!, _scope, out BoundExpression? program, allowBareBinary: true, allowBareGuid: true) is { } f)
                 {
                     return f;
                 }
@@ -4111,7 +4115,7 @@ public sealed class BoundSelect : IDisposable
                 foreach (ColumnDescriptor c in s.Table.Columns)
                 {
                     var schema = new FixedField(new ColumnBinding(s.Index, c));
-                    BoundExpression program = BoundExpression.Bind(new SyntaxNode { Kind = SyntaxKind.Name, Text = c.Name }, schema, _context, allowBareBinary: true, out ExpressionFailure? failure)!;
+                    BoundExpression program = BoundExpression.Bind(new SyntaxNode { Kind = SyntaxKind.Name, Text = c.Name }, schema, _context, allowBareBinary: true, out ExpressionFailure? failure, allowBareGuid: true)!;
                     if (failure is not null)
                     {
                         return SqlFailure.Of(failure, SqlPhase.Bind, syntax.Source, item.Offset, item.Offset + 1);
@@ -4748,6 +4752,18 @@ public sealed class BoundSelect : IDisposable
             }
             // r-sql-13b/memo-compare-scope #612, #629: Memo/OLE column in non-EXISTS subquery fails 3342.
             return (null, ExpressionFailure.Ace(ExpressionPhase.Bind, 3342, $"Invalid Memo, OLE, or Hyperlink Object in subquery '{colName}'.") with { Site = node.Offset });
+        }
+        if (kind != SubqueryKind.Exists
+            && (subPlan.Columns[0].FieldType == 15
+                || subPlan.Columns[0].SourceColumn?.Column.TypeCode == NativeTypes.Guid))
+        {
+            string colName = subPlan.Columns[0].Name;
+            subPlan.Dispose();
+            foreach (OuterBinding ob in outerBindings)
+            {
+                ob.Expression.Dispose();
+            }
+            return (null, ExpressionFailure.Open(ExpressionPhase.Bind, "NotModelled.FieldType", $"GUID field '{colName}' in a subquery") with { Site = node.Offset });
         }
         if (kind == SubqueryKind.Exists && outerBindings.Count > 0 && subPlan.Top is not null)
         {

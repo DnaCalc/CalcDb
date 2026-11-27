@@ -703,6 +703,7 @@ public static unsafe class ActionExecutor
         }
 
         var sourceRows = new List<NativeVariant[]>();
+        SqlFailure? lateReadFailure = null;
         try
         {
             using (SelectCursor? source = SelectCursor.Open(plan.SourceSelect, database, ResultKind.Snapshot, nullableParams, out SqlFailure? selectFail))
@@ -715,6 +716,7 @@ public static unsafe class ActionExecutor
                 for (MoveOutcome move = source.MoveFirst(); move == MoveOutcome.Moved; move = source.MoveNext())
                 {
                     var row = new NativeVariant[width];
+                    bool readFailed = false;
                     for (int c = 0; c < width; c++)
                     {
                         if (!source.Read(c, out NativeVariant v, out SqlFailure? readFail))
@@ -735,15 +737,24 @@ public static unsafe class ActionExecutor
                             }
                             if (sourceRows.Count > 0)
                             {
-                                return ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.InsertSelectLateExpressionFailure", $"INSERT SELECT expression error after earlier source rows: {mapped}"));
+                                // W-07/actions (56cs, evidence/r-q18-statements/ins-div0-fail): stream the prefix rows
+                                // before the failing row into the target so rollback records the rows and AutoNumber
+                                // counters reached before the late expression failure.
+                                lateReadFailure = mapped;
+                                readFailed = true;
+                                break;
                             }
                             return ActionOutcome.Fail(mapped);
                         }
                         row[c] = SelectValues.Copy(v);
                     }
+                    if (readFailed)
+                    {
+                        break;
+                    }
                     sourceRows.Add(row);
                 }
-                if (source.FetchFailure is { } fetchFail)
+                if (lateReadFailure is null && source.FetchFailure is { } fetchFail)
                 {
                     return ActionOutcome.Fail(fetchFail.Number == 3167
                         ? SqlFailure.Open(SqlPhase.Execute, "NotModelled.ActionDeletedRecord", "deleted row encountered while scanning INSERT SELECT source (not recorded)")
@@ -764,7 +775,7 @@ public static unsafe class ActionExecutor
             if (editContext!.Semantics.HasCheckConstraints)
             {
                 if (editContext.Semantics.AutoNumber is { } autoCol
-                    && (!failOnError || sourceRows.Count > 1 || plan.InsertColumns.Any(c => c.Ordinal == autoCol.Ordinal)))
+                    && (!failOnError || sourceRows.Count > 1 || lateReadFailure is not null || plan.InsertColumns.Any(c => c.Ordinal == autoCol.Ordinal)))
                 {
                     cursor!.Dispose();
                     string names = FormatCheckConstraintNames(editContext.Semantics);
@@ -773,7 +784,7 @@ public static unsafe class ActionExecutor
                         "NotModelled.Edit.Rule",
                         $"CHECK constraint {names} on {editContext.Semantics.TableName}: INSERT ... SELECT without dbFailOnError, with multiple rows, or with explicit AutoNumber assignment on '{autoCol.Name}' is not recorded"));
                 }
-                if ((failOnError || errorSource == ActionErrorSource.Ado) && sourceRows.Count > 1)
+                if ((failOnError || errorSource == ActionErrorSource.Ado) && (sourceRows.Count > 1 || lateReadFailure is not null))
                 {
                     // r-q31-sql-check-2/multi-ins-dao-fail, multi-ins-ado-exec: multi-row INSERT ... SELECT with
                     // dbFailOnError or through ADO on a CHECK table is recorded only for an empty ACCDB table with no
@@ -802,7 +813,17 @@ public static unsafe class ActionExecutor
             // Multi-row INSERT ... SELECT with dbFailOnError rolls back all rows on failure (RecordsAffected 0).
             bool externalDepthZero = database.Workspace.Depth == 0;
             bool explicitAutoNumber = plan.InsertColumns.Any(c => c.IsAutoNumber);
-            bool wrapStmtTxn = failOnError && sourceRows.Count > 1;
+            if (lateReadFailure is not null
+                && !(failOnError
+                    && lateReadFailure.Number == 11
+                    && externalDepthZero
+                    && !explicitAutoNumber
+                    && editContext!.Semantics.AutoNumber is not null))
+            {
+                cursor!.Dispose();
+                return ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.InsertSelectLateExpressionFailure", $"INSERT SELECT expression error after earlier source rows: {lateReadFailure}"));
+            }
+            bool wrapStmtTxn = failOnError && (sourceRows.Count > 1 || lateReadFailure is not null);
             if (wrapStmtTxn && database.Workspace.Depth >= TransactionCoordinator.MaxWriteDepth)
             {
                 cursor!.Dispose();
@@ -861,22 +882,9 @@ public static unsafe class ActionExecutor
                                     if (convSide.Error is { } sideErr)
                                     {
                                         SqlFailure sideFail = SqlFailure.Ace(SqlPhase.Execute, sideErr.Number, sideErr.Describe());
-                                        if (txnStarted)
-                                        {
-                                            if (CallerAcceptsFailure(sideFail, acceptsFailure))
-                                            {
-                                                database.Workspace.Rollback();
-                                            }
-                                            txnStarted = false;
-                                        }
-                                        return ActionOutcome.Fail(sideFail);
+                                        return FailWithRollback(database.Workspace, ref txnStarted, sideFail, acceptsFailure);
                                     }
-                                    if (txnStarted)
-                                    {
-                                        database.Workspace.Rollback();
-                                        txnStarted = false;
-                                    }
-                                    return ActionOutcome.Fail(convFail);
+                                    return FailWithRollback(database.Workspace, ref txnStarted, convFail, acceptsFailure);
                                 }
                                 SqlFailure finalFail = convFail.IsNotModelled
                                     ? convFail
@@ -885,50 +893,60 @@ public static unsafe class ActionExecutor
                                         : r > 0
                                             ? SqlFailure.Open(SqlPhase.Execute, "NotModelled.InsertSelectLateExpressionFailure", $"INSERT SELECT conversion error on row {r + 1}: {convFail}")
                                             : convFail;
-                                if (txnStarted)
-                                {
-                                    if (CallerAcceptsFailure(finalFail, acceptsFailure))
-                                    {
-                                        database.Workspace.Rollback();
-                                    }
-                                    txnStarted = false;
-                                }
-                                return ActionOutcome.Fail(finalFail);
+                                return FailWithRollback(database.Workspace, ref txnStarted, finalFail, acceptsFailure);
                             }
                         }
 
                         if (CheckExplicitAutoNumberIncrement(plan.InsertColumns, editContext!) is { } reseedOpen)
                         {
                             ClearAll(converted);
-                            if (txnStarted)
-                            {
-                                if (CallerAcceptsFailure(reseedOpen, acceptsFailure))
-                                {
-                                    database.Workspace.Rollback();
-                                }
-                                txnStarted = false;
-                            }
-                            return ActionOutcome.Fail(reseedOpen);
+                            return FailWithRollback(database.Workspace, ref txnStarted, reseedOpen, acceptsFailure);
                         }
 
                         SqlFailure? rowFail = InsertOneRow(frame, plan.InsertColumns, converted, failOnError, out bool inserted);
                         ClearAll(converted);
                         if (rowFail is not null)
                         {
-                            if (txnStarted)
-                            {
-                                if (CallerAcceptsFailure(rowFail, acceptsFailure))
-                                {
-                                    database.Workspace.Rollback();
-                                }
-                                txnStarted = false;
-                            }
-                            return ActionOutcome.Fail(rowFail);
+                            return FailWithRollback(database.Workspace, ref txnStarted, rowFail, acceptsFailure);
                         }
                         if (inserted)
                         {
                             affected++;
                         }
+                    }
+
+                    if (lateReadFailure is not null)
+                    {
+                        if (failOnError
+                            && lateReadFailure.Number == 11
+                            && externalDepthZero
+                            && !explicitAutoNumber
+                            && editContext!.Semantics.AutoNumber is not null)
+                        {
+                            if (!CallerAcceptsFailure(lateReadFailure, acceptsFailure))
+                            {
+                                txnStarted = false;
+                                return ActionOutcome.Fail(lateReadFailure);
+                            }
+                            // R-TXN-1 TXN-STMT, R-CRASH-1 CRASH-ORDER (56cs, evidence/r-q18-statements/ins-div0-fail):
+                            // after inserting the rows before the failing expression, a late division-by-zero (11)
+                            // on an autocommit generated-AutoNumber INSERT ... SELECT consumes that row's ticket and
+                            // rolls back the statement (+3 page-0 commits, counters 2/3/2/2).
+                            UpdateOutcome lateSide = frame.RecordStatementConversionFailure(lateReadFailure.Number);
+                            if (lateSide.Open != MutationOpen.None)
+                            {
+                                txnStarted = false;
+                                return ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.Edit." + lateSide.Open, lateSide.Detail ?? lateSide.Open.ToString()));
+                            }
+                            if (lateSide.Error is { } sideErr)
+                            {
+                                SqlFailure sideFail = SqlFailure.Ace(SqlPhase.Execute, sideErr.Number, sideErr.Describe());
+                                return FailWithRollback(database.Workspace, ref txnStarted, sideFail, acceptsFailure);
+                            }
+                            return FailWithRollback(database.Workspace, ref txnStarted, lateReadFailure, acceptsFailure);
+                        }
+                        SqlFailure openLate = SqlFailure.Open(SqlPhase.Execute, "NotModelled.InsertSelectLateExpressionFailure", $"INSERT SELECT expression error after earlier source rows: {lateReadFailure}");
+                        return FailWithRollback(database.Workspace, ref txnStarted, openLate, acceptsFailure);
                     }
 
                     if (txnStarted)
@@ -949,7 +967,7 @@ public static unsafe class ActionExecutor
                     ClearAll(converted);
                     if (txnStarted)
                     {
-                        database.Workspace.Rollback();
+                        _ = database.Workspace.Rollback();
                     }
                 }
             }
@@ -1240,41 +1258,17 @@ public static unsafe class ActionExecutor
                             if (failOnError)
                             {
                                 SqlFailure conflictFail = SqlFailure.Ace(SqlPhase.Execute, MutationError.WriteConflict, new MutationError(MutationError.WriteConflict, MutationErrorSource.Database).Describe());
-                                if (txnStarted)
-                                {
-                                    if (CallerAcceptsFailure(conflictFail, acceptsFailure))
-                                    {
-                                        database.Workspace.Rollback();
-                                    }
-                                    txnStarted = false;
-                                }
-                                return ActionOutcome.Fail(conflictFail);
+                                return FailWithRollback(database.Workspace, ref txnStarted, conflictFail, acceptsFailure);
                             }
                             continue;
                         }
                         SqlFailure bmSqlFail = SqlFailure.Open(SqlPhase.Execute, "NotModelled.Storage", $"DELETE bookmark failed on {rowId}: {bmFail}");
-                        if (txnStarted)
-                        {
-                            if (CallerAcceptsFailure(bmSqlFail, acceptsFailure))
-                            {
-                                database.Workspace.Rollback();
-                            }
-                            txnStarted = false;
-                        }
-                        return ActionOutcome.Fail(bmSqlFail);
+                        return FailWithRollback(database.Workspace, ref txnStarted, bmSqlFail, acceptsFailure);
                     }
 
                     if (CommitRowChange(frame, frame.Delete, failOnError, out bool deleted) is { } delFail)
                     {
-                        if (txnStarted)
-                        {
-                            if (CallerAcceptsFailure(delFail, acceptsFailure))
-                            {
-                                database.Workspace.Rollback();
-                            }
-                            txnStarted = false;
-                        }
-                        return ActionOutcome.Fail(delFail);
+                        return FailWithRollback(database.Workspace, ref txnStarted, delFail, acceptsFailure);
                     }
                     if (!deleted)
                     {
@@ -1298,7 +1292,7 @@ public static unsafe class ActionExecutor
             {
                 if (txnStarted)
                 {
-                    database.Workspace.Rollback();
+                    _ = database.Workspace.Rollback();
                 }
             }
         }
@@ -1514,7 +1508,7 @@ public static unsafe class ActionExecutor
     /// <list type="bullet">
     /// <item><b>Byte</b> (<c>r-fix-cursor-dao/ovf-insert-byte-failonerror</c>, <c>r-q-wire/int-sql-literal-byte</c>):
     /// banker's-rounded via <c>CLng</c>, then wrapped mod 256 (<c>300 → 44</c>, <c>256 → 0</c>, <c>-1 → 255</c>, <c>255.5 → 0</c>).</item>
-    /// <item><b>Integer</b> (<c>r-q-wire/int-sql-literal-integer</c>): banker's-rounded via <c>CInt</c>; overflow fails <b>6</b> (<c>Overflow</c>).</item>
+    /// <item><b>Integer</b> (<c>r-q-wire/int-sql-literal-integer</c>, <c>r-q53-conv-abspos-subq-loc/conv-sql-ins-upd-accdb</c>): banker's-rounded via <c>CInt</c>; <c>VT_I4</c> overflow fails <b>6</b> (<c>Overflow</c>), <c>VT_DECIMAL</c> overflow (<c>32767.5</c>) fails <b>3464</b>.</item>
     /// <item><b>Long</b> (<c>r-q-wire/int-sql-literal-long</c>, <c>r-def-expr-sql/sql-insert-values-forms</c>, <c>r-sql-2-3/act-fail-conversion</c>):
     /// banker's-rounded via <c>CLng</c>; overflow or non-numeric text fails <b>3464</b> (<c>Data type mismatch in criteria expression.</c>).</item>
     /// <item><b>Text</b> (<c>r-def-expr-sql/sql-insert-values-forms</c>, <c>r-oledb-odbc/error-record-channels</c>):
@@ -1539,12 +1533,11 @@ public static unsafe class ActionExecutor
         VarType vt = incoming.Type;
         if (vt == VarType.Null)
         {
-            if (column.TypeCode == NativeTypes.Boolean)
-            {
-                failure = SqlFailure.Open(SqlPhase.Execute, "NotModelled.NullIntoBoolean", $"Null into Yes/No column '{column.Name}'");
-                return false;
-            }
-            converted = new NativeVariant { Vt = (ushort)VarType.Null };
+            // evidence/r-q53-conv-abspos-subq-loc/conv-sql-ins-upd-accdb, conv-sql-ins-upd-mdb (call 39):
+            // Null into Yes/No stores False (VT_BOOL 0).
+            converted = column.TypeCode == NativeTypes.Boolean
+                ? new NativeVariant { Vt = (ushort)VarType.Bool, Int64 = 0 }
+                : new NativeVariant { Vt = (ushort)VarType.Null };
             return true;
         }
         if (allowExtendedDateTimeBytes && column.TypeCode == NativeTypes.ExtendedDateTime && vt == (VarType.Array | VarType.UI1) && incoming.Pointer != 0)
@@ -1592,13 +1585,16 @@ public static unsafe class ActionExecutor
             }
             case NativeTypes.Integer:
             {
+                // evidence/r-q-wire/int-sql-literal-integer: out-of-range VT_I4 literals (32768, -32769) fail 6 (Overflow);
+                // evidence/r-q53-conv-abspos-subq-loc/conv-sql-ins-upd-accdb, conv-sql-ins-upd-mdb (calls 34, 79, 84):
+                // half-to-even rounding ('0.5' -> 0), bad text ('abc') and VT_DECIMAL overflow (32767.5) fail 3464.
                 ScalarOutcome r = ScalarKernel.Apply(ScalarDescriptor.Unary(ScalarOperation.CInt, 0, OperandContract.Expression), incoming, context);
                 if (r.Succeeded)
                 {
                     converted = r.Value;
                     return true;
                 }
-                failure = MapConversionKernelFailure(r, column, overflowIs3464: false, overflowIs6: true);
+                failure = MapConversionKernelFailure(r, column, overflowIs3464: vt == VarType.Decimal, overflowIs6: vt == VarType.I4);
                 return false;
             }
             case NativeTypes.Long:
@@ -1640,13 +1636,15 @@ public static unsafe class ActionExecutor
             }
             case NativeTypes.Single:
             {
+                // evidence/r-q53-conv-abspos-subq-loc/conv-sql-ins-upd-accdb, conv-sql-ins-upd-mdb (calls 99, 104):
+                // bad text ('abc') fails 3464; Single overflow (1e39) fails 6 (Overflow).
                 ScalarOutcome r = ScalarKernel.Apply(ScalarDescriptor.Unary(ScalarOperation.CSng, 0, OperandContract.Expression), incoming, context);
                 if (r.Succeeded)
                 {
                     converted = r.Value;
                     return true;
                 }
-                failure = MapConversionKernelFailure(r, column, overflowIs3464: false, overflowIs6: false);
+                failure = MapConversionKernelFailure(r, column, overflowIs3464: false, overflowIs6: true);
                 return false;
             }
             case NativeTypes.Double:
@@ -1684,6 +1682,17 @@ public static unsafe class ActionExecutor
             }
             case NativeTypes.Boolean:
             {
+                if (vt == VarType.Bstr)
+                {
+                    ReadOnlySpan<char> bstr = Bstrs.Chars(incoming.Pointer);
+                    if (bstr.Equals("True", StringComparison.OrdinalIgnoreCase) || bstr.Equals("False", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // evidence/r-q53-conv-abspos-subq-loc/conv-sql-ins-upd-accdb, conv-sql-ins-upd-mdb (calls 24, 29):
+                        // SQL INSERT/UPDATE rejects boolean-word text ('True', 'False') into Yes/No (BIT) with 3464.
+                        failure = SqlFailure.Ace(SqlPhase.Execute, 3464, SqlMessages.DataTypeMismatch);
+                        return false;
+                    }
+                }
                 ScalarOutcome r = ScalarKernel.Apply(ScalarDescriptor.Unary(ScalarOperation.CBool, 0, OperandContract.Expression), incoming, context);
                 if (r.Succeeded)
                 {
@@ -1771,15 +1780,76 @@ public static unsafe class ActionExecutor
             }
             case NativeTypes.Numeric:
             {
-                // evidence/r-q51-codecs-props-compact/dec-desc-keys-accdb, dec-desc-keys-mdb, seek-args-decimal-accdb, seek-args-decimal-mdb:
-                // SQL INSERT of numeric literals into DECIMAL(p, s).
+                // evidence/r-q51-codecs-props-compact/dec-desc-keys-accdb, dec-desc-keys-mdb, seek-args-decimal-accdb, seek-args-decimal-mdb;
+                // evidence/r-q53-conv-abspos-subq-loc/conv-sql-ins-upd-accdb, conv-sql-ins-upd-mdb (calls 34, 129, 134),
+                // dao-draft-decimal-accdb, dao-draft-decimal-mdb (call 146: Decimal(38, 0) passthrough):
+                // SQL INSERT/UPDATE converts numeric/text values via VariantChangeTypeEx(VT_DECIMAL), truncates excess
+                // fractional digits to column.NumericScale ('12.34575' -> 12.3457), fails 3464 on bad text ('abc'),
+                // and fails 3761 when integer magnitude exceeds column.NumericPrecision ('999999999999999.0').
                 NativeVariant source = incoming;
-                if (OwnedVariant.TryChangeScalar(&source, VarType.Decimal, context.Lcid, out converted, out _))
+                if (column.NumericPrecision == 38 && column.NumericScale == 0)
                 {
-                    return true;
+                    if (OwnedVariant.TryChangeScalar(&source, VarType.Decimal, context.Lcid, out converted, out _))
+                    {
+                        return true;
+                    }
+                    failure = SqlFailure.Open(SqlPhase.Execute, "NotModelled.ActionConversion", $"converting {vt} into DECIMAL(38,0) column '{column.Name}'");
+                    return false;
                 }
-                failure = SqlFailure.Open(SqlPhase.Execute, "NotModelled.ActionConversion", $"converting {vt} into DECIMAL column '{column.Name}'");
-                return false;
+                if (column.NumericPrecision is 0 or > 28 || column.NumericScale > column.NumericPrecision)
+                {
+                    failure = SqlFailure.Open(SqlPhase.Execute, "NotModelled.ActionConversion", $"DECIMAL({column.NumericPrecision},{column.NumericScale}) column '{column.Name}'");
+                    return false;
+                }
+                if (!OwnedVariant.TryChangeScalar(&source, VarType.Decimal, context.Lcid, out NativeVariant decVar, out int hr))
+                {
+                    const int DispETypeMismatch = unchecked((int)0x80020005);
+                    if (hr == DispETypeMismatch)
+                    {
+                        failure = SqlFailure.Ace(SqlPhase.Execute, 3464, SqlMessages.DataTypeMismatch);
+                        return false;
+                    }
+                    failure = SqlFailure.Open(SqlPhase.Execute, "NotModelled.ActionConversion", $"converting {vt} into DECIMAL column '{column.Name}' (hr 0x{hr:X8})");
+                    return false;
+                }
+                DecimalValue dv = OwnedVariant.ReadDecimal(decVar);
+                UInt128 magnitude = ((UInt128)dv.High32 << 64) | dv.Low64;
+                byte scale = dv.Scale;
+                while (scale > column.NumericScale)
+                {
+                    magnitude /= 10;
+                    scale--;
+                }
+                UInt128 limit = UInt128.One;
+                for (int i = 0; i < column.NumericPrecision; i++)
+                {
+                    limit *= 10;
+                }
+                UInt128 maxBeforeScale = (limit - UInt128.One) / 10;
+                while (scale < column.NumericScale)
+                {
+                    if (magnitude > maxBeforeScale)
+                    {
+                        failure = SqlFailure.Ace(
+                            SqlPhase.Execute,
+                            MutationError.DecimalPrecisionTooSmall,
+                            new MutationError(MutationError.DecimalPrecisionTooSmall, MutationErrorSource.Database).Describe());
+                        return false;
+                    }
+                    magnitude *= 10;
+                    scale++;
+                }
+                if (magnitude >= limit)
+                {
+                    failure = SqlFailure.Ace(
+                        SqlPhase.Execute,
+                        MutationError.DecimalPrecisionTooSmall,
+                        new MutationError(MutationError.DecimalPrecisionTooSmall, MutationErrorSource.Database).Describe());
+                    return false;
+                }
+                bool negative = magnitude != 0 && dv.Negative;
+                converted = OwnedVariant.DecimalCell(new DecimalValue(scale, negative, (uint)(magnitude >> 64), (ulong)magnitude));
+                return true;
             }
             case NativeTypes.ExtendedDateTime:
             {
@@ -1908,6 +1978,28 @@ public static unsafe class ActionExecutor
         }
         failure = SqlFailure.Ace(SqlPhase.Execute, err.Number, err.Describe());
         return true;
+    }
+
+    private static ActionOutcome FailWithRollback(
+        TransactionCoordinator workspace,
+        ref bool txnStarted,
+        SqlFailure failure,
+        Func<SqlFailure, bool>? acceptsFailure)
+    {
+        if (txnStarted)
+        {
+            txnStarted = false;
+            if (CallerAcceptsFailure(failure, acceptsFailure))
+            {
+                // W-07/actions (9dnf): propagate ResolutionOutcome instead of discarding Rollback() failures.
+                ResolutionOutcome rb = workspace.Rollback();
+                if (!rb.Succeeded)
+                {
+                    return ActionOutcome.Fail(MapResolutionFailure(rb));
+                }
+            }
+        }
+        return ActionOutcome.Fail(failure);
     }
 
     private static SqlFailure MapResolutionFailure(ResolutionOutcome outcome) =>
