@@ -2348,10 +2348,11 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                     && plan.Sources.Count == 1
                     && plan.Sources[0].Subquery is null
                     && !plan.Grouped
-                    && ((where.LastFailureWasStoredBooleanComparison && plan.Order.Count > 0)
+                    && (((where.LastFailureWasStoredBooleanComparison || where.LastFailureWasBetweenTypeMismatch) && plan.Order.Count > 0)
                         || where.LastFailureWasExtendedDateTimeComparison))
                 {
-                    // r-q43-schema-lval-index/bool-cmp-origin-accdb (stored YESNO vs text on ordered SELECT) and
+                    // r-q43-schema-lval-index/bool-cmp-origin-accdb (stored YESNO vs text on ordered SELECT),
+                    // r-sql-13b/between-null-mixed-types calls 65, 75, 85, 105 (mixed-type BETWEEN on ordered SELECT), and
                     // r-q49-dt2-draftprops/dt2-select-compare-accdb, dt2-params-dao-querydef-accdb (DATETIME2 WHERE 3464):
                     // single-table non-grouped SELECT fails OpenRecordset with 3464.
                     failure = At(wf);

@@ -83,9 +83,16 @@ public sealed record SqlFailure(SqlPhase Phase, int Number, string Message, stri
                 string trimmedQuote = expr.Length > 1 ? expr[..^1] : expr;
                 return new SqlFailure(phase, 3075, $"{failure.Message[..^InExpression.Length]}{QueryExpression}{trimmedQuote}'.") { ExcerptExact = true, FromDomainFunction = failure.FromDomainFunction };
             }
+            if (failure.Message is ExpressionMessages.CommaSyntax && failure.ExactExcerpt)
+            {
+                // r-sql-13b/sub-in-list-null-forms call 105 ((a, g) IN ((1, 'x'))) and sub-quantified-operators call 185 (a = ANY (1, 2)):
+                // when the caller scanned the full clause expression span, quote the full trimmed span with ExcerptExact = true.
+                string fullQuote = source[start..Math.Max(start, Math.Min(end, source.Length))].TrimEnd();
+                return new SqlFailure(phase, 3075, $"{failure.Message[..^InExpression.Length]}{QueryExpression}{fullQuote}'.") { ExcerptExact = true, FromDomainFunction = failure.FromDomainFunction };
+            }
             int stop = failure.Site > start && failure.Site <= source.Length ? failure.Site : end;
             string quote = source[start..Math.Max(start, stop)].TrimEnd();
-            return new SqlFailure(phase, 3075, $"{failure.Message[..^InExpression.Length]}{QueryExpression}{quote}'.") { ExcerptExact = false, FromDomainFunction = failure.FromDomainFunction };
+            return new SqlFailure(phase, 3075, $"{failure.Message[..^InExpression.Length]}{QueryExpression}{quote}'.") { ExcerptExact = failure.ExactExcerpt, FromDomainFunction = failure.FromDomainFunction };
         }
         return Ace(phase, failure.Number, failure.Message) with { FromDomainFunction = failure.FromDomainFunction };
     }

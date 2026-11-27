@@ -22,6 +22,9 @@ public sealed record ExpressionFailure(ExpressionPhase Phase, int Number, string
     /// <summary>The source offset where a parse or bind failure was detected, or -1 (the SQL layer quotes the text up to it).</summary>
     public int Site { get; init; } = -1;
 
+    /// <summary>Whether <see cref="Site"/> gives ACE's exact query-expression excerpt boundary.</summary>
+    public bool ExactExcerpt { get; init; }
+
     /// <summary>The name a failure is about (an unknown function, an unresolved name), when it has one.</summary>
     public string? Subject { get; init; }
 

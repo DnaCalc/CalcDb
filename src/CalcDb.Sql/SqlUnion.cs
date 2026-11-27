@@ -157,22 +157,46 @@ internal static class UnionTypes
 }
 
 /// <summary>The scope of a union's output (II-11 §15): its columns by the first arm's names, as slots of the union row.</summary>
-internal sealed class UnionScope(List<ResultColumn> first, UnionConversion[] conversions) : ExpressionSchema
+internal sealed class UnionScope(List<ResultColumn> first, IReadOnlyList<SourceSlot> firstSources, UnionConversion[] conversions) : ExpressionSchema
 {
     public override SlotBinding? Substitute(SyntaxNode node)
     {
-        if (node.Kind != SyntaxKind.Name)
+        if (node.Kind != SyntaxKind.Name || node.Text is not { } text)
         {
             return null;
         }
-        int i = first.FindIndex(c => string.Equals(c.Name, node.Text, StringComparison.OrdinalIgnoreCase));
+        int i = first.FindIndex(c => string.Equals(c.Name, text, StringComparison.OrdinalIgnoreCase));
+        if (i < 0)
+        {
+            int dot = text.LastIndexOf('.');
+            if (dot > 0)
+            {
+                // r-def-expr-sql/sql-nonstandard-clauses-select call 336: SELECT ID FROM Dm UNION SELECT ID FROM One ORDER BY Dm.ID succeeds.
+                // r-sql-13b/union-order-by-forms call 75: SELECT a AS v FROM JA UNION ... ORDER BY JA.a fails 3351 because 'a' is aliased to 'v'.
+                string qual = text[..dot], col = text[(dot + 1)..];
+                int srcIdx = -1;
+                for (int s = 0; s < firstSources.Count; s++)
+                {
+                    if (string.Equals(firstSources[s].ScopeName, qual, StringComparison.OrdinalIgnoreCase))
+                    {
+                        srcIdx = s;
+                        break;
+                    }
+                }
+                if (srcIdx >= 0)
+                {
+                    i = first.FindIndex(c => string.Equals(c.Name, col, StringComparison.OrdinalIgnoreCase) && c.SourceColumn?.SourceIndex == srcIdx);
+                }
+            }
+        }
         return i < 0 ? null : new SlotBinding(i, conversions[i].Target, conversions[i].DaoType == 1 ? StaticType.Boolean : StaticType.Value, OperandOrigin.Derived);
     }
 
     public override ColumnBinding? Resolve(string name, out ExpressionFailure? failure)
     {
-        // r-sql-13b/union-order-by-forms: ORDER BY may name the first arm's output columns; other names are not decided here.
-        failure = ExpressionFailure.Open(ExpressionPhase.Bind, "NotModelled.UnionOrderName", $"'{name}' is not an output column of the union's first arm");
+        // r-sql-13b/union-order-by-forms calls 15, 25, 35, 75: ORDER BY naming a field not in the first arm's output fails 3351.
+        failure = ExpressionFailure.Ace(ExpressionPhase.Bind, 3351,
+            $"The ORDER BY expression ({name}) includes fields that are not selected by the query. Only those fields requested in the first query can be included in an ORDER BY expression.");
         return null;
     }
 }

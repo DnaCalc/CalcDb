@@ -962,12 +962,13 @@ public sealed class BoundSelect : IDisposable
                 return typeFailure;
             }
         }
-        var output = new UnionScope(Arms[0].ColumnList, conversions);
+        var output = new UnionScope(Arms[0].ColumnList, Arms[0].SourceList, conversions);
         for (int i = 0; i < width; i++)
         {
             UnionConversion conversion = conversions[i];
             int? size = sizes[i];
-            BoundExpression program = BoundExpression.Bind(new SyntaxNode { Kind = SyntaxKind.Name, Text = Arms[0].ColumnList[i].Name }, output, Context, out ExpressionFailure? f)!;
+            var slotSchema = new FixedDerivedSlot(new SlotBinding(i, conversion.Target, conversion.DaoType == 1 ? StaticType.Boolean : StaticType.Value, OperandOrigin.Derived));
+            BoundExpression program = BoundExpression.Bind(new SyntaxNode { Kind = SyntaxKind.Name, Text = Arms[0].ColumnList[i].Name }, slotSchema, Context, out ExpressionFailure? f)!;
             if (f is not null)
             {
                 return SqlFailure.Of(f, SqlPhase.Bind, Source, 0, Source.Length);
@@ -985,18 +986,36 @@ public sealed class BoundSelect : IDisposable
         }
         foreach (OrderItem o in _syntax.UnionOrderBy)
         {
-            if (o.Expression.Syntax.Root is { Kind: SyntaxKind.Literal, Literal: LiteralKind.Number })
+            if (o.Expression.Syntax.Root is { Kind: SyntaxKind.Literal, Literal: LiteralKind.Number } numNode)
             {
-                return SqlFailure.Open(SqlPhase.Bind, "NotModelled.OrderByNumber", "ORDER BY a number (position or constant)");
+                if (numNode.Value.Vt == (ushort)VarType.I4)
+                {
+                    int pos = (int)numNode.Value.Int64;
+                    if (pos >= 1 && pos <= width)
+                    {
+                        // r-sql-13b/union-order-by-forms calls 45 (ORDER BY 1 DESC) and 105 (ORDER BY 2, 1):
+                        // 1-based ordinal selects slot (pos - 1) directly (safe even with duplicate output column names).
+                        UnionConversion conv = conversions[pos - 1];
+                        var posSchema = new FixedDerivedSlot(new SlotBinding(pos - 1, conv.Target, conv.DaoType == 1 ? StaticType.Boolean : StaticType.Value, OperandOrigin.Derived));
+                        BoundExpression? posKey = BoundExpression.Bind(new SyntaxNode { Kind = SyntaxKind.Name, Text = Arms[0].ColumnList[pos - 1].Name }, posSchema, Context, out ExpressionFailure? pf);
+                        if (pf is not null)
+                        {
+                            return SqlFailure.Of(pf, SqlPhase.Bind, Source, o.Expression.Start, o.Expression.End);
+                        }
+                        Order.Add(new OrderKey(posKey!, o.Descending));
+                        continue;
+                    }
+                    // r-sql-13b/union-order-by-forms call 55: ORDER BY 2 on a 1-column union fails 3070.
+                    return SqlFailure.Ace(SqlPhase.Bind, 3070, $"The Microsoft Access database engine does not recognize '{o.Expression.Text(Source).Trim()}' as a valid field name or expression.");
+                }
+                return SqlFailure.Open(SqlPhase.Bind, "NotModelled.OrderByNumber", "ORDER BY a non-integer number over a union");
             }
             if (o.Expression.Syntax.Root is not { Kind: SyntaxKind.Name })
             {
-                // r-sql-13b/union-order-by-forms: ORDER BY v + 1 over a union is 3351, quoting the expression re-rendered ("(v+1)").
-                return new SqlFailure(SqlPhase.Bind, 3351, $"The ORDER BY expression ({o.Expression.Text(Source)}) includes fields that are not selected by the query. Only those fields requested in the first query can be included in an ORDER BY expression.")
-                {
-                    ExcerptExact = false,
-                    Quote = "The ORDER BY expression (",
-                };
+                // r-sql-13b/union-order-by-forms calls 65 (v + 1 -> v+1) and 145 (IIf(v Is Null, 0, 1) -> IIf(v Is Null,0,1)):
+                // non-column ORDER BY expression over a union fails 3351 with operator/comma spaces compacted.
+                string compacted = CompactExpressionQuote(o.Expression.Text(Source).Trim());
+                return SqlFailure.Ace(SqlPhase.Bind, 3351, $"The ORDER BY expression ({compacted}) includes fields that are not selected by the query. Only those fields requested in the first query can be included in an ORDER BY expression.");
             }
             BoundExpression? key = BoundExpression.Bind(o.Expression.Syntax.Root!, output, Context, out ExpressionFailure? f);
             if (f is not null)
@@ -1342,6 +1361,8 @@ public sealed class BoundSelect : IDisposable
         /// </summary>
         public bool InWhere { get; set; }
 
+        public bool TreatAliasesAsParameters { get; set; }
+
         internal OuterScopeChain? OuterChain => outerChain;
 
         internal bool CanResolve(string name) =>
@@ -1405,7 +1426,7 @@ public sealed class BoundSelect : IDisposable
                 QueryParameter dp = parameters[declaredIdx];
                 return new SlotBinding(ParameterSlot0 + declaredIdx, dp.Declaring, dp.DaoType == 1 ? StaticType.Boolean : StaticType.Value, OperandOrigin.Parameter, dp.DaoType == 20);
             }
-            if (Column(name, out _) is not null || aliases.Contains(name))
+            if (Column(name, out _) is not null || (!TreatAliasesAsParameters && aliases.Contains(name)))
             {
                 return null;
             }
@@ -1714,54 +1735,58 @@ public sealed class BoundSelect : IDisposable
             {
                 return null;
             }
-            string quoted = CompactAggregateQuote(Item ?? name);
+            string quoted = CompactExpressionQuote(Item ?? name);
             failure = ExpressionFailure.Ace(ExpressionPhase.Bind, 3122, $"Your query does not include the specified expression '{quoted}' as part of an aggregate function.") with { Subject = name };
             return null;
         }
+    }
 
-        private static string CompactAggregateQuote(string text)
+    /// <summary>
+    /// Compacts spaces around operator and delimiter punctuation outside quotes/brackets to match ACE's re-rendered
+    /// expression excerpts in 3122, 3096, 3098, and 3351 messages (r-q53-conv-abspos-subq-loc/groupby-expr-decagg-dao-*,
+    /// r-sql-13b/group-aggregate-placement, r-sql-13b/union-order-by-forms).
+    /// </summary>
+    internal static string CompactExpressionQuote(string text)
+    {
+        var sb = new System.Text.StringBuilder(text.Length);
+        char quote = '\0';
+        for (int i = 0; i < text.Length; i++)
         {
-            // r-q53-conv-abspos-subq-loc/groupby-expr-decagg-dao-* ('Left(S,2)' for Left(S, 2)),
-            // r-sql-13b/group-aggregate-placement ('h=''x''' for h = 'x'): ACE compacts spaces around ',' and '=' outside literals.
-            var sb = new System.Text.StringBuilder(text.Length);
-            char quote = '\0';
-            for (int i = 0; i < text.Length; i++)
+            char c = text[i];
+            if (quote != '\0')
             {
-                char c = text[i];
-                if (quote != '\0')
-                {
-                    sb.Append(c);
-                    if ((quote == '[' && c == ']') || (quote != '[' && c == quote))
-                    {
-                        quote = '\0';
-                    }
-                    continue;
-                }
-                if (c is '\'' or '"' or '[')
-                {
-                    quote = c;
-                    sb.Append(c);
-                    continue;
-                }
-                if (c == ' ')
-                {
-                    char prev = sb.Length > 0 ? sb[^1] : '\0';
-                    int nextIdx = i + 1;
-                    while (nextIdx < text.Length && text[nextIdx] == ' ')
-                    {
-                        nextIdx++;
-                    }
-                    char next = nextIdx < text.Length ? text[nextIdx] : '\0';
-                    if (prev is ',' or '=' or '(' || next is ',' or '=' or ')')
-                    {
-                        i = nextIdx - 1;
-                        continue;
-                    }
-                }
                 sb.Append(c);
+                if ((quote == '[' && c == ']') || (quote != '[' && c == quote))
+                {
+                    quote = '\0';
+                }
+                continue;
             }
-            return sb.ToString();
+            if (c is '\'' or '"' or '[')
+            {
+                quote = c;
+                sb.Append(c);
+                continue;
+            }
+            if (c == ' ')
+            {
+                char prev = sb.Length > 0 ? sb[^1] : '\0';
+                int nextIdx = i + 1;
+                while (nextIdx < text.Length && text[nextIdx] == ' ')
+                {
+                    nextIdx++;
+                }
+                char next = nextIdx < text.Length ? text[nextIdx] : '\0';
+                if (prev is ',' or '=' or '<' or '>' or '+' or '-' or '*' or '/' or '('
+                    || next is ',' or '=' or '<' or '>' or '+' or '-' or '*' or '/' or ')')
+                {
+                    i = nextIdx - 1;
+                    continue;
+                }
+            }
+            sb.Append(c);
         }
+        return sb.ToString();
     }
 
     private sealed class Binder(BoundSelect bound, SelectSyntax syntax, ISqlDatabase database, bool allowRepeatedSingleSourceColumn = false, OuterScopeChain? outerChain = null, bool allowDuplicateOutputNames = false, bool allowViewExpansion = true)
@@ -1811,7 +1836,8 @@ public sealed class BoundSelect : IDisposable
             {
                 if (Walk(where.Syntax.Root!).Any(n => AggregateOf(n) is not null))
                 {
-                    return Open("NotModelled.AggregateInWhere", "an aggregate in WHERE (ACE's answer not recorded)");
+                    // r-sql-13b/group-aggregate-placement call 5: SELECT g FROM GA WHERE Sum(v) > 5 GROUP BY g -> 3096.
+                    return SqlFailure.Ace(SqlPhase.Bind, 3096, $"Cannot have aggregate function in WHERE clause ({CompactExpressionQuote(where.Text(syntax.Source).Trim())}).");
                 }
                 _scope.InWhere = true;
                 SqlFailure? wf = Program(where, _scope, out BoundExpression? w);
@@ -2766,8 +2792,9 @@ public sealed class BoundSelect : IDisposable
                 return null;
             }
             SqlFailure f = Of(failure, fragment);
-            // r-sql-13b/group-aggregate-placement: ACE quotes the expression of a 3122 re-rendered ('h='x'' for h = 'x').
-            return f.Number == 3122 ? f with { ExcerptExact = false, Quote = SqlFailure.AggregateExpression } : f;
+            // r-sql-13b/group-aggregate-placement, group-expression-forms, r-q53-conv-abspos-subq-loc/groupby-expr-decagg-dao-*:
+            // CompactExpressionQuote produces ACE's exact 3122 excerpt ('h='x'', 'v Mod 2', 'g', 'Left(S,2)').
+            return f.Number == 3122 ? f with { ExcerptExact = true, Quote = SqlFailure.AggregateExpression } : f;
         }
 
         private SqlFailure? BindPlain()
@@ -4135,9 +4162,40 @@ public sealed class BoundSelect : IDisposable
                 {
                     continue;
                 }
-                if (s.Subquery is not null)
+                if (s.Subquery is { } sub)
                 {
-                    return Open("NotModelled.Subquery", "* over a derived table");
+                    if (bound.SourceList.Count != 1)
+                    {
+                        return Open("NotModelled.Subquery", "* over a derived table in a multi-source FROM");
+                    }
+                    // r-sql-13b/union-syntax-forms call 125: SELECT * FROM (SELECT a FROM JA UNION SELECT b FROM JB) AS u WHERE u.a > 1.
+                    for (int i = 0; i < sub.Columns.Count; i++)
+                    {
+                        ResultColumn innerCol = sub.Columns[i];
+                        s.ReferencedColumns![i] = true;
+                        bool isBool = innerCol.FieldType == 1 || innerCol.Program.Type == StaticType.Boolean;
+                        var slotBinding = new SlotBinding(DerivedSlot0 + i, isBool ? VarType.Bool : DeclaredVarTypeOfFieldType(innerCol.FieldType), isBool ? StaticType.Boolean : StaticType.Value, OperandOrigin.Derived, innerCol.FieldType == 26, IsGuid: innerCol.FieldType == 15);
+                        var schema = new FixedDerivedSlot(slotBinding);
+                        BoundExpression program = BoundExpression.Bind(new SyntaxNode { Kind = SyntaxKind.Name, Text = innerCol.Name }, schema, _context, allowBareBinary: true, out ExpressionFailure? failure, allowBareGuid: true)!;
+                        if (failure is not null)
+                        {
+                            return SqlFailure.Of(failure, SqlPhase.Bind, syntax.Source, item.Offset, item.Offset + 1);
+                        }
+                        var column = new ResultColumn(innerCol.Name, program)
+                        {
+                            Origin = ColumnOrigin.DerivedColumn,
+                            TypeRule = innerCol.TypeRule,
+                            FieldType = innerCol.FieldType,
+                            TypeOpen = innerCol.TypeOpen,
+                            Size = innerCol.Size,
+                            DecimalPrecision = innerCol.DecimalPrecision,
+                            DecimalScale = innerCol.DecimalScale,
+                            SourceTable = innerCol.Origin == ColumnOrigin.Union ? "" : innerCol.SourceTable,
+                            SourceField = innerCol.Origin == ColumnOrigin.Union ? "" : innerCol.SourceField,
+                        };
+                        bound.ColumnList.Add(column);
+                    }
+                    continue;
                 }
                 foreach (ColumnDescriptor c in s.Table.Columns)
                 {
@@ -4172,9 +4230,17 @@ public sealed class BoundSelect : IDisposable
             var keyStaticTypes = new List<StaticTypeResult>();
             foreach (Fragment k in syntax.GroupBy)
             {
-                if (Program(k, _scope, out BoundExpression? key) is { } f)
+                if (Walk(k.Syntax.Root!).Any(n => AggregateOf(n) is not null))
                 {
-                    return f;
+                    // r-sql-13b/group-aggregate-placement call 105: SELECT g, Sum(v) AS s FROM GA GROUP BY g, Sum(v) -> 3098.
+                    return SqlFailure.Ace(SqlPhase.Bind, 3098, $"Cannot have aggregate function in GROUP BY clause ({CompactExpressionQuote(k.Text(syntax.Source).Trim())}).");
+                }
+                _scope.TreatAliasesAsParameters = true;
+                SqlFailure? kf = Program(k, _scope, out BoundExpression? key);
+                _scope.TreatAliasesAsParameters = false;
+                if (kf is not null)
+                {
+                    return kf;
                 }
                 if (key!.BareField is { } field)
                 {
@@ -4191,26 +4257,25 @@ public sealed class BoundSelect : IDisposable
                     keyFieldTypes.Add(field);
                     keyStaticTypes.Add(default);
                 }
+                else if (!key.UsesSubqueries)
+                {
+                    // r-q53-conv-abspos-subq-loc/groupby-expr-decagg-dao-*, subq-grp-decagg-ado-*,
+                    // r-sql-13b/group-expression-forms (v Mod 2, UCase(h), g & '', IIf(...), v > 5, 'k', 1 + 1, Null, r, 1, g + 0):
+                    // admit non-subquery GROUP BY expressions; projected static-type check runs only if the key is projected in SELECT.
+                    StaticTypeResult st = StaticTypeOf(k.Syntax.Root!, null);
+                    bool knownProjected = st.FieldType is int ft and (3 or 4 or 10) && st.InnerMatchesDao && !key.UsesSlots;
+                    bound.Keys.Add(key);
+                    bound.KeyMemoPrefix.Add(false);
+                    bound.KeyReferenced.Add(false);
+                    keys.Add(k.Syntax.Root!);
+                    keyTypes.Add((knownProjected ? (st.FieldType switch { 3 => VarType.I2, 4 => VarType.I4, _ => VarType.Bstr }) : VarType.Empty, StaticType.Value));
+                    keyFieldTypes.Add(null);
+                    keyStaticTypes.Add(knownProjected ? st : default);
+                }
                 else
                 {
-                    StaticTypeResult st = StaticTypeOf(k.Syntax.Root!, null);
-                    if (st.FieldType is int ft and (3 or 4 or 10) && st.InnerMatchesDao && !key.UsesSlots && !key.UsesSubqueries)
-                    {
-                        // r-q53-conv-abspos-subq-loc/groupby-expr-decagg-dao-*, subq-grp-decagg-ado-*:
-                        // GROUP BY expressions of static Integer (3, e.g. Year(D)), Long (4, e.g. N \ 10), or Text (10, e.g. Left(S, 1)).
-                        bound.Keys.Add(key);
-                        bound.KeyMemoPrefix.Add(false);
-                        bound.KeyReferenced.Add(false);
-                        keys.Add(k.Syntax.Root!);
-                        keyTypes.Add((ft switch { 3 => VarType.I2, 4 => VarType.I4, _ => VarType.Bstr }, StaticType.Value));
-                        keyFieldTypes.Add(null);
-                        keyStaticTypes.Add(st);
-                    }
-                    else
-                    {
-                        key.Dispose();
-                        return Open("NotModelled.GroupByExpression", "a GROUP BY key that is not a field (its static type is not identified)");
-                    }
+                    key.Dispose();
+                    return Open("NotModelled.GroupByExpression", "a GROUP BY key containing a subquery");
                 }
             }
             foreach (Fragment f in Expressions())
@@ -4231,7 +4296,11 @@ public sealed class BoundSelect : IDisposable
             int unnamed = 0;
             foreach (SelectItem item in syntax.Items)
             {
-                output.Item = item.Expression!.Text(syntax.Source);
+                // r-def-expr-sql/sql-nonstandard-clauses-select call 196: SELECT G AS k, Count(*) FROM Dm GROUP BY k quotes 'k';
+                // r-sql-13b/group-expression-forms call 15: SELECT v Mod 2 AS r, Count(*) FROM GA GROUP BY r quotes 'v Mod 2'.
+                output.Item = item.Alias is { } itemAlias && item.Expression!.Syntax.Root is { Kind: SyntaxKind.Name }
+                    ? itemAlias
+                    : item.Expression!.Text(syntax.Source);
                 if (Program(item.Expression, output, out BoundExpression? program) is { } f)
                 {
                     return f;
@@ -4268,10 +4337,13 @@ public sealed class BoundSelect : IDisposable
                         }
                         else
                         {
-                            // r-q53-conv-abspos-subq-loc/groupby-expr-decagg-dao-*, subq-grp-decagg-ado-*:
-                            // projected GROUP BY expression key (Left(S,1) -> 10/0, Year(D) -> 3/2, N \ 10 -> 4/4).
+                            // r-q53-conv-abspos-subq-loc/groupby-expr-decagg-dao-*, subq-grp-decagg-ado-*,
+                            // r-sql-13b/group-expression-forms: projected GROUP BY expression key.
                             StaticTypeResult st = keyStaticTypes[slot];
-                            int ft = st.FieldType!.Value;
+                            if (st.FieldType is not int ft)
+                            {
+                                return Open("NotModelled.GroupByExpression", "a projected GROUP BY expression key whose static type is not identified");
+                            }
                             column.Origin = ColumnOrigin.Expression;
                             column.IsGroupExpressionKey = true;
                             column.TypeRule = ColumnTypeRule.Bound;
@@ -4361,17 +4433,40 @@ public sealed class BoundSelect : IDisposable
             output.Item = null;
             if (syntax.Having is { } having)
             {
-                if (keys.Count == 0 && Walk(having.Syntax.Root!).Any(n => n.Kind == SyntaxKind.Name && !Walk(having.Syntax.Root!).Any(a => AggregateOf(a) is not null && Walk(a).Contains(n))))
+                bool hasAggregate = Walk(having.Syntax.Root!).Any(n => AggregateOf(n) is not null);
+                if (keys.Count == 0 && !hasAggregate && Walk(having.Syntax.Root!).Any(n => n.Kind == SyntaxKind.Name))
                 {
-                    // r-sql-13b/group-aggregate-placement: SELECT Count(*) AS n FROM GA HAVING v > 3 opens; what it does is not recorded here.
-                    return Open("NotModelled.HavingField", "HAVING over a field without GROUP BY");
+                    if (syntax.Where is not null)
+                    {
+                        return Open("NotModelled.HavingField", "HAVING over a field without GROUP BY alongside a WHERE clause");
+                    }
+                    // r-sql-13b/group-aggregate-placement call 45: SELECT Count(*) AS n FROM GA HAVING v > 3
+                    // applies the aggregate-free HAVING predicate as a pre-aggregation row filter (returns n = 6).
+                    _scope.InWhere = true;
+                    SqlFailure? hwf = Program(having, _scope, out BoundExpression? hw);
+                    _scope.InWhere = false;
+                    if (hwf is not null)
+                    {
+                        return hwf;
+                    }
+                    bound.SetWhere(hw!);
                 }
-                output.Item = having.Text(syntax.Source);
-                if (Program(having, output, out BoundExpression? h) is { } f)
+                else
                 {
-                    return f;
+                    if (keys.Count == 0 && Walk(having.Syntax.Root!).Any(n => n.Kind == SyntaxKind.Name && !Walk(having.Syntax.Root!).Any(a => AggregateOf(a) is not null && Walk(a).Contains(n))))
+                    {
+                        return Open("NotModelled.HavingField", "HAVING mixing an ungrouped field and an aggregate without GROUP BY");
+                    }
+                    output.Item = having.Text(syntax.Source);
+                    _scope.TreatAliasesAsParameters = true;
+                    SqlFailure? hf = Program(having, output, out BoundExpression? h);
+                    _scope.TreatAliasesAsParameters = false;
+                    if (hf is not null)
+                    {
+                        return hf;
+                    }
+                    bound.SetHaving(h!);
                 }
-                bound.SetHaving(h!);
             }
             foreach (OrderItem o in syntax.OrderBy)
             {
@@ -4380,9 +4475,12 @@ public sealed class BoundSelect : IDisposable
                     return pf;
                 }
                 output.Item = o.Expression.Text(syntax.Source);
-                if (Program(o.Expression, output, out BoundExpression? key) is { } f)
+                _scope.TreatAliasesAsParameters = true;
+                SqlFailure? of = Program(o.Expression, output, out BoundExpression? key);
+                _scope.TreatAliasesAsParameters = false;
+                if (of is not null)
                 {
-                    return f;
+                    return of;
                 }
                 bool memoPrefix = key!.BareSlot is int s && s < keys.Count && bound.KeyMemoPrefix[s];
                 if (!memoPrefix && Walk(o.Expression.Syntax.Root!).Any(n => output.KeyColumn(n)?.TypeCode == NativeTypes.Memo || output.Aggregate(n)?.FieldType == 12))
@@ -4980,6 +5078,17 @@ public sealed class BoundSelect : IDisposable
         {
             failure = null;
             return field;
+        }
+    }
+
+    private sealed class FixedDerivedSlot(SlotBinding slot) : ExpressionSchema
+    {
+        public override SlotBinding? Substitute(SyntaxNode node) => node.Kind == SyntaxKind.Name ? slot : null;
+
+        public override ColumnBinding? Resolve(string name, out ExpressionFailure? failure)
+        {
+            failure = null;
+            return null;
         }
     }
 }

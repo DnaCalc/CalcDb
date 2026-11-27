@@ -118,6 +118,8 @@ public sealed class SelectSyntax : IDisposable
 
     internal bool ParenthesizedArm { get; set; }
 
+    internal bool IsTableArm { get; set; }
+
     /// <summary>Every expression of the statement, for disposal.</summary>
     internal List<Fragment> Fragments { get; } = [];
 
@@ -603,14 +605,98 @@ public static class SqlParser
             if (syntax.Failure is { } f)
             {
                 fragment = null;
-                return !f.IsNotModelled && Depth(start, s.Length) >= 31
-                    ? new SqlFailure(SqlPhase.Parse, 3075, $"Expression too complex{SqlFailure.QueryExpression}{s[start..].TrimEnd()}'.") { ExcerptExact = false }
-                    : SqlFailure.Of(f, SqlPhase.Parse, s, start, end);
+                if (!f.IsNotModelled && Depth(start, s.Length) >= 31)
+                {
+                    return new SqlFailure(SqlPhase.Parse, 3075, $"Expression too complex{SqlFailure.QueryExpression}{s[start..].TrimEnd()}'.") { ExcerptExact = false };
+                }
+                if (f.Message == ExpressionMessages.CommaSyntax)
+                {
+                    int spanEnd = ScanClauseExpressionEnd(start);
+                    return SqlFailure.Of(f with { ExactExcerpt = true }, SqlPhase.Parse, s, start, spanEnd);
+                }
+                return SqlFailure.Of(f, SqlPhase.Parse, s, start, end);
             }
             fragment = new Fragment(syntax, start, end);
             statement.Fragments.Add(fragment);
             _p = end;
             return Complexity(fragment);
+        }
+
+        private int ScanClauseExpressionEnd(int start)
+        {
+            int p = start;
+            int depth = 0;
+            char quote = '\0';
+            while (p < s.Length)
+            {
+                char c = s[p];
+                if (quote != '\0')
+                {
+                    if ((quote == '[' && c == ']') || (quote != '[' && c == quote))
+                    {
+                        quote = '\0';
+                    }
+                    p++;
+                    continue;
+                }
+                if (c is '\'' or '"' or '[' or '`')
+                {
+                    quote = c;
+                    p++;
+                    continue;
+                }
+                if (c == '(')
+                {
+                    depth++;
+                    p++;
+                    continue;
+                }
+                if (c == ')')
+                {
+                    if (depth == 0)
+                    {
+                        break;
+                    }
+                    depth--;
+                    p++;
+                    continue;
+                }
+                if (depth == 0)
+                {
+                    if (c is ';' or ',')
+                    {
+                        break;
+                    }
+                    if (char.IsLetter(c) && (p == start || (!char.IsLetterOrDigit(s[p - 1]) && s[p - 1] != '_')))
+                    {
+                        int wEnd = p;
+                        while (wEnd < s.Length && (char.IsLetterOrDigit(s[wEnd]) || s[wEnd] == '_'))
+                        {
+                            wEnd++;
+                        }
+                        ReadOnlySpan<char> word = s.AsSpan(p, wEnd - p);
+                        if (word.Equals("FROM", StringComparison.OrdinalIgnoreCase)
+                            || word.Equals("WHERE", StringComparison.OrdinalIgnoreCase)
+                            || word.Equals("GROUP", StringComparison.OrdinalIgnoreCase)
+                            || word.Equals("HAVING", StringComparison.OrdinalIgnoreCase)
+                            || word.Equals("ORDER", StringComparison.OrdinalIgnoreCase)
+                            || word.Equals("UNION", StringComparison.OrdinalIgnoreCase)
+                            || word.Equals("INTO", StringComparison.OrdinalIgnoreCase)
+                            || word.Equals("WITH", StringComparison.OrdinalIgnoreCase)
+                            || word.Equals("AS", StringComparison.OrdinalIgnoreCase)
+                            || word.Equals("ASC", StringComparison.OrdinalIgnoreCase)
+                            || word.Equals("DESC", StringComparison.OrdinalIgnoreCase)
+                            || word.Equals("PIVOT", StringComparison.OrdinalIgnoreCase))
+                        {
+                            break;
+                        }
+                        p = wEnd;
+                        continue;
+                    }
+                }
+                p++;
+            }
+            return p;
         }
 
         /// <summary>
@@ -812,9 +898,10 @@ public static class SqlParser
                 {
                     return SqlFailure.Ace(SqlPhase.Parse, 3129, InvalidStatement);
                 }
-                if (last.OrderBy.Count > 0)
+                if (AtEnd() || IsSymbol(';') || (_armDepth > 0 && IsSymbol(')')))
                 {
-                    return Open("NotModelled.ArmOrderBy", "an ORDER BY on an arm before UNION (ACE's answer not recorded)");
+                    // r-sql-13b/union-syntax-forms calls 105, 115: trailing UNION without a following arm fails 3450.
+                    return SqlFailure.Ace(SqlPhase.Parse, 3450, "Syntax error in query. Incomplete query clause.");
                 }
                 var arm = new SelectSyntax(s);
                 statement.Unions.Add(new UnionArm(all, arm));
@@ -826,6 +913,12 @@ public static class SqlParser
             }
             if (statement.IsUnion)
             {
+                if (statement.Unions.Any(u => u.All)
+                    && (statement.OrderBy.Count > 0 || statement.Unions.Take(statement.Unions.Count - 1).Any(u => u.Select.OrderBy.Count > 0)))
+                {
+                    // r-sql-13b/union-order-by-forms call 85 records pre-UNION ORDER BY on pure distinct UNION only.
+                    return Open("NotModelled.ArmOrderBy", "an ORDER BY on an arm of a UNION ALL chain (ACE's answer not recorded)");
+                }
                 statement.UnionOrderBy.AddRange(last.OrderBy);
                 last.OrderBy.Clear();
             }
@@ -924,7 +1017,7 @@ public static class SqlParser
             {
                 statement.ParenthesizedArm = true;
                 _armDepth++;
-                SqlFailure? inner = ArmBody(statement, allowNoFrom: false, allowWith, out _, allowInto, allowPivot: false);
+                SqlFailure? inner = ArmBody(statement, allowNoFrom: false, allowWith, out _, allowInto, allowPivot: false, allowTableArm: false);
                 _armDepth--;
                 if (inner is not null)
                 {
@@ -938,7 +1031,7 @@ public static class SqlParser
                 return null;
             }
             _p = save;
-            SqlFailure? result = ArmBody(statement, allowNoFrom: false, allowWith, out _, allowInto, allowPivot: false);
+            SqlFailure? result = ArmBody(statement, allowNoFrom: false, allowWith, out _, allowInto, allowPivot: false, allowTableArm: true);
             statement.ArmEnd = _p;
             return result;
         }
@@ -960,9 +1053,29 @@ public static class SqlParser
 
         private SqlFailure? ArmBody(SelectSyntax statement) => ArmBody(statement, allowNoFrom: false, allowWith: false, out _, allowInto: false, allowPivot: false);
 
-        private SqlFailure? ArmBody(SelectSyntax statement, bool allowNoFrom, bool allowWith, out bool hasFrom, bool allowInto = false, bool allowPivot = false)
+        private SqlFailure? ArmBody(SelectSyntax statement, bool allowNoFrom, bool allowWith, out bool hasFrom, bool allowInto = false, bool allowPivot = false, bool allowTableArm = false)
         {
             hasFrom = false;
+            int tableOffset = _p;
+            if (allowTableArm && TakeWord("TABLE"))
+            {
+                // r-sql-13b/union-syntax-forms calls 85, 95 (SELECT d, e FROM JD UNION TABLE JD; TABLE JD UNION ALL TABLE JD)
+                // and r-def-expr-sql/sql-nonstandard-clauses-select call 98 (TABLE Dm): TABLE <name> expands to SELECT * FROM <name>.
+                string? tableName = Name(WordRole.Clause);
+                if (tableName is null || BadName)
+                {
+                    return Open("NotModelled.Statement", "malformed TABLE <name> syntax (not recorded)");
+                }
+                statement.IsTableArm = true;
+                statement.Items.Add(new SelectItem(null, true, null, null, tableOffset));
+                statement.From.Add(new NamedSource(tableName, null, tableOffset));
+                hasFrom = true;
+                if (!AtEnd() && !IsSymbol(';') && !IsWord("UNION") && !(allowWith && IsWord("WITH")) && !(_armDepth > 0 && IsSymbol(')')))
+                {
+                    return Open("NotModelled.SqlSyntax", $"text after TABLE {tableName} at {_p} (ACE's answer not recorded)");
+                }
+                return null;
+            }
             if (!TakeWord("SELECT"))
             {
                 string? word = PeekWord();
@@ -1131,28 +1244,71 @@ public static class SqlParser
         }
 
         /// <summary>
-        /// TOP n [PERCENT] (qualified.md R-SQL-3 SQL-TOP: <c>+2</c>, <c>2E0</c>, <c>2.0</c> and 2147483647 are accepted; 0,
-        /// -1, <c>-0</c>, <c>0 PERCENT</c> and more than 100 PERCENT are 3141; <c>TOP 2.5</c> returns 2). Forms the records
-        /// do not decide (<c>&amp;H2</c>, expressions, parameters) are named.
+        /// TOP n [PERCENT] (qualified.md R-SQL-3 SQL-TOP; r-sql-13b/top-expression-forms, top-parameter-forms):
+        /// <c>+2</c>, <c>&amp;H2</c>, <c>2E0</c>, <c>1E1</c>, <c>2.0</c>, <c>2.5</c> (returns 2) and 2147483647 are accepted;
+        /// 0, -1, <c>-0</c>, <c>0 PERCENT</c>, &gt;100 PERCENT, &gt;2147483647, parenthesized values, expressions,
+        /// strings, identifiers, keywords, and parameters fail 3141.
         /// </summary>
         private SqlFailure? Top(SelectSyntax statement)
         {
             Skip();
             int start = _p;
-            while (_p < s.Length && (char.IsAsciiDigit(s[_p]) || s[_p] is '.' or '+' or '-' or 'e' or 'E'))
+            double value;
+            string text;
+            if (_p + 1 < s.Length && s[_p] == '&')
             {
-                if (s[_p] is '+' or '-' && _p > start && s[_p - 1] is not ('e' or 'E'))
+                if (s[_p + 1] is 'H' or 'h')
                 {
-                    break;
+                    _p += 2;
+                    int hexStart = _p;
+                    while (_p < s.Length && Uri.IsHexDigit(s[_p]))
+                    {
+                        _p++;
+                    }
+                    text = s[start.._p];
+                    if (_p == hexStart || !(_p >= s.Length || char.IsWhiteSpace(s[_p])))
+                    {
+                        return SqlFailure.Ace(SqlPhase.Parse, 3141, SelectSyntaxError);
+                    }
+                    if (!ulong.TryParse(s.AsSpan(hexStart, _p - hexStart), System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out ulong hexVal))
+                    {
+                        return SqlFailure.Ace(SqlPhase.Parse, 3141, SelectSyntaxError);
+                    }
+                    if (hexVal == 0 || hexVal > int.MaxValue)
+                    {
+                        return SqlFailure.Ace(SqlPhase.Parse, 3141, SelectSyntaxError);
+                    }
+                    if (hexVal >= 0x8000)
+                    {
+                        // &H8000..&HFFFF sign-extension in TOP is unprobed (only &H2 is recorded in r-sql-13b/top-expression-forms).
+                        return Open("NotModelled.TopArgument", $"TOP {text}: hex literal >= &H8000 is not decided by the records");
+                    }
+                    value = hexVal;
                 }
-                _p++;
+                else
+                {
+                    return Open("NotModelled.TopArgument", $"TOP {s[start..Math.Min(s.Length, start + 4)]}…: non-hex & literal is not decided by the records");
+                }
             }
-            string text = s[start.._p];
-            string digits = text.TrimStart('+', '-');
-            if (digits.Length == 0 || !char.IsAsciiDigit(digits[0]) || !(_p >= s.Length || char.IsWhiteSpace(s[_p]))
-                || !double.TryParse(digits, System.Globalization.NumberStyles.AllowDecimalPoint | System.Globalization.NumberStyles.AllowExponent, System.Globalization.CultureInfo.InvariantCulture, out double value))
+            else
             {
-                return Open("NotModelled.TopArgument", $"TOP {text}{(_p < s.Length ? s[_p].ToString() : "")}…: this form is not decided by the records");
+                while (_p < s.Length && (char.IsAsciiDigit(s[_p]) || s[_p] is '.' or '+' or '-' or 'e' or 'E'))
+                {
+                    if (s[_p] is '+' or '-' && _p > start && s[_p - 1] is not ('e' or 'E'))
+                    {
+                        break;
+                    }
+                    _p++;
+                }
+                text = s[start.._p];
+                string digits = text.TrimStart('+', '-');
+                if (digits.Length == 0 || !char.IsAsciiDigit(digits[0]) || !(_p >= s.Length || char.IsWhiteSpace(s[_p]))
+                    || !double.TryParse(digits, System.Globalization.NumberStyles.AllowDecimalPoint | System.Globalization.NumberStyles.AllowExponent, System.Globalization.CultureInfo.InvariantCulture, out value))
+                {
+                    // r-sql-13b/top-expression-forms calls 5..35, 115..165 and top-parameter-forms calls 5..101:
+                    // parenthesized values, arithmetic/calls, strings, subqueries, identifiers, keywords, and parameters fail 3141.
+                    return SqlFailure.Ace(SqlPhase.Parse, 3141, SelectSyntaxError);
+                }
             }
             bool percent = TakeWord("PERCENT");
             if (value <= 0 || text.StartsWith('-') || (percent && value > 100) || value > int.MaxValue)

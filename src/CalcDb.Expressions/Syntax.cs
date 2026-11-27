@@ -321,7 +321,12 @@ public sealed unsafe class ExpressionSyntax : IDisposable
         return taken;
     }
 
-    internal sealed class SyntaxError(string message) : Exception(message);
+    internal sealed class SyntaxError(string message, int? site = null, bool exactExcerpt = false) : Exception(message)
+    {
+        public int? Site { get; } = site;
+
+        public bool ExactExcerpt { get; } = exactExcerpt;
+    }
 
     /// <summary>A form of the grammar CalcDb does not parse yet (a subquery, ALIKE, a parameter marker): named, never guessed.</summary>
     internal sealed class NotModelledSyntax(string name, string detail) : Exception(detail)
@@ -398,7 +403,7 @@ public sealed unsafe class ExpressionSyntax : IDisposable
         public ExpressionSyntax Failed(SyntaxError e)
         {
             FreeTexts();
-            return new ExpressionSyntax(null, ExpressionFailure.Ace(ExpressionPhase.Parse, 3077, e.Message) with { Site = ErrorPosition }, []);
+            return new ExpressionSyntax(null, ExpressionFailure.Ace(ExpressionPhase.Parse, 3077, e.Message) with { Site = e.Site ?? ErrorPosition, ExactExcerpt = e.ExactExcerpt }, []);
         }
 
         public ExpressionSyntax Failed(NotModelledSyntax e)
@@ -764,19 +769,31 @@ public sealed unsafe class ExpressionSyntax : IDisposable
                         {
                             Next(); // ANY / SOME / ALL
                             Next(); // (
-                            object sub = ParseSubqueryAt(Position, q.Text);
-                            CloseParenthesis(out int closeOffset);
-                            left = new SyntaxNode
+                            Token innerFirst = Peek();
+                            if (innerFirst.Kind == TokenKind.Name && innerFirst.Text.Equals("SELECT", StringComparison.OrdinalIgnoreCase))
                             {
-                                Kind = SyntaxKind.QuantifiedComparison,
-                                Operation = op,
-                                Left = left,
-                                QuantifierAll = q.Text.Equals("ALL", StringComparison.OrdinalIgnoreCase),
-                                Subquery = sub,
-                                Offset = t.Start,
-                                CloseOffset = closeOffset,
-                            };
-                            continue;
+                                object sub = ParseSubqueryAt(Position, q.Text);
+                                CloseParenthesis(out int closeOffset);
+                                left = new SyntaxNode
+                                {
+                                    Kind = SyntaxKind.QuantifiedComparison,
+                                    Operation = op,
+                                    Left = left,
+                                    QuantifierAll = q.Text.Equals("ALL", StringComparison.OrdinalIgnoreCase),
+                                    Subquery = sub,
+                                    Offset = t.Start,
+                                    CloseOffset = closeOffset,
+                                };
+                                continue;
+                            }
+                            if (innerFirst.Kind == TokenKind.Symbol && innerFirst.Text == ")")
+                            {
+                                throw new NotModelledSyntax("NotModelled.QuantifiedOperand", $"empty {q.Text}() operand (not recorded)");
+                            }
+                            // r-sql-13b/sub-quantified-operators call 185: a = ANY (1, 2) fails 3075 "Syntax error (comma)".
+                            _ = Expression();
+                            CloseParenthesis();
+                            throw new NotModelledSyntax("NotModelled.QuantifiedOperand", $"non-subquery single-item {q.Text}(...) operand (not recorded)");
                         }
                     }
                     left = new SyntaxNode { Kind = SyntaxKind.Binary, Operation = op, Left = left, Right = Concatenation(), Offset = t.Start };
@@ -868,8 +885,13 @@ public sealed unsafe class ExpressionSyntax : IDisposable
             {
                 throw new SyntaxError(ExpressionMessages.MissingOperator);
             }
-            Next();
+            Token open = Next();
             Token first = Peek();
+            if (first.Kind == TokenKind.Symbol && first.Text == ")")
+            {
+                // r-sql-13b/sub-in-list-null-forms call 35: a IN () fails 3075 "Syntax error (missing operator) in query expression 'a IN ('."
+                throw new SyntaxError(ExpressionMessages.MissingOperator, open.Start + open.Length, exactExcerpt: true);
+            }
             if (first.Kind == TokenKind.Name && first.Text.Equals("SELECT", StringComparison.OrdinalIgnoreCase))
             {
                 object sub = ParseSubqueryAt(first.Start, "SELECT");
