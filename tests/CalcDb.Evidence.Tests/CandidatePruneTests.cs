@@ -192,11 +192,15 @@ public sealed class CandidatePruneTests : IDisposable
         var impl = new ImplementationSelection("calcdb", @"C:\deploy", new string('d', 64));
         AttemptRecord attempt = PrepareAndSeal(store, "card/cand-junction", ImplementationSelection.CalcDbEnvironment, impl, seal: true);
         string attemptDir = store.AttemptDirectory(attempt.AttemptId);
-        string workLink = Path.Combine(attemptDir, "work");
-        if (Directory.Exists(workLink))
+        foreach (string sub in (string[])["inputs", "work", "artifacts"])
         {
-            Directory.Delete(workLink, recursive: true);
+            string subPath = Path.Combine(attemptDir, sub);
+            if (Directory.Exists(subPath))
+            {
+                Directory.Delete(subPath, recursive: true);
+            }
         }
+        string workLink = Path.Combine(attemptDir, "work");
 
         // Create a directory junction (no elevation required on Windows) pointing at protected-target.
         using var proc = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("cmd.exe", $"/c mklink /J \"{workLink}\" \"{targetDir}\"")
