@@ -1662,6 +1662,18 @@ public sealed class SchemaWriter
         {
             return new SchemaOutcome(new SchemaRefusal(null, "CREATE TABLE inside nested BeginTrans (depth > 1) is not recorded (qualified.md R-TXN-1 4nfc Open)"), default, _pageCount);
         }
+        if (workspace.Depth > 0 && exclusiveSession)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, "CREATE TABLE inside BeginTrans on an exclusive session is not recorded (4nfc)"), default, _pageCount);
+        }
+        if (workspace.Depth > 0 && workspace.TryPeekDeferredCatalogCommit(_cache, out _))
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, "CREATE TABLE inside BeginTrans while a deferred catalog commit is pending is not recorded (4nfc)"), default, _pageCount);
+        }
+        if (workspace.Depth > 0 && workspace.HasPublishedGlobalMapActivity(_cache))
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, "CREATE TABLE inside BeginTrans after prior published global-map activity is not recorded (4nfc)"), default, _pageCount);
+        }
         bool hasExtendedType = request.Fields.Any(f => f.Type is NewFieldType.BigInt or NewFieldType.DateTime2);
         bool hasDefault = request.Route == SchemaRoute.Ado && request.Fields.Any(f => f.DefaultValue is not null);
         if (hasDefault && workspace.Depth > 0)
@@ -2684,15 +2696,35 @@ public sealed class SchemaWriter
             }
             if (FindTable(fk.ReferencedTable) is null)
             {
+                if (workspace.Depth > 0)
+                {
+                    return new SchemaOutcome(new SchemaRefusal(null, $"DAO Relations.Append missing-table 3011 rollback for '{fk.ReferencedTable}' inside BeginTrans is not recorded (4nfc)"), default, _pageCount);
+                }
                 missingTableName = fk.ReferencedTable;
                 BufferRelationRollbackCounts(workspace);
                 return new SchemaOutcome(new SchemaRefusal(3011, null), default, _pageCount);
             }
             if (FindTable(request.Table) is null)
             {
+                if (workspace.Depth > 0)
+                {
+                    return new SchemaOutcome(new SchemaRefusal(null, $"DAO Relations.Append missing-table 3011 rollback for '{request.Table}' inside BeginTrans is not recorded (4nfc)"), default, _pageCount);
+                }
                 missingTableName = request.Table;
                 BufferRelationRollbackCounts(workspace);
                 return new SchemaOutcome(new SchemaRefusal(3011, null), default, _pageCount);
+            }
+            if (workspace.Depth > 0 && workspace.IsExclusiveSession(_cache))
+            {
+                return new SchemaOutcome(new SchemaRefusal(null, "DAO Relations.Append inside BeginTrans on an exclusive session is not recorded (4nfc)"), default, _pageCount);
+            }
+            if (workspace.Depth > 0 && workspace.TryPeekDeferredCatalogCommit(_cache, out _))
+            {
+                return new SchemaOutcome(new SchemaRefusal(null, "DAO Relations.Append inside BeginTrans while a deferred catalog commit is pending is not recorded (4nfc)"), default, _pageCount);
+            }
+            if (workspace.Depth > 0 && workspace.HasPublishedGlobalMapActivity(_cache))
+            {
+                return new SchemaOutcome(new SchemaRefusal(null, "DAO Relations.Append inside BeginTrans after prior published global-map activity is not recorded (4nfc)"), default, _pageCount);
             }
         }
 
@@ -2713,10 +2745,18 @@ public sealed class SchemaWriter
         {
             if (isDao && fkRefusal.Error == 3368)
             {
+                if (workspace.Depth > 0)
+                {
+                    return new SchemaOutcome(new SchemaRefusal(null, "DAO Relations.Append type-mismatch 3368 rollback inside BeginTrans is not recorded (4nfc)"), default, _pageCount);
+                }
                 return EmitRelation3368Rollback(workspace, fkRefusal);
             }
             if (isDao && fkRefusal.Error == 3201)
             {
+                if (workspace.Depth > 0)
+                {
+                    return new SchemaOutcome(new SchemaRefusal(null, "DAO Relations.Append orphan-row 3201 rollback inside BeginTrans is not recorded (4nfc)"), default, _pageCount);
+                }
                 return EmitRelation3201Rollback(workspace, fkRefusal);
             }
             return new SchemaOutcome(fkRefusal, default, _pageCount);
@@ -2731,6 +2771,10 @@ public sealed class SchemaWriter
             IReadOnlyList<uint> pendingRolledBack = workspace.PendingRolledBackPages(_cache);
             if (pendingRolledBack.Count > 0)
             {
+                if (workspace.Depth > 0)
+                {
+                    return new SchemaOutcome(new SchemaRefusal(null, "DAO Relations.Append inside BeginTrans with pending rolled-back pages from an earlier 3368 failure is not recorded (4nfc)"), default, _pageCount);
+                }
                 AcceptOutcome freeOutcome = workspace.AcceptSchemaChange(
                     _cache,
                     ObjectSemantics,
@@ -2796,6 +2840,10 @@ public sealed class SchemaWriter
         if (workspace.IsExclusiveSession(_cache))
         {
             return new SchemaOutcome(new SchemaRefusal(null, "DAO Relations.Delete in an exclusive session is not recorded (evidence/r-q47-bigint-expr-edges/reldel-* and evidence/r-cat-1b/rel-delete-relation record shared sessions only)"), default, _pageCount);
+        }
+        if (workspace.Depth > 0 && workspace.TryPeekDeferredCatalogCommit(_cache, out _))
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, "DAO Relations.Delete inside BeginTrans while a deferred catalog commit is pending is not recorded (4nfc)"), default, _pageCount);
         }
         if (request.Route is not (SchemaRoute.Dao or SchemaRoute.Sql))
         {
@@ -2878,6 +2926,10 @@ public sealed class SchemaWriter
         if (targetRel.Columns.Count > 2 || (targetRel.Columns.Count > 1 && (isJet4Mdb || isDontEnforce)))
         {
             return new SchemaOutcome(new SchemaRefusal(null, $"DAO Relations.Delete of {targetRel.Columns.Count}-column{(isDontEnforce ? " DontEnforce" : "")} relation '{targetRel.Name}' on {(isJet4Mdb ? "Jet 4 MDB" : "ACCDB")} is not recorded (evidence/r-q47-bigint-expr-edges/reldel-* records 1-col ACCDB/MDB; evidence/r-cat-1b/rel-delete-relation records 2-col enforced ACCDB)"), default, _pageCount);
+        }
+        if (workspace.Depth == 1 && (isDontEnforce || targetRel.Columns.Count != 1))
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, $"DAO Relations.Delete of {targetRel.Columns.Count}-column{(isDontEnforce ? " DontEnforce" : "")} relation '{targetRel.Name}' inside BeginTrans is not recorded (evidence/r-q53-conv-abspos-subq-loc/dao-ddl-begintrans-* records 1-col enforced only)"), default, _pageCount);
         }
         CatalogEntry? parentEntry = null;
         CatalogEntry? childEntry = null;
@@ -4729,7 +4781,7 @@ public sealed class SchemaWriter
     {
         isDuplicate = false;
         failure = null;
-        if (RelationshipCatalog.Read(_cache, _d, _catalog, _pageCount, out string? relReadFailure) is not { } existingRelationships)
+        if (RelationshipCatalog.Read(_cache, _d, _catalog, _pageCount, out string? relReadFailure, _overlay) is not { } existingRelationships)
         {
             failure = $"MSysRelationships could not be read: {relReadFailure}";
             return false;
@@ -5101,9 +5153,21 @@ public sealed class SchemaWriter
         {
             return new SchemaOutcome(new SchemaRefusal(null, $"DROP TABLE of existing persisted table '{entry.Name}' inside BeginTrans is not recorded (qualified.md R-TXN-1 4nfc Open)"), default, _pageCount);
         }
+        if (workspace.Depth > 0 && workspace.IsExclusiveSession(_cache))
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, "DROP TABLE inside BeginTrans on an exclusive session is not recorded (4nfc)"), default, _pageCount);
+        }
+        if (workspace.Depth > 0 && workspace.TryPeekDeferredCatalogCommit(_cache, out _))
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, "DROP TABLE inside BeginTrans while a deferred catalog commit is pending is not recorded (4nfc)"), default, _pageCount);
+        }
         if (Table(entry, out string? failure) is not { } table)
         {
             return new SchemaOutcome(new SchemaRefusal(null, failure), default, _pageCount);
+        }
+        if (workspace.Depth == 1 && table.LongValueMaps.Count > 0)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, $"DROP TABLE of same-transaction table '{entry.Name}' with Memo/OLE columns inside BeginTrans is not recorded (4nfc)"), default, _pageCount);
         }
         if (table.LogicalIndexes.Any(li => li.IndexType == _d.IndexDescriptor.ForeignKeyType || li.RelatedTable != 0))
         {
@@ -5188,9 +5252,21 @@ public sealed class SchemaWriter
         {
             return new SchemaOutcome(new SchemaRefusal(null, "attached DAO TableDef.Fields.Append inside nested BeginTrans (depth > 1) is not recorded (qualified.md R-TXN-1 4nfc Open)"), default, _pageCount);
         }
+        if (workspace.Depth > 0 && workspace.IsExclusiveSession(_cache))
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, "attached DAO TableDef.Fields.Append inside BeginTrans on an exclusive session is not recorded (4nfc)"), default, _pageCount);
+        }
+        if (workspace.Depth > 0 && workspace.TryPeekDeferredCatalogCommit(_cache, out _))
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, "attached DAO TableDef.Fields.Append inside BeginTrans while a deferred catalog commit is pending is not recorded (4nfc)"), default, _pageCount);
+        }
         if (request.Route != SchemaRoute.Dao)
         {
             return new SchemaOutcome(new SchemaRefusal(null, $"AddField on {request.Route} route is not recorded (only DAO attached TableDef.Fields.Append is recorded in cf-attached-*)"), default, _pageCount);
+        }
+        if (workspace.Depth == 1 && (request.Field.Type != NewFieldType.Long || request.Field.Required || request.Field.AllowZeroLength))
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, $"attached DAO TableDef.Fields.Append of {request.Field.Type} (Required={request.Field.Required}, AllowZeroLength={request.Field.AllowZeroLength}) inside BeginTrans is not recorded (evidence/r-q53-conv-abspos-subq-loc/dao-ddl-begintrans-* records non-required Long only)"), default, _pageCount);
         }
         if (FindTable(request.Table) is not { } entry)
         {
@@ -5410,7 +5486,8 @@ public sealed class SchemaWriter
         ColumnDescriptor lvPropCol = objects.Columns[Ordinal(objects, "LvProp")];
         List<string> baseNames = [];
         List<PropertyMap> baseMaps = [];
-        using (RowView? objResolved = RowResolver.Resolve(_cache, _d, entry.Root, out TraversalFailure? objFailure))
+        var lvSource = new PageSource(_cache, _overlay);
+        using (RowView? objResolved = RowResolver.Resolve(lvSource, _d, entry.Root, out TraversalFailure? objFailure))
         {
             if (objResolved is not { } objRow)
             {
@@ -5439,7 +5516,7 @@ public sealed class SchemaWriter
                 {
                     return new SchemaOutcome(new SchemaRefusal(null, $"attached DAO Fields.Append on '{entry.Name}' whose MSysObjects.LvProp has form {oldPlan.Form} is not recorded"), default, _pageCount);
                 }
-                NativeValue lvVal = FieldDecoder.Read(objRow, objects, lvPropCol, _cache, _d);
+                NativeValue lvVal = FieldDecoder.Read(objRow, objects, lvPropCol, lvSource, _d);
                 if (lvVal.Kind != NativeKind.LongBinary || lvVal.Bytes is not { } rawBlob)
                 {
                     return new SchemaOutcome(new SchemaRefusal(null, $"table '{entry.Name}' MSysObjects.LvProp could not be decoded ({lvVal.Kind}: {lvVal.Failure})"), default, _pageCount);
@@ -8917,11 +8994,12 @@ public sealed class SchemaWriter
         bool foundRelationshipsContainer = false;
         int? maxNegativeId = null;
         List<TraversalFailure> objScanFailures = [];
-        foreach (RowView row in RowResolver.Scan(_cache, _d, objects, _pageCount, objScanFailures))
+        var objSource = new PageSource(_cache, _overlay);
+        foreach (RowView row in RowResolver.Scan(objSource, _d, objects, _pageCount, objScanFailures))
         {
             using (row)
             {
-                NativeValue idVal = FieldDecoder.Read(row, objects, idCol, _cache, _d);
+                NativeValue idVal = FieldDecoder.Read(row, objects, idCol, objSource, _d);
                 if (idVal.Kind == NativeKind.Failed)
                 {
                     return new SchemaRefusal(null, $"MSysObjects row {row.Root} Id: {idVal.Failure}");
@@ -8931,7 +9009,7 @@ public sealed class SchemaWriter
                     int id = (int)idVal.Integer;
                     if (id == RelationshipsContainerId)
                     {
-                        NativeValue typeVal = FieldDecoder.Read(row, objects, typeCol, _cache, _d);
+                        NativeValue typeVal = FieldDecoder.Read(row, objects, typeCol, objSource, _d);
                         if (typeVal.Kind == NativeKind.Integer && typeVal.Integer == 3)
                         {
                             foundRelationshipsContainer = true;
@@ -8942,14 +9020,14 @@ public sealed class SchemaWriter
                         maxNegativeId = id;
                     }
                 }
-                NativeValue parentVal = FieldDecoder.Read(row, objects, parentCol, _cache, _d);
+                NativeValue parentVal = FieldDecoder.Read(row, objects, parentCol, objSource, _d);
                 if (parentVal.Kind == NativeKind.Failed)
                 {
                     return new SchemaRefusal(null, $"MSysObjects row {row.Root} ParentId: {parentVal.Failure}");
                 }
                 if (parentVal.Kind == NativeKind.Long && (int)parentVal.Integer == RelationshipsContainerId)
                 {
-                    NativeValue existingNameVal = FieldDecoder.Read(row, objects, nameCol, _cache, _d);
+                    NativeValue existingNameVal = FieldDecoder.Read(row, objects, nameCol, objSource, _d);
                     if (existingNameVal.Kind == NativeKind.Failed)
                     {
                         return new SchemaRefusal(null, $"MSysObjects row {row.Root} Name: {existingNameVal.Failure}");
@@ -9489,7 +9567,7 @@ public sealed class SchemaWriter
             childCols[i] = col;
         }
 
-        var source = new PageSource(_cache, overlay: null);
+        var source = new PageSource(_cache, _overlay);
         using TableCursor? parentCursor = TableCursor.Open(source, _d, parentTable, _pageCount, 0, out TraversalFailure? openFailure);
         if (parentCursor is null)
         {
@@ -9503,14 +9581,14 @@ public sealed class SchemaWriter
 
         List<TraversalFailure> scanFailures = [];
         var keys = new SeekKey[childCols.Length];
-        foreach (RowView row in RowResolver.Scan(_cache, _d, childTable, _pageCount, scanFailures))
+        foreach (RowView row in RowResolver.Scan(source, _d, childTable, _pageCount, scanFailures))
         {
             using (row)
             {
                 bool anyNull = false;
                 for (int i = 0; i < childCols.Length; i++)
                 {
-                    NativeValue v = FieldDecoder.Read(row, childTable, childCols[i], _cache, _d);
+                    NativeValue v = FieldDecoder.Read(row, childTable, childCols[i], source, _d);
                     if (v.Kind == NativeKind.Null)
                     {
                         anyNull = true;
@@ -10152,7 +10230,8 @@ public sealed class SchemaWriter
         var keyValues = new NativeValue[keyCols.Length];
         uint scannedRows = 0;
         int nullKeyRows = 0;
-        foreach (RowView row in RowResolver.Scan(_cache, _d, table, _pageCount, scanFailures))
+        var leafSource = new PageSource(_cache, _overlay);
+        foreach (RowView row in RowResolver.Scan(leafSource, _d, table, _pageCount, scanFailures))
         {
             using (row)
             {
@@ -10161,7 +10240,7 @@ public sealed class SchemaWriter
                 bool anyNull = false;
                 for (int i = 0; i < keyCols.Length; i++)
                 {
-                    NativeValue v = FieldDecoder.Read(row, table, keyCols[i], _cache, _d);
+                    NativeValue v = FieldDecoder.Read(row, table, keyCols[i], leafSource, _d);
                     if (v.Kind == NativeKind.Failed)
                     {
                         failure = $"row {row.Root} column {keyCols[i].Name}: {v.Failure}";

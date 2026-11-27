@@ -114,10 +114,29 @@ internal sealed unsafe class DatabaseObject : DaoObject
     {
         _overlayCatalog = null;
         _overlayRelationships = null;
-        _overlayEditContexts = null;
+        if (_overlayEditContexts is not null)
+        {
+            foreach (TableEditContext ctx in _overlayEditContexts.Values)
+            {
+                ctx.Semantics.Dispose();
+            }
+            _overlayEditContexts = null;
+        }
         _overlayRelationshipContext = null;
         _overlayRuleBinder = null;
         _sql?.Forget();
+    }
+
+    private void ClearSameWorkspaceOverlaySchemaCaches()
+    {
+        ClearOverlaySchemaCache();
+        foreach (DatabaseObject peer in Engine.Sessions)
+        {
+            if (!ReferenceEquals(peer, this) && !peer.Closed && ReferenceEquals(peer._pooled, _pooled) && ReferenceEquals(peer._workspace, _workspace))
+            {
+                peer.ClearOverlaySchemaCache();
+            }
+        }
     }
 
     /// <summary>Catalog flags of rows neither TableDefs nor the Tables Documents list (the MSysComplexType_* tables; r-dao-1b/documents-members-each: 17 documents).</summary>
@@ -864,9 +883,10 @@ internal sealed unsafe class DatabaseObject : DaoObject
             tempSlot = Engine.PeekFreeTempSlot();
             bookmarkBase = ResolveKeysetBookmarkBase(recordsetType, table, tempSlot.Value, excludingFamilyRoot: null, out bookmarkBaseRefusal);
         }
+        ulong cursorExtent = recordsetType == 4 ? PageCount : OverlayExtentPages;
         IRecordCursor? cursor = recordsetType == 1
-            ? TableCursor.Open(source, Format, table, PageCount, (ulong)entry.Id, out traversal)
-            : PopulationCursor.Open(source, Format, table, PageCount, forwardOnly: recordsetType == 8, out traversal,
+            ? TableCursor.Open(source, Format, table, cursorExtent, (ulong)entry.Id, out traversal)
+            : PopulationCursor.Open(source, Format, table, cursorExtent, forwardOnly: recordsetType == 8, out traversal,
                 bookmarkBase: bookmarkBase,
                 snapshot: recordsetType == 4,
                 appendOnly: recordsetType == 2 && RecordsetOptions.IsAppendOnly(options));
@@ -1094,7 +1114,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
     {
         if (_workspace.Transactions.Depth > 0)
         {
-            ClearOverlaySchemaCache();
+            ClearSameWorkspaceOverlaySchemaCaches();
             return;
         }
         CatalogSnapshot before = _session.Catalog;
@@ -1330,7 +1350,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
         }
         else if (workspace.Depth > 0 && accepted.Accepted)
         {
-            ClearOverlaySchemaCache();
+            ClearSameWorkspaceOverlaySchemaCaches();
             tableDefs.Relist();
         }
         return accepted.Error is { } error ? EditPublication.Published(error)
@@ -1416,7 +1436,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
             }
             else
             {
-                ClearOverlaySchemaCache();
+                ClearSameWorkspaceOverlaySchemaCaches();
             }
             fields.Relist();
             if (tableDef.Definition is { } updatedDef && updatedDef.Columns.Count > 0)
@@ -2442,7 +2462,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
         }
         else if (workspace.Depth > 0 && accepted.Accepted)
         {
-            ClearOverlaySchemaCache();
+            ClearSameWorkspaceOverlaySchemaCaches();
             relations.Relist();
         }
         return accepted.Error is { } error ? EditPublication.Published(error)
@@ -2506,7 +2526,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
         }
         else if (workspace.Depth > 0 && accepted.Accepted)
         {
-            ClearOverlaySchemaCache();
+            ClearSameWorkspaceOverlaySchemaCaches();
             relations.Relist();
         }
         return accepted.Error is { } error ? EditPublication.Published(error)
@@ -2754,6 +2774,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
     /// <summary>Close: every recordset of this Database closes, the file is released once the last holder closes, the Workspace forgets it.</summary>
     private CallResult Close()
     {
+        ClearOverlaySchemaCache();
         _readOnlyFirstView?.Dispose();
         _readOnlyFirstView = null;
         foreach (IDatabaseRecordset r in _recordsets.ToArray())
