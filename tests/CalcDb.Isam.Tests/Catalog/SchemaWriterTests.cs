@@ -1719,16 +1719,16 @@ public sealed class SchemaWriterTests
             Assert.Equal(before, session.File.Snapshot());
         }
 
-        // Finding 4b: Populated Jet 4 MDB refuses IGNORE NULL, DISALLOW NULL, and DESC (and ADO route) with 0 bytes written;
-        // PRIMARY KEY on a populated Jet 4 MDB is now recorded in evidence/r-q34-ddl-sweep/alt-pk-rows-mdb-dao.
+        // Finding 4b: Populated Jet 4 MDB refuses DESC (and ADO route) with 0 bytes written;
+        // PRIMARY KEY is recorded in evidence/r-q34-ddl-sweep/alt-pk-rows-mdb-dao, and IGNORE NULL / DISALLOW NULL
+        // on populated MDB are recorded in evidence/r-q50-jk44-ddl-vis/ddl-index-ignore-null-rows-mdb and
+        // ddl-index-disallow-primary-rows-mdb.
         byte[] mdbPopImage = Kept.AfterSetupImage("ix-nonuq-rows-nopk-mdb-dao");
         using (var session = new Session(mdbPopImage))
         {
             CreateIndexRequest[] mdbRefused =
             [
                 new("T", new("IX_ADO", ["K"], PrimaryKey: false), SchemaRoute.Ado),
-                new("T", new("IX_IGN", ["K"], PrimaryKey: false, IgnoreNull: true), SchemaRoute.Sql),
-                new("T", new("IX_DIS", ["K"], PrimaryKey: false, DisallowNull: true), SchemaRoute.Sql),
                 new("T", new("IX_DESC", ["K"], PrimaryKey: false, Descending: [true]), SchemaRoute.Sql),
             ];
             foreach (CreateIndexRequest req in mdbRefused)
@@ -1775,16 +1775,11 @@ public sealed class SchemaWriterTests
         }
 
         // Table TI (ID, A, B, C, D) with row 2 having C = NULL and B = 10.
+        // UNIQUE + WITH IGNORE NULL on a populated table with Nulls is now recorded in
+        // evidence/r-q50-jk44-ddl-vis/ddl-index-ignore-null-rows-accdb, ddl-index-ignore-null-rows-mdb.
         byte[] nullImage = Kept.AfterSetupImage("ix-cat1b-rows-chain-accdb-dao");
         using (var session = new Session(nullImage))
         {
-            // Finding 4c: UNIQUE + WITH IGNORE NULL on a populated table refuses by name with 0 bytes written.
-            SchemaOutcome uqIgn = session.Writer().CreateIndex(session.Workspace, new("TI", new("UK_C_IGN", ["C"], PrimaryKey: false, Unique: true, IgnoreNull: true), SchemaRoute.Sql), 2);
-            Assert.False(uqIgn.Succeeded);
-            Assert.False(uqIgn.PublishedAny);
-            Assert.Contains("IGNORE NULL", uqIgn.Refused?.NotWritten);
-            Assert.Equal(nullImage, session.File.Snapshot());
-
             // Existing NULL on PRIMARY, DISALLOW NULL, UNIQUE non-IGNORE NULL, DESC non-IGNORE NULL, and 2-col non-IGNORE NULL/IGNORE NULL refuse by name
             // (only a single ascending Long Null row in a non-unique non-IGNORE NULL index is recorded in r-q43-schema-lval-index/ix-lval-pk-rows-*).
             NewIndex[] nullRefused =
