@@ -21,6 +21,7 @@ namespace CalcDb.Com.Dao;
 internal sealed class EngineState(HostBinding binding) : IPublicationTarget
 {
     private WorkspaceObject? _defaultWorkspace;
+    private ErrorsObject? _errors;
     private ulong _nextSeq;
 
     // Per-engine temp-page slot allocator for table-opened dynaset (2) and snapshot (4) families
@@ -135,6 +136,9 @@ internal sealed class EngineState(HostBinding binding) : IPublicationTarget
     /// <summary>The latest failure, replacing the earlier one; a success never clears it.</summary>
     public List<Failure> Errors { get; } = [];
 
+    /// <summary>The engine's singleton Errors collection, surviving DBEngine release and re-creation (r-q-wire/retain-errors-after-engine-release).</summary>
+    public ErrorsObject ErrorsCollection => _errors ??= new ErrorsObject(this);
+
     public void Record(Failure failure)
     {
         Errors.Clear();
@@ -220,7 +224,6 @@ internal sealed unsafe class DBEngineObject : DaoObject
 
     private readonly Apartment _apartment;
     private WorkspacesObject? _workspaces;
-    private ErrorsObject? _errors;
 
     private PropertiesObject? _properties;
 
@@ -232,11 +235,11 @@ internal sealed unsafe class DBEngineObject : DaoObject
 
     protected override OperationTable Table => Operations;
 
-    /// <summary>An argument-count or conversion failure of DBEngine's transaction members is not recorded (the Workspace's is); CreateDatabase reports 3001/3421 from DAO.DbEngine with IErrorInfo (r-wire/opt-createdatabase).</summary>
+    /// <summary>An argument-count or conversion failure of DBEngine's transaction members is not recorded (the Workspace's is); CreateDatabase and CreateWorkspace report 3001 from DAO.DbEngine with IErrorInfo (r-wire/opt-createdatabase, r-dao-1-err-1/err-bind-arity-member call 8).</summary>
     protected override Failure? ArgumentCountFailure(MemberDecl member) => member.Name switch
     {
         "BeginTrans" or "CommitTrans" or "Rollback" => Failure.NotModelled("NotModelled.EngineTransactionArguments", $"DBEngine.{member.Name} with a wrong argument count (recorded on Workspace only)"),
-        "CreateDatabase" => InvalidArgumentCount(),
+        "CreateDatabase" or "CreateWorkspace" => InvalidArgumentCount(),
         _ => null,
     };
 
@@ -292,7 +295,7 @@ internal sealed unsafe class DBEngineObject : DaoObject
     /// </summary>
     protected override Operation? ExtraArgumentGet(MemberDecl member) => member.Name == "Workspaces" ? WorkspacesItem : null;
 
-    private ErrorsObject ErrorsCollection => _errors ??= new ErrorsObject(Engine);
+    private ErrorsObject ErrorsCollection => Engine.ErrorsCollection;
 
     /// <summary>
     /// The 7 built-ins (r-dao-1b/eng-properties-enumerated). Reading them touches the default session: SystemDB read
@@ -1063,7 +1066,6 @@ internal sealed unsafe class DBEngineObject : DaoObject
     {
         _apartment.Live.Remove(Engine.Binding.Identity);
         _workspaces?.Release();
-        _errors?.Release();
         _properties?.Release();
     }
 }
@@ -1424,17 +1426,42 @@ internal sealed unsafe class WorkspaceObject : DaoObject
             return CallResult.Fail(Failure.NotImplemented("OpenDatabase with a Connect string"));
         }
         bool optionsGiven = args.Length > 1 && args[1] != 0;
-        bool? readOnly = Args.Bool(args.Length > 2 ? args[2] : 0, omitted: false);
-        if (readOnly is null)
+        bool exclusive = false;
+        bool effectiveReadOnly = false;
+        if (optionsGiven)
         {
-            return CallResult.Fail(Failure.NotImplemented("OpenDatabase with a ReadOnly argument that is not Boolean"));
+            bool? parsedExclusive = Args.Bool(args[1], omitted: false);
+            if (parsedExclusive is null)
+            {
+                VarType optVt = Args.TypeOf(args[1]);
+                if (optVt is VarType.Null or VarType.Bstr)
+                {
+                    // r-fix-wire-ado/opt-opendatabase-all-null, opt-opendatabase-options-bstr-x,
+                    // r-q-wire/opt-opendatabase-options-null-alone, r-dao-1-err-1/err-bind-types call 57:
+                    // Null or non-Boolean BSTR Options fails 3421 from DAO.Workspace without IErrorInfo.
+                    return Fail(3421, DaoErrors.ConversionError);
+                }
+                return CallResult.Fail(Failure.NotImplemented($"OpenDatabase with an Options argument of type {optVt} that is not Boolean"));
+            }
+            exclusive = parsedExclusive.Value;
+            bool? readOnly = Args.Bool(args.Length > 2 ? args[2] : 0, omitted: false);
+            if (readOnly is null)
+            {
+                return CallResult.Fail(Failure.NotImplemented("OpenDatabase with a ReadOnly argument that is not Boolean"));
+            }
+            effectiveReadOnly = readOnly.Value;
         }
-        bool? exclusive = Args.Bool(args.Length > 1 ? args[1] : 0, omitted: false);
-        if (exclusive is null)
+        else if (args.Length > 2 && args[2] != 0)
         {
-            return CallResult.Fail(Failure.NotImplemented("OpenDatabase with an Options argument that is not Boolean"));
+            // R-ORACLE-1 OR-WIRE (r-fix-wire-ado/opt-opendatabase-options-missing-readonly-null,
+            // opt-opendatabase-options-missing-readonly-true, -empty): with Options omitted/Missing,
+            // ReadOnly (Boolean, Empty, or Null) is ignored and the database opens updatable.
+            if (Args.TypeOf(args[2]) != VarType.Null && Args.Bool(args[2], omitted: false) is null)
+            {
+                return CallResult.Fail(Failure.NotImplemented($"OpenDatabase with Options omitted and ReadOnly of type {Args.TypeOf(args[2])}"));
+            }
         }
-        CallResult result = DatabaseObject.Open(this, name, exclusive.Value, optionsGiven && readOnly.Value, out DatabaseObject? database);
+        CallResult result = DatabaseObject.Open(this, name, exclusive, effectiveReadOnly, out DatabaseObject? database);
         if (database is not null)
         {
             _databases.Add(database);

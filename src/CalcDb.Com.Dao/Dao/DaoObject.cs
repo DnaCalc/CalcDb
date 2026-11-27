@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using CalcDb.Com.Com;
 using CalcDb.Com.Declarations;
 using CalcDb.Foundation;
@@ -214,6 +215,65 @@ internal abstract unsafe class DaoObject : DispatchObject
 
     protected override Operation? Find(MemberDecl member) => Table.Find(member);
 
+    /// <summary>
+    /// DAO wrong-InvokeKind dispatch rules (W-08, R-DAO-1, R-ERR-1):
+    /// <list type="bullet">
+    /// <item>PropertyPut on a read-only PropertyGet -> DAO 3001 (<c>Invalid argument.</c>) with IErrorInfo
+    /// (r-dao-1-err-1/prop-enumerate-and-context call 29 <c>db.Version</c>; r-dao-1-err-1/err-bind-arity-member
+    /// calls 17-18 <c>db.Name</c>, <c>eng.Version</c>).</item>
+    /// <item>PropertyGet on a write-only PropertyPut (<c>eng.DefaultUser</c>, <c>eng.DefaultPassword</c>:
+    /// r-dao-1b/eng-members-each calls 6-7, r-dao-1-err-1/prop-enumerate-and-context call 25), PropertyGet on a
+    /// Method (<c>_NewEnum</c>: r-dao-1b/coll-newenum-get calls 24-38), Method on a PropertyGet (<c>eng.Version()</c>:
+    /// r-dao-1-err-1/err-bind-arity-member call 19), or PropertyPutRef on a non-PutRef property (<c>db.Connect</c>:
+    /// r-dao-1-err-1/err-bind-arity-member call 21) -> DAO 3251 (<c>Operation is not supported for this type of object.</c>)
+    /// with IErrorInfo.</item>
+    /// </list>
+    /// Unknown DISPIDs and unrecorded flag combinations return null (<c>DISP_E_MEMBERNOTFOUND</c>).
+    /// </summary>
+    protected override Failure? WrongInvokeKindFailure(int dispId, ushort flags)
+    {
+        bool hasMethod = false, hasGet = false, hasPut = false, hasPutRef = false;
+        IReadOnlyList<MemberDecl> members = Declaration.Members;
+        for (int i = 0; i < members.Count; i++)
+        {
+            if (members[i].MemberId != dispId)
+            {
+                continue;
+            }
+            switch (members[i].Kind)
+            {
+                case InvokeKind.Method: hasMethod = true; break;
+                case InvokeKind.PropertyGet: hasGet = true; break;
+                case InvokeKind.PropertyPut: hasPut = true; break;
+                case InvokeKind.PropertyPutRef: hasPutRef = true; break;
+            }
+        }
+        if (!(hasMethod || hasGet || hasPut || hasPutRef))
+        {
+            return null;
+        }
+        if (flags == (ushort)InvokeKind.PropertyPut && hasGet && !hasPut)
+        {
+            return Failure.Dao(3001, Source, DaoErrors.InvalidArgument) with { PublishesErrorInfo = true };
+        }
+        if ((flags == (ushort)InvokeKind.PropertyGet && (hasPut || hasMethod))
+            || (flags == (ushort)InvokeKind.Method && hasGet)
+            || (flags == (ushort)InvokeKind.PropertyPutRef && (hasGet || hasPut) && !hasPutRef))
+        {
+            return Failure.Dao(3251, Source, DaoErrors.NotSupportedForType) with { PublishesErrorInfo = true };
+        }
+        return null;
+    }
+
+    protected static CallResult NewEnumResult(IDaoEnumerableCollection collection)
+    {
+        var enumerator = new DaoEnumVariant(collection);
+        nint unknown;
+        enumerator.QueryInterface(ComIids.IUnknown, &unknown);
+        enumerator.Release();
+        return CallResult.Of(OwnedVariant.TakeObject(unknown, VarType.Unknown));
+    }
+
     protected override void OnFailure(Failure failure)
     {
         if (failure.Kind == FailureKind.Dao)
@@ -326,4 +386,143 @@ internal static unsafe class CollectionLookup
     }
 
     private static long Value(NativeVariant* v) => ((VarType)v->Vt & VarType.ByRef) != 0 ? *(short*)v->Pointer : v->Int64;
+}
+
+/// <summary>A DAO collection enumerable through <see cref="DaoEnumVariant"/> (<c>_NewEnum</c>).</summary>
+internal interface IDaoEnumerableCollection
+{
+    EngineState Engine { get; }
+    bool IsEnumInvalid { get; }
+    string EnumClosedSource { get; }
+    int EnumCount { get; }
+    nint EnumDispatchAt(int index);
+    void AddRefCollection();
+    void ReleaseCollection();
+}
+
+/// <summary>
+/// COM <c>IEnumVARIANT</c> (<c>{00020404-0000-0000-C000-000000000046}</c>) over a DAO collection
+/// (r-q2-wire/obs-errors-foreach-enumeration, r-q2-wire/retain-enum-dao-after-close):
+/// <c>Next</c> returns <c>S_OK</c> with <c>VT_DISPATCH</c> items, <c>S_FALSE</c> at/past end, or <c>0x800A0D5C</c>
+/// (DAO 3420 recorded in <c>DBEngine.Errors</c> with the owner's closed source) when the collection is invalid;
+/// <c>Skip</c> returns <c>E_FAIL</c> (<c>0x80004005</c>); <c>Reset</c> and <c>Clone</c> return <c>S_OK</c>.
+/// </summary>
+internal sealed unsafe class DaoEnumVariant : ComObject
+{
+    public static readonly Guid IidEnumVariant = new("00020404-0000-0000-C000-000000000046");
+    private const int DaoObjectInvalidHResult = unchecked((int)0x800A0D5C);
+    private const int EFailHResult = unchecked((int)0x80004005);
+
+    private static readonly nint EnumVtable = BuildVtable();
+
+    private readonly IDaoEnumerableCollection _collection;
+    private int _index;
+
+    public DaoEnumVariant(IDaoEnumerableCollection collection, int index = 0) : base(EnumVtable)
+    {
+        _collection = collection;
+        _index = index;
+        collection.AddRefCollection();
+    }
+
+    protected override int HeadFor(in Guid iid) => iid == IidEnumVariant ? 0 : -1;
+
+    private int Next(uint celt, NativeVariant* rgVar, uint* pceltFetched)
+    {
+        if (rgVar is null)
+        {
+            return HResults.E_POINTER;
+        }
+        if (pceltFetched is null && celt > 1)
+        {
+            return HResults.E_INVALIDARG;
+        }
+        if (_collection.IsEnumInvalid)
+        {
+            if (pceltFetched is not null)
+            {
+                *pceltFetched = 0;
+            }
+            _collection.Engine.Record(Failure.Dao(3420, _collection.EnumClosedSource, DaoErrors.ObjectInvalid));
+            return DaoObjectInvalidHResult;
+        }
+        uint fetched = 0;
+        int count = _collection.EnumCount;
+        while (fetched < celt && _index < count)
+        {
+            nint dispatch = _collection.EnumDispatchAt(_index++);
+            OleAut.VariantInit(rgVar + fetched);
+            rgVar[fetched].Vt = (ushort)VarType.Dispatch;
+            rgVar[fetched].Pointer = dispatch;
+            fetched++;
+        }
+        if (pceltFetched is not null)
+        {
+            *pceltFetched = fetched;
+        }
+        return fetched == celt ? HResults.S_OK : HResults.S_FALSE;
+    }
+
+    /// <summary>ACE DAO enumerators always return E_FAIL (0x80004005) on Skip (r-q2-wire/obs-errors-foreach-enumeration, retain-enum-dao-after-close).</summary>
+    private static int Skip(uint celt)
+    {
+        _ = celt;
+        return EFailHResult;
+    }
+
+    private int Reset()
+    {
+        _index = 0;
+        return HResults.S_OK;
+    }
+
+    private int Clone(nint* ppenum)
+    {
+        if (ppenum is null)
+        {
+            return HResults.E_POINTER;
+        }
+        var copy = new DaoEnumVariant(_collection, _index);
+        int hr = copy.QueryInterface(IidEnumVariant, ppenum);
+        copy.Release();
+        return hr;
+    }
+
+    protected override void OnFinalRelease() => _collection.ReleaseCollection();
+
+    private static nint BuildVtable()
+    {
+        nint* table = (nint*)NativeMemory.AllocZeroed(7, (nuint)sizeof(nint));
+        table[0] = (nint)(delegate* unmanaged<nint, Guid*, nint*, int>)&QueryInterfaceEntry;
+        table[1] = (nint)(delegate* unmanaged<nint, uint>)&AddRefEntry;
+        table[2] = (nint)(delegate* unmanaged<nint, uint>)&ReleaseEntry;
+        table[3] = (nint)(delegate* unmanaged<nint, uint, NativeVariant*, uint*, int>)&NextEntry;
+        table[4] = (nint)(delegate* unmanaged<nint, uint, int>)&SkipEntry;
+        table[5] = (nint)(delegate* unmanaged<nint, int>)&ResetEntry;
+        table[6] = (nint)(delegate* unmanaged<nint, nint*, int>)&CloneEntry;
+        return (nint)table;
+    }
+
+    [UnmanagedCallersOnly]
+    private static int QueryInterfaceEntry(nint self, Guid* iid, nint* result) =>
+        result is null || iid is null ? HResults.E_POINTER : Recover<DaoEnumVariant>(self).QueryInterface(*iid, result);
+
+    [UnmanagedCallersOnly]
+    private static uint AddRefEntry(nint self) => Recover<DaoEnumVariant>(self).AddRef();
+
+    [UnmanagedCallersOnly]
+    private static uint ReleaseEntry(nint self) => Recover<DaoEnumVariant>(self).Release();
+
+    [UnmanagedCallersOnly]
+    private static int NextEntry(nint self, uint celt, NativeVariant* rgVar, uint* pceltFetched) =>
+        Recover<DaoEnumVariant>(self).Next(celt, rgVar, pceltFetched);
+
+    [UnmanagedCallersOnly]
+    private static int SkipEntry(nint self, uint celt) => Skip(celt);
+
+    [UnmanagedCallersOnly]
+    private static int ResetEntry(nint self) => Recover<DaoEnumVariant>(self).Reset();
+
+    [UnmanagedCallersOnly]
+    private static int CloneEntry(nint self, nint* ppenum) => Recover<DaoEnumVariant>(self).Clone(ppenum);
 }

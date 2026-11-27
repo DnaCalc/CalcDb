@@ -778,11 +778,11 @@ public sealed unsafe class DaoSharedSessionTests : IDisposable
         Ok(Method(m2, "Close"));
         Ok(Method(m1, "Close"));
 
-        // Beside Exclusive RW: ReadOnly handle reads cleanly, refuses Updatable and Execute by name.
+        // Beside Exclusive RW: ReadOnly handle reads cleanly and inherits Updatable=true (r-q-wire/opt-opendatabase-options-null-alone calls 3, 34, 38); Execute stays refused by name.
         DatabaseObject e1 = Open(ws0, accdb, exclusive: true, readOnly: false);
         DatabaseObject e2ro = Open(ws0, accdb, exclusive: false, readOnly: true);
         Assert.Equal([(1, 10), (2, 20)], Rows(e2ro));
-        FailsNotModelled(Get(e2ro, "Updatable"), "NotModelled.InheritedReadOnlyExclusive");
+        Assert.True(BoolResult(Get(e2ro, "Updatable")));
         FailsNotModelled(Method(e2ro, "Execute", "INSERT INTO T VALUES (60, 600, 'exro')", 128), "NotModelled.ReadOnlyAction");
         Ok(Method(e2ro, "Close"));
         Ok(Method(e1, "Close"));

@@ -365,12 +365,11 @@ internal sealed unsafe class DatabaseObject : DaoObject
         "NotModelled.InheritedReadOnlyWrite",
         $"{member} on a ReadOnly handle that inherited read/write from an open writable binding is not recorded (only Database.Updatable, recorded Database.Execute forms, and shared SELECT dynaset Edit/Update are recorded)"));
 
-    private CallResult UpdatableResult() =>
-        InheritedWritable && Exclusive
-            ? CallResult.Fail(Failure.NotModelled(
-                "NotModelled.InheritedReadOnlyExclusive",
-                "Database.Updatable on a ReadOnly handle opened beside an exclusive read/write binding is not recorded"))
-            : Bool(!ReadOnly);
+    /// <summary>
+    /// Database.Updatable: <c>Bool(!ReadOnly)</c>, including a ReadOnly handle that inherited read/write beside an
+    /// exclusive read/write binding (r-q-wire/opt-opendatabase-options-null-alone calls 3, 34, 38 -> VT_BOOL -1).
+    /// </summary>
+    private CallResult UpdatableResult() => Bool(!ReadOnly);
 
     /// <summary>
     /// Whether this Database was opened or created exclusively (no <c>.laccdb</c>/<c>.ldb</c> lock file), selecting
@@ -384,6 +383,35 @@ internal sealed unsafe class DatabaseObject : DaoObject
     protected override OperationTable Table => Operations;
 
     protected override Failure? ArgumentCountFailure(MemberDecl member) => InvalidArgumentCount();
+
+    /// <summary>
+    /// OpenRecordset Name (p0, declared BSTR): Missing fails 3001 with IErrorInfo (r-wire/opt-openrecordset call 124);
+    /// DISP_E_TYPEMISMATCH (Null, object) fails 3421 with IErrorInfo (r-dao-1-err-1/err-bind-types calls 29, 41;
+    /// r-wire/opt-openrecordset call 118).
+    /// </summary>
+    protected override Failure? ArgumentConversionFailure(MemberDecl member, ArgumentConversion conversion) => member.Name switch
+    {
+        "OpenRecordset" when conversion is { Parameter: 0, Reason: ArgumentConversionReason.Missing } => InvalidArgumentCount(),
+        "OpenRecordset" when conversion is { Parameter: 0, Reason: ArgumentConversionReason.TypeMismatch } =>
+            Failure.Dao(3421, Source, DaoErrors.ConversionError) with { PublishesErrorInfo = true },
+        _ => null,
+    };
+
+    private static readonly Operation TableDefsItem = static (self, args) =>
+    {
+        if (args.Length != 1)
+        {
+            return CallResult.Fail(Failure.NotImplemented($"Database.TableDefs with {args.Length} index arguments (only one is recorded)"));
+        }
+        nint index = args[0];
+        return Live(self, d => d.TableDefsCollection().Item(index));
+    };
+
+    /// <summary>
+    /// <c>Database.TableDefs(Index)</c>: a get of TableDefs with one index argument forwards to <c>TableDefs.Item</c>
+    /// (r-dao-1-err-1/err-bind-arity-member call 20: <c>db.TableDefs(VT_I4 0)</c> returns the first TableDef).
+    /// </summary>
+    protected override Operation? ExtraArgumentGet(MemberDecl member) => member.Name == "TableDefs" ? TableDefsItem : null;
 
     private static CallResult Live(ComObject self, Func<DatabaseObject, CallResult> op)
     {
@@ -781,7 +809,31 @@ internal sealed unsafe class DatabaseObject : DaoObject
         {
             return CallResult.Fail(Failure.NotImplemented("OpenRecordset with a null source"));
         }
-        int? type = Args.Int32(args.Length > 1 ? args[1] : 0, omitted: null);
+        int? type = null;
+        if (args.Length > 1 && args[1] != 0)
+        {
+            type = Args.Int32(args[1], omitted: null);
+            if (type is null)
+            {
+                CalcDb.Foundation.VarType typeVt = Args.TypeOf(args[1]) & ~CalcDb.Foundation.VarType.ByRef;
+                if (typeVt is CalcDb.Foundation.VarType.Null or CalcDb.Foundation.VarType.Bstr)
+                {
+                    // r-dao-1-err-1/err-bind-optional-cells calls 17, 34; r-dao-1-err-1/err-bind-types call 5;
+                    // r-wire/opt-openrecordset calls 22, 100: Null or non-numeric BSTR Type fails 3421 without IErrorInfo.
+                    return Fail(3421, DaoErrors.ConversionError);
+                }
+                return CallResult.Fail(Failure.NotModelled(
+                    "NotModelled.OpenRecordsetTypeConversion",
+                    $"OpenRecordset Type argument of type {typeVt} failed Int32 conversion (only Null and non-numeric BSTR 3421 are recorded)"));
+            }
+            if (type is not (1 or 2 or 4 or 8))
+            {
+                // r-dao-1-err-1/err-bind-optional-cells call 11 (Empty -> 0), err-bind-types call 23 (Bool True -> -1),
+                // recordset-state-inventory call 44 (16 dbOpenDynamic), r-wire/opt-openrecordset call 16 (Empty -> 0):
+                // invalid RecordsetType fails 3001 without IErrorInfo.
+                return Fail(3001, DaoErrors.InvalidArgument);
+            }
+        }
         int? options = Args.Int32(args.Length > 2 ? args[2] : 0, omitted: 0);
         int? lockEdit = Args.Int32(args.Length > 3 ? args[3] : 0, omitted: null);
         if (options is null)
@@ -801,7 +853,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
         if (entry is null)
         {
             string trimmed = name.TrimStart();
-            if (trimmed.StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
+            if (type != 1 && trimmed.StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
             {
                 return SelectRoute.Open(this, name, type, options.Value);
             }
@@ -813,7 +865,12 @@ internal sealed unsafe class DatabaseObject : DaoObject
             {
                 return CallResult.Fail(Failure.NotImplemented("OpenRecordset of a crosstab or a saved query MSysQueries does not list (W-06/relational-spill)"));
             }
-            return Fail(3011, DaoErrors.ObjectNotFound(name));
+            // Table-type (1) reports 3011 (r-oracle-1/failed-call-t1, r-wire/opt-openrecordset call 106,
+            // r-err-1b/arg-openrs-opentable-on-sql call 7, r-cursor-1b/open-argument-shapes call 50);
+            // non-table-type or omitted Type reports 3078 (r-dao-1-err-1/err-bind-types call 35, r-wire/opt-openrecordset call 112).
+            return type == 1
+                ? Fail(3011, DaoErrors.ObjectNotFound(name))
+                : Fail(3078, SqlMessages.NoInputTable(name));
         }
         return OpenLocalTableRecordset(entry, type, options.Value, lockEdit, fromTableDef: false);
     }
@@ -855,6 +912,11 @@ internal sealed unsafe class DatabaseObject : DaoObject
         // A local table opens table-type when no type is given (dbOpenTable 1); dynaset 2, snapshot 4 and forward-only 8
         // populate through the occurrence store (CUR-POP).
         int recordsetType = type ?? 1;
+        if (recordsetType == 1 && lockEdit == 3)
+        {
+            // r-dao-1-err-1/err-bind-optional-cells call 5: db.OpenRecordset("T", Missing, 0, 3) -> 3001 (table-type rejects dbOptimistic).
+            return Fail(3001, DaoErrors.InvalidArgument);
+        }
         switch (RecordsetOptions.Admit(recordsetType, options))
         {
             case OptionAdmission.InvalidArgument:
@@ -1302,6 +1364,11 @@ internal sealed unsafe class DatabaseObject : DaoObject
         if (text is null)
         {
             return Fail(3421, DaoErrors.ConversionError);
+        }
+        if (text.Length > 64)
+        {
+            // r-dao-1-err-1/err-invalid-names call 54: 65-char name fails 3001 at CreateTableDef (shorter invalid names fail 3125 at Append).
+            return Fail(3001, DaoErrors.InvalidArgument);
         }
         var draft = new NewTableDefObject(this, text);
         CallResult result = Object(draft);

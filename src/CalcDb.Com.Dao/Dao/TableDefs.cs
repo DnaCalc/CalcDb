@@ -11,7 +11,7 @@ namespace CalcDb.Com.Dao;
 /// after its last release. <see cref="Denied"/>, when set, is the failure every member gives (ACE refuses the Indexes of
 /// a system table to the default Admin with 3110).
 /// </summary>
-internal sealed unsafe class DefinitionCollection : DaoObject
+internal sealed unsafe class DefinitionCollection : DaoObject, IDaoEnumerableCollection
 {
     private static readonly Dictionary<InterfaceDecl, (nint Vtable, OperationTable Operations)> Shapes = new(ReferenceEqualityComparer.Instance);
 
@@ -231,6 +231,8 @@ internal sealed unsafe class DefinitionCollection : DaoObject
                         : c.CountDenied is { } denied ? c.Fail(denied.Number, denied.Text) : Int16(c._names.Count)))
                     .Get("Item", (self, args) => { nint index = args[0]; return Live(self, c => (c.Gap ?? c.ItemGap) is { } gap ? CallResult.Fail(Failure.NotImplemented(gap))
                         : c.Item(index)); })
+                    .Method("_NewEnum", (self, args) => Live(self, c => (c.Gap ?? c.ItemGap) is { } gap ? CallResult.Fail(Failure.NotImplemented(gap))
+                        : c.CountDenied is { } denied ? c.Fail(denied.Number, denied.Text) : NewEnumResult(c)))
                     .Method("Refresh", (self, args) => Live(self, c => c.Refresh()));
                 if (decl.MembersNamed("Append").Length > 0)
                 {
@@ -283,7 +285,7 @@ internal sealed unsafe class DefinitionCollection : DaoObject
     /// </summary>
     public string? OwnerInvalidSource { get; set; }
 
-    private CallResult Item(nint index)
+    internal CallResult Item(nint index)
     {
         int? ordinal = CollectionLookup.Find(index, _lookup, out bool objectIndex);
         if (objectIndex)
@@ -320,6 +322,27 @@ internal sealed unsafe class DefinitionCollection : DaoObject
         {
             _held.Remove(kv.Key);
         }
+    }
+
+    bool IDaoEnumerableCollection.IsEnumInvalid => Invalid;
+    string IDaoEnumerableCollection.EnumClosedSource => !Database.Closed && OwnerInvalidSource is { } owner ? owner : ClosedSource ?? Source;
+    int IDaoEnumerableCollection.EnumCount => _names.Count;
+    void IDaoEnumerableCollection.AddRefCollection() => AddRef();
+    void IDaoEnumerableCollection.ReleaseCollection() => Release();
+
+    nint IDaoEnumerableCollection.EnumDispatchAt(int index)
+    {
+        nint dispatch;
+        if (_held.TryGetValue(index, out DaoObject? held))
+        {
+            held.QueryInterface(ComIids.IDispatch, &dispatch);
+            return dispatch;
+        }
+        DaoObject made = _make(this, index);
+        _held[index] = made;
+        made.QueryInterface(ComIids.IDispatch, &dispatch);
+        made.Release();
+        return dispatch;
     }
 
     protected override void OnFinalRelease()
@@ -541,6 +564,7 @@ internal sealed unsafe class TableDefObject : DaoObject
             (IReadOnlyList<string> names, Func<DefinitionCollection, int, DaoObject> make, _) = FieldsMembership(reload: false);
             _fields = new DefinitionCollection(DaoTypes.Fields, "DAO.Fields", _owner.Database, names, make)
             {
+                ClosedSource = "DAO.TableDef", // 3420 after Close from the owner (r-q-wire/retain-tabledef-after-db-close call 19)
                 EmptyNameSource = "DAO.TableDef", // r-dao-1-err-1/coll-name-variants: Item("") of a TableDef's Fields
                 Membership = () => FieldsMembership(reload: true),
                 PreserveHeldByName = true,
