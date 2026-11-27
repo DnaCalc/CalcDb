@@ -1723,6 +1723,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
         {
             return EditPublication.Open(accepted.Open, accepted.Detail);
         }
+        Engine.IdleCalledForDeferredQueryDef = false;
 
         if (Queries?.Queries.FirstOrDefault(q => q.Entry.Id == existing.Entry.Id) is not { } updatedQuery)
         {
@@ -1802,6 +1803,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
         {
             return EditPublication.Open(accepted.Open, accepted.Detail);
         }
+        Engine.IdleCalledForDeferredQueryDef = false;
 
         if (queryDefs.FindHeld(entry.Name) is QueryDefObject held)
         {
@@ -1890,6 +1892,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
         {
             return EditPublication.Open(accepted.Open, accepted.Detail);
         }
+        Engine.IdleCalledForDeferredQueryDef = false;
 
         if (Queries?.Queries.FirstOrDefault(q => q.Entry.Id == createdObjectId) is not { } savedQuery)
         {

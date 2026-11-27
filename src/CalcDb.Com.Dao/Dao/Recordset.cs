@@ -2556,6 +2556,16 @@ internal sealed unsafe class FieldObject : DaoObject
         .Get("SourceField", (self, args) => Live(self, f => Text(f.Column.Name)))
         .Get("SourceTable", (self, args) => Live(self, f => Text(f.Recordset.TableName)))
         .Get("Expression", (self, args) => Live(self, f => f.Column.CalculatedResultType is null ? Text("") : f.CalculatedNamed("Expression")))
+        // Field.Precision / Field.Scale (evidence/r-q54-excl-ddl-ix-cmd/field-meta-and-lockwait-accdb, -mdb):
+        // Decimal returns declared precision/scale (18/4 on DECIMAL(18,4)); all other types (Byte..GUID) with General (1033) collating order return 1033/0 across all 4 cursor types.
+        .Get("Precision", (self, args) => Live(self, f => f.Column.CalculatedResultType == NativeTypes.Numeric
+            ? f.CalculatedNamed("Precision")
+            : f.Column.TypeCode == NativeTypes.Numeric
+                ? Int16(f.Column.NumericPrecision)
+                : ColumnFacts.CollatingOrder(f.Column) == 1033
+                    ? Int16(1033)
+                    : CallResult.Fail(Failure.NotModelled("NotModelled.FieldPrecisionCollatingOrder", $"Field.Precision with CollatingOrder {ColumnFacts.CollatingOrder(f.Column)} (only 1033 is recorded)"))))
+        .Get("Scale", (self, args) => Live(self, f => f.Column.CalculatedResultType == NativeTypes.Numeric ? f.CalculatedNamed("Scale") : f.Column.TypeCode == NativeTypes.Numeric ? Int16(f.Column.NumericScale) : Int16(0)))
         .Get("ComplexType", (self, args) => Live(self, f => f.Fail(3219, DaoErrors.InvalidOperation)))
         .Get("ForeignName", (self, args) => Live(self, f => f.Fail(3219, DaoErrors.InvalidOperation)))
         .Get("VisibleValue", (self, args) => Live(self, f => f.Fail(3251, DaoErrors.NotSupportedForType)))

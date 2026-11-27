@@ -9,6 +9,7 @@ using CalcDb.Foundation;
 using CalcDb.Isam.Edit;
 using CalcDb.Isam.Transactions;
 using CalcDb.Storage;
+using CalcDb.Values;
 
 namespace CalcDb.Com.Dao;
 
@@ -123,6 +124,9 @@ internal sealed class EngineState(HostBinding binding) : IPublicationTarget
         return false;
     }
 
+    /// <summary>True once <c>DBEngine.Idle</c> has been called since the last <c>CreateQueryDef</c> deferred commit (<c>r-q54-excl-ddl-ix-cmd/dao-dbengine-idle-*</c>).</summary>
+    internal bool IdleCalledForDeferredQueryDef { get; set; }
+
     /// <summary>Monotonic sequence for ordering recordset opens against Workspace BeginTrans frames (<c>r-txn-1b/ws2-reader-after-other-rollback</c>).</summary>
     public ulong NextSequence() => ++_nextSeq;
 
@@ -201,6 +205,7 @@ internal sealed unsafe class DBEngineObject : DaoObject
         .Method("CreateWorkspace", (self, args) => ((DBEngineObject)self).CreateWorkspace(args))
         .Method("CompactDatabase", (self, args) => ((DBEngineObject)self).CompactDatabase(args))
         .Method("RepairDatabase", (self, args) => ((DBEngineObject)self).RepairDatabase(args[0]))
+        .Method("Idle", (self, args) => ((DBEngineObject)self).Idle(args))
         .Method("SetOption", (self, args) => ((DBEngineObject)self).SetOption(args[0], args[1]))
         .Method("OpenDatabase", (self, args) => ((DBEngineObject)self).Engine.DefaultWorkspace.OpenDatabase(args))
         .Method("CreateDatabase", (self, args) => ((DBEngineObject)self).Engine.DefaultWorkspace.CreateDatabase(args))
@@ -355,6 +360,54 @@ internal sealed unsafe class DBEngineObject : DaoObject
     {
         _ = nameArg;
         return Fail(3251, DaoErrors.NotSupportedForType);
+    }
+
+    /// <summary>
+    /// Idle([Action]) (R-DAO-1, R-LOCK-2; evidence/r-q54-excl-ddl-ix-cmd/dao-dbengine-idle-accdb,
+    /// dao-dbengine-idle-mdb): accepts omitted or any integer Action (0, 1 dbFreeLocks, 2, 8 dbRefreshCache, 9, -1, 999
+    /// -> VT_EMPTY), rejects non-coercible BSTR ("bad") and Null with DAO 3421 from DAO.DbEngine without IErrorInfo,
+    /// and ends active lazy-write bursts on open sessions so pending deferred DML writes are flushed (0xE02 +1) without
+    /// committing explicit transactions or flushing deferred QueryDef catalog commits.
+    /// </summary>
+    private CallResult Idle(ReadOnlySpan<nint> args)
+    {
+        if (args.Length > 0 && args[0] != 0)
+        {
+            NativeVariant* cell = Args.Cell(args[0]);
+            if (!TypedCall.IsMissing(cell))
+            {
+                VarType vt = (VarType)cell->Vt;
+                switch (vt)
+                {
+                    case VarType.I4:
+                        break;
+                    case VarType.Null:
+                        return Fail(3421, DaoErrors.ConversionError);
+                    case VarType.Bstr:
+                        if (!OwnedVariant.TryChangeScalar(cell, VarType.I4, SessionLocale.Lcid, out _, out _))
+                        {
+                            return Fail(3421, DaoErrors.ConversionError);
+                        }
+                        return CallResult.Fail(Failure.NotModelled(
+                            "NotModelled.IdleArgumentType",
+                            "DBEngine.Idle with a numeric-text BSTR argument (only omitted, I4, non-numeric BSTR and Null are recorded)"));
+                    default:
+                        return CallResult.Fail(Failure.NotModelled(
+                            "NotModelled.IdleArgumentType",
+                            $"DBEngine.Idle with {vt} argument (only omitted, I4, non-numeric BSTR and Null are recorded)"));
+                }
+            }
+        }
+        for (int si = 0; si < Engine.Sessions.Count; si++)
+        {
+            DatabaseObject session = Engine.Sessions[si];
+            if (!session.Closed)
+            {
+                session.Workspace.Transactions.EndLazyBurst(session.Cache);
+            }
+        }
+        Engine.IdleCalledForDeferredQueryDef = true;
+        return CallResult.Nothing;
     }
 
     /// <summary>
@@ -1177,13 +1230,33 @@ internal sealed unsafe class WorkspaceObject : DaoObject
     {
         if (Transactions.TryGetPendingDeferredKinds(out bool hasQueryDef, out bool hasTableDefAppend))
         {
-            if (hasQueryDef && hasTableDefAppend)
+            if (hasTableDefAppend)
             {
-                return CallResult.Fail(Failure.NotModelled("NotModelled.BeginTransWithPendingDeferredCatalogCommit", "BeginTrans while both QueryDef and DAO TableDefs.Append deferred catalog commits are pending is not recorded"));
+                return hasQueryDef
+                    ? CallResult.Fail(Failure.NotModelled("NotModelled.BeginTransWithPendingDeferredCatalogCommit", "BeginTrans while both QueryDef and DAO TableDefs.Append deferred catalog commits are pending is not recorded"))
+                    : CallResult.Fail(Failure.NotModelled("NotModelled.BeginTransAfterTableDefsAppend", "BeginTrans while a DAO TableDefs.Append deferred TableDef write is pending is not recorded (qualified.md R-FMT-2, R-CRASH-1 r-q41)"));
             }
-            return hasTableDefAppend
-                ? CallResult.Fail(Failure.NotModelled("NotModelled.BeginTransAfterTableDefsAppend", "BeginTrans while a DAO TableDefs.Append deferred TableDef write is pending is not recorded (qualified.md R-FMT-2, R-CRASH-1 r-q41)"))
-                : CallResult.Fail(Failure.NotModelled("NotModelled.BeginTransAfterCreateQueryDef", "BeginTrans while a QueryDef deferred catalog commit is pending is not recorded (qualified.md R-CAT-1 CAT-Q r-q39)"));
+            if (hasQueryDef)
+            {
+                if (!Engine.IdleCalledForDeferredQueryDef)
+                {
+                    return CallResult.Fail(Failure.NotModelled("NotModelled.BeginTransAfterCreateQueryDef", "BeginTrans while a QueryDef deferred catalog commit is pending is not recorded (qualified.md R-CAT-1 CAT-Q r-q39)"));
+                }
+                // evidence/r-q54-excl-ddl-ix-cmd/dao-dbengine-idle-accdb, dao-dbengine-idle-mdb (calls 101-146):
+                // BeginTrans after CreateQueryDef + Idle succeeds and flushes the deferred QueryDef catalog commit.
+                Engine.IdleCalledForDeferredQueryDef = false;
+                foreach (DatabaseObject db in _databases)
+                {
+                    if (!db.Closed)
+                    {
+                        (MutationOpen defOpen, string? defDetail) = Transactions.FlushDeferredCatalogCommitIfAny(db.Cache);
+                        if (defOpen != MutationOpen.None)
+                        {
+                            return EditPublication.Open(defOpen, defDetail);
+                        }
+                    }
+                }
+            }
         }
         if (Transactions.BeginTrans() is { } refused)
         {
