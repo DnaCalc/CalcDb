@@ -815,9 +815,16 @@ internal sealed unsafe class DatabaseObject : DaoObject
             type = Args.Int32(args[1], omitted: null);
             if (type is null)
             {
-                // r-dao-1-err-1/err-bind-optional-cells calls 17, 34; r-dao-1-err-1/err-bind-types call 5;
-                // r-wire/opt-openrecordset calls 22, 100: Null or non-numeric BSTR Type fails 3421 without IErrorInfo.
-                return Fail(3421, DaoErrors.ConversionError);
+                CalcDb.Foundation.VarType typeVt = Args.TypeOf(args[1]) & ~CalcDb.Foundation.VarType.ByRef;
+                if (typeVt is CalcDb.Foundation.VarType.Null or CalcDb.Foundation.VarType.Bstr)
+                {
+                    // r-dao-1-err-1/err-bind-optional-cells calls 17, 34; r-dao-1-err-1/err-bind-types call 5;
+                    // r-wire/opt-openrecordset calls 22, 100: Null or non-numeric BSTR Type fails 3421 without IErrorInfo.
+                    return Fail(3421, DaoErrors.ConversionError);
+                }
+                return CallResult.Fail(Failure.NotModelled(
+                    "NotModelled.OpenRecordsetTypeConversion",
+                    $"OpenRecordset Type argument of type {typeVt} failed Int32 conversion (only Null and non-numeric BSTR 3421 are recorded)"));
             }
             if (type is not (1 or 2 or 4 or 8))
             {
@@ -846,7 +853,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
         if (entry is null)
         {
             string trimmed = name.TrimStart();
-            if (trimmed.StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
+            if (type != 1 && trimmed.StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
             {
                 return SelectRoute.Open(this, name, type, options.Value);
             }
@@ -858,7 +865,8 @@ internal sealed unsafe class DatabaseObject : DaoObject
             {
                 return CallResult.Fail(Failure.NotImplemented("OpenRecordset of a crosstab or a saved query MSysQueries does not list (W-06/relational-spill)"));
             }
-            // Table-type (1) reports 3011 (r-oracle-1/failed-call-t1, r-wire/opt-openrecordset call 106);
+            // Table-type (1) reports 3011 (r-oracle-1/failed-call-t1, r-wire/opt-openrecordset call 106,
+            // r-err-1b/arg-openrs-opentable-on-sql call 7, r-cursor-1b/open-argument-shapes call 50);
             // non-table-type or omitted Type reports 3078 (r-dao-1-err-1/err-bind-types call 35, r-wire/opt-openrecordset call 112).
             return type == 1
                 ? Fail(3011, DaoErrors.ObjectNotFound(name))

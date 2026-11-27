@@ -231,7 +231,8 @@ internal sealed unsafe class DefinitionCollection : DaoObject, IDaoEnumerableCol
                         : c.CountDenied is { } denied ? c.Fail(denied.Number, denied.Text) : Int16(c._names.Count)))
                     .Get("Item", (self, args) => { nint index = args[0]; return Live(self, c => (c.Gap ?? c.ItemGap) is { } gap ? CallResult.Fail(Failure.NotImplemented(gap))
                         : c.Item(index)); })
-                    .Method("_NewEnum", (self, args) => Live(self, c => NewEnumResult(c)))
+                    .Method("_NewEnum", (self, args) => Live(self, c => (c.Gap ?? c.ItemGap) is { } gap ? CallResult.Fail(Failure.NotImplemented(gap))
+                        : c.CountDenied is { } denied ? c.Fail(denied.Number, denied.Text) : NewEnumResult(c)))
                     .Method("Refresh", (self, args) => Live(self, c => c.Refresh()));
                 if (decl.MembersNamed("Append").Length > 0)
                 {

@@ -505,7 +505,7 @@ internal sealed unsafe class DaoEnumVariant : ComObject
 
     [UnmanagedCallersOnly]
     private static int QueryInterfaceEntry(nint self, Guid* iid, nint* result) =>
-        result is null ? HResults.E_POINTER : Recover<DaoEnumVariant>(self).QueryInterface(*iid, result);
+        result is null || iid is null ? HResults.E_POINTER : Recover<DaoEnumVariant>(self).QueryInterface(*iid, result);
 
     [UnmanagedCallersOnly]
     private static uint AddRefEntry(nint self) => Recover<DaoEnumVariant>(self).AddRef();

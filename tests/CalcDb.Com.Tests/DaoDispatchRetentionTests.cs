@@ -509,6 +509,19 @@ public sealed unsafe class DaoDispatchRetentionTests : IDisposable
 
             // recordset-state-inventory call 44: ("T", 16) -> 3001.
             Assert.Equal(unchecked((int)0x800A0BB9), InvokeRaw(db, openRsId, (ushort)InvokeKind.Method, vT, I4Var(16)).Scode);
+
+            // r-wire/opt-openrecordset call 106: ("SELECT ID FROM T", 1) -> 3011 DAO.Database.
+            NativeVariant vSel = BstrVar("SELECT ID FROM T");
+            try
+            {
+                RawInvokeResult selTable = InvokeRaw(db, openRsId, (ushort)InvokeKind.Method, vSel, I4Var(1));
+                Assert.Equal(unchecked((int)0x800A0BC3), selTable.Scode);
+                Assert.Equal("DAO.Database", selTable.Source);
+            }
+            finally
+            {
+                FreeVar(ref vSel);
+            }
         }
         finally
         {
