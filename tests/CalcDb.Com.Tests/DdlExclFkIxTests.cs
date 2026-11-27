@@ -69,6 +69,7 @@ public sealed unsafe class DdlExclFkIxTests
                 // 2. ADO ALTER TABLE ADD COLUMN without DEFAULT (nullable TEXT/LONG/MEMO + NOT NULL) & r-ado-1b/rs-source-kinds adCmdStoredProc 3732
                 nint cn = OpenAceConnection(dbPath);
                 Assert.Null(Call(cn, "Execute", "ALTER TABLE T ADD COLUMN X TEXT(20)", Missing, 129).Failure);
+                Assert.Null(Call(cn, "Execute", "INSERT INTO T (ID, A, B, D) VALUES (1, 10, 'b1', 1)", Missing, 129).Failure);
                 Assert.Null(Call(cn, "Execute", "ALTER TABLE T ADD COLUMN Z LONG", Missing, 129).Failure);
                 Assert.Null(Call(cn, "Execute", "ALTER TABLE T ADD COLUMN M2 MEMO", Missing, 129).Failure);
 

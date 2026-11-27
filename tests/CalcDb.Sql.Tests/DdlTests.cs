@@ -1402,7 +1402,7 @@ public sealed class DdlTests
         var lockedParent = new LockedTableDatabase(db, "P2");
         AssertNotModelled(lockedParent, "CREATE TABLE CHeld (ID LONG CONSTRAINT PKCH PRIMARY KEY, K LONG CONSTRAINT FK_CH REFERENCES P2(ID))", "NotModelled.DdlTableInUsePrecedence");
         AssertNotModelled(lockedParent, "ALTER TABLE T2 ADD CONSTRAINT FK_T2_HELD FOREIGN KEY (K) REFERENCES P2(ID)", "NotModelled.DdlTableInUsePrecedence");
-        AssertNotModelled(db, "CREATE TABLE C2 (ID LONG CONSTRAINT PKC2 PRIMARY KEY, K LONG CONSTRAINT FK_C2_P REFERENCES P(ID))", "NotModelled.SchemaWriter");
+        // Second FK referencing the same parent P is now recorded in evidence/r-q54-excl-ddl-ix-cmd/second-fk-negid-and-lvalchild-accdb and second-fk-negid-and-lvalchild-mdb.
         AssertNotModelled(db, "CREATE TABLE SelfT (ID LONG CONSTRAINT PKS PRIMARY KEY, K LONG CONSTRAINT FK_SELF REFERENCES SelfT(ID))", "NotModelled.DdlForeignKey");
         AssertNotModelled(db, "ALTER TABLE T2 ADD CONSTRAINT FK_T2_P2 FOREIGN KEY (K) REFERENCES P2(ID)", "NotModelled.SchemaWriter");
         // ADO DROP CONSTRAINT on FK is unrecorded (DAO FK drop is recorded in r-q44/dropcon-fk-accdb-dao & mdb-dao),

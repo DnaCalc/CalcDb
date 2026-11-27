@@ -2183,7 +2183,7 @@ public sealed class SchemaWriter
         // CREATE UNIQUE / WITH IGNORE NULL / DISALLOW NULL / PRIMARY INDEX reserves the 32-page session extent on page 1 on first global-map activity.
         bool useSessionExtentReservation =
             workspace.Depth == 0
-            && (request.Index.IgnoreNull || request.Index.DisallowNull || request.Index.PrimaryKey || request.Index.Unique)
+            && (request.Index.IgnoreNull || request.Index.DisallowNull || request.Index.PrimaryKey || (request.Index.Unique && !isExtendedKeyType))
             && !workspace.HasGlobalMapAllocationOrReservation(_cache)
             && sessionReserved.Count == 0;
         ulong extent = _pageCount;
@@ -9605,7 +9605,7 @@ public sealed class SchemaWriter
                         return false;
                     }
                     nullKeyRows++;
-                    if (!index.Unique && keyCols.Length == 1 && nullKeyRows > 1)
+                    if (!index.Unique && keyCols.Length == 1 && keyCols[0].TypeCode == NativeTypes.Long && nullKeyRows > 1)
                     {
                         failure = $"{index.Name}: multiple Null rows in single-column non-unique index is not recorded (evidence/r-q43-schema-lval-index/ix-lval-pk-rows-accdb records 1 Null row)";
                         return false;
