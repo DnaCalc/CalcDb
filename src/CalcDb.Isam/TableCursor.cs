@@ -1533,7 +1533,7 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
     /// The zero-based ordinal of the current occurrence (DAO AbsolutePosition), the pre-failure ordinal after a rejected
     /// Bookmark assignment (r-q2-cursor-dao/id-bookmark-requery-populated), or the deleted row's ordinal after a sibling
     /// delete — including when the sibling deleted the last populated row (r-def-cursor-dao/delete-by-other-cursor-current-row;
-    /// r-q53-conv-abspos-subq-loc/abspos-delete-edit-{accdb,mdb} call 112: ordinal 5 at RecordCount 5), or null without a current row.
+    /// r-q53-conv-abspos-subq-loc/abspos-delete-edit-accdb, abspos-delete-edit-mdb call 112: ordinal 5 at RecordCount 5), or null without a current row.
     /// </summary>
     public int? Ordinal => _position.Current
         ?? _position.BookmarkInvalidAnchor
@@ -1659,15 +1659,15 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
         return appended;
     }
 
-    /// <summary>The keyset bookmark for an already-populated ordinal, preserving monotonic keyset slots across deletes (r-q53-conv-abspos-subq-loc/abspos-delete-edit-{accdb,mdb} calls 138, 219).</summary>
+    /// <summary>The keyset bookmark for an already-populated ordinal, preserving monotonic keyset slots across deletes (r-q53-conv-abspos-subq-loc/abspos-delete-edit-accdb, abspos-delete-edit-mdb calls 138, 219).</summary>
     public byte[]? BookmarkForOrdinal(int ordinal) =>
         _family.BookmarkBase is uint @base && ordinal >= 0 && ordinal < _family.Store.ObservedCount
             ? KeysetBookmark.Encode(@base, _family.Store.KeysetSlotAt(ordinal))
             : null;
 
     /// <summary>
-    /// AbsolutePosition assignment on a dynaset or snapshot (r-q53-conv-abspos-subq-loc/abspos-get-put-read-{accdb,mdb},
-    /// abspos-delete-edit-{accdb,mdb}): operates over the populated frontier without populating forward.
+    /// AbsolutePosition assignment on a dynaset or snapshot (r-q53-conv-abspos-subq-loc/abspos-get-put-read-accdb,
+    /// abspos-get-put-read-mdb, abspos-delete-edit-accdb, abspos-delete-edit-mdb): operates over the populated frontier without populating forward.
     /// Negative targets fail OutOfRange (3001) even on an empty recordset; on an empty recordset 0 fails NoCurrentRecord
     /// (3021); targets &gt; ObservedCount fail OutOfRange (3001); target == ObservedCount clamps to ObservedCount - 1.
     /// Valid targets reposition from At, BOF, EOF, Deleted, DeletedBySibling and BookmarkInvalid.
@@ -1813,7 +1813,7 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
             && bookmark.Length == 4
             && bookmark[0] == 0xFF && bookmark[1] == 0xFF && bookmark[2] == 0xFF && bookmark[3] == 0xFF)
         {
-            // r-q53-conv-abspos-subq-loc/abspos-delete-edit-{accdb,mdb} calls 144-153:
+            // r-q53-conv-abspos-subq-loc/abspos-delete-edit-accdb, abspos-delete-edit-mdb calls 144-153:
             // assigning 0xFFFFFFFF after a sibling deleted the current row fails 3001 ("Invalid argument.")
             // and keeps BOF/EOF false and AbsolutePosition at the deleted anchor ordinal.
             return CursorFailure.OutOfRange;

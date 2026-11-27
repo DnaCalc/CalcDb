@@ -188,20 +188,23 @@ public sealed class CloneRequeryCursorTests
         Assert.Equal(MoveOutcome.Moved, sameRowPrev.MovePrevious());
         Assert.Equal(1, Id(sameRowPrev));
 
-        // Later-row sibling stayed on ID 4; keyset bookmarks are invalidated until Requery because RemoveAt shifted ordinals.
+        // Later-row sibling stayed on ID 4 and keeps its original keyset bookmark (abspos-delete-edit-accdb calls 138, 219);
+        // SetBookmark of a pre-delete bookmark after cursor Delete remains NotObserved until Requery.
         Assert.Equal(4, Id(laterRow));
         Assert.True(laterRow.BookmarksInvalidatedByDelete);
-        Assert.Null(laterRow.BookmarkForOrdinal(0));
-        Assert.Null(laterRow.GetBookmark(out CursorFailure? bmGetFailure));
-        Assert.Equal(CursorFailure.NotObserved, bmGetFailure);
+        Assert.NotNull(laterRow.BookmarkForOrdinal(0));
+        Assert.Equal(bmBeforeDelete, laterRow.GetBookmark(out CursorFailure? bmGetFailure));
+        Assert.Null(bmGetFailure);
         Assert.Equal(CursorFailure.NotObserved, laterRow.SetBookmark(bmBeforeDelete));
 
-        // Deleting the last populated row puts a sibling on that row in IsDeletedBySiblingOutOfRange (Ordinal null).
+        // Deleting the last populated row keeps the deleted row's ordinal on a sibling sitting on that row
+        // (r-q53-conv-abspos-subq-loc/abspos-delete-edit-accdb, abspos-delete-edit-mdb call 112).
         Assert.Equal(MoveOutcome.Moved, parent.MoveLast());      // last row (ID 5)
         Assert.Equal(MoveOutcome.Moved, sameRowNext.MoveLast()); // last row (ID 5)
+        int lastOrdinal = sameRowNext.Ordinal!.Value;
         parent.OnRowDeleted();
         Assert.True(sameRowNext.IsDeletedBySiblingOutOfRange);
-        Assert.Null(sameRowNext.Ordinal);
+        Assert.Equal(lastOrdinal, sameRowNext.Ordinal);
     }
 
     [Fact]

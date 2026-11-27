@@ -198,7 +198,7 @@ public sealed unsafe class DaoCloneRequeryTests : IDisposable
         AssertNotModelled(Put(laterRow, "Bookmark", bmBeforeDelete), "NotModelled.BookmarkAfterDelete");
 
         // Deleting the last populated row keeps the deleted row's ordinal on a sibling sitting on that row
-        // (r-q53-conv-abspos-subq-loc/abspos-delete-edit-{accdb,mdb} call 112: ordinal 5 at RecordCount 5).
+        // (r-q53-conv-abspos-subq-loc/abspos-delete-edit-accdb, abspos-delete-edit-mdb call 112: ordinal 5 at RecordCount 5).
         Ok(Method(parent, "MoveLast"));
         Ok(Method(sameRow, "MoveLast"));
         int lastOrdinal = Int32Value(Ok(Get(sameRow, "AbsolutePosition")));

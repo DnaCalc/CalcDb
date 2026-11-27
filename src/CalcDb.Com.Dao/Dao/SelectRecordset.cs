@@ -131,6 +131,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
     private NativeValue[]? _seeChangesValues;
     private ulong _seeChangesSerial;
     private readonly DerivedSourceSpec? _derivedSpec;
+    private readonly bool _isDerived;
     private string _filter = "";
     private string _sort = "";
     private bool _noMatch;
@@ -158,7 +159,8 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         ulong openSequence = 0,
         InnerJoinKeys? innerJoin = null,
         bool hasGroupBy = false,
-        DerivedSourceSpec? derivedSpec = null) : base(Decl, Vtable, database.Engine, "DAO.Recordset")
+        DerivedSourceSpec? derivedSpec = null,
+        bool isDerived = false) : base(Decl, Vtable, database.Engine, "DAO.Recordset")
     {
         Database = database;
         Plan = plan;
@@ -169,6 +171,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         OpenSequence = openSequence;
         HasGroupBy = hasGroupBy;
         _derivedSpec = derivedSpec;
+        _isDerived = isDerived;
         _openLevels = [.. database.Workspace.Transactions.Frames];
         _openOverlay = database.Workspace.Transactions.OverlayOf(database.Cache);
         _snapshotView = snapshotView;
@@ -634,7 +637,8 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
 
     /// <summary>
     /// Refuse unrecorded Move(Rows) and AbsolutePosition put source VarTypes before IDispatch coercion, matching
-    /// Dao.RecordsetObject (r-cursor-1b/move-argument-forms, r-q53-conv-abspos-subq-loc/abspos-get-put-read-{accdb,mdb}).
+    /// Dao.RecordsetObject (r-cursor-1b/move-argument-forms, r-q53-conv-abspos-subq-loc/abspos-get-put-read-accdb,
+    /// abspos-get-put-read-mdb).
     /// </summary>
     protected override Failure? ScalarArgumentRefusal(MemberDecl member, int parameter, VarType sourceType) => (member.Name, parameter) switch
     {
@@ -1557,7 +1561,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         {
             return CallResult.Fail(Failure.NotModelled("NotModelled.QueryRecordsetClone", "Clone on this SELECT query recordset shape, cursor type, or transaction depth (not recorded)"));
         }
-        // r-q53-conv-abspos-subq-loc/filter-sort-openrs-read-{accdb,mdb} calls 55-84:
+        // r-q53-conv-abspos-subq-loc/filter-sort-openrs-read-accdb, filter-sort-openrs-read-mdb calls 55-84:
         // Clone of a derived/single-table SELECT dynaset or snapshot opens an independent cursor at row 0
         // with Filter = "", Sort = "", surviving parent Close().
         return SelectRoute.OpenDerived(Database, this, spec, RecordsetType, filter: "", sort: "", typeArg: 0, optionsArg: 0);
@@ -2127,6 +2131,10 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         if (EditFrameForSource("Delete", 0, out CallResult refused) is not { } frame)
         {
             return refused;
+        }
+        if (!_isDerived)
+        {
+            return CallResult.Fail(Failure.NotImplemented("Recordset.Delete on a writable SELECT dynaset (only read-only 3027 and derived OpenRecordset dynasets are recorded)"));
         }
         if (IsAtBof || IsAtEof || _deletedCurrent)
         {
@@ -3126,6 +3134,10 @@ internal sealed unsafe class SelectFieldObject : DaoObject
             return CallResult.Fail(Failure.NotModelled("NotModelled.FieldProperties.CursorType", $"Field.Properties on a type {Recordset.RecordsetType} query recordset (only dynaset and snapshot are recorded)"));
         }
         bool isBase = Column.Origin == ColumnOrigin.BaseColumn && Column.SourceColumn is not null;
+        if (Recordset.RecordsetType == 4 && !Recordset.Database.ReadOnly && isBase)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.FieldProperties.CursorType", $"Field.Properties on a writable-database snapshot base column ({Column.Name}: not recorded)"));
+        }
         bool isSingleColumnExpr = Column.Origin == ColumnOrigin.Expression
             && Column.SourceTable is { Length: > 0 }
             && Column.SourceField is { Length: > 0 };
@@ -3231,13 +3243,14 @@ internal sealed unsafe class SelectFieldObject : DaoObject
     /// <list type="bullet">
     /// <item>Ungrouped aggregate snapshot (<c>!HasGroupBy</c>, <see cref="ColumnOrigin.Aggregate"/>): fails 3021
     /// (<c>"No current record."</c>, source <c>DAO.Field</c>, no IErrorInfo) across ACCDB and Jet 4 MDB
-    /// (<c>evidence/r-q53-conv-abspos-subq-loc/groupby-expr-decagg-dao-{accdb,mdb}</c> calls 94, 136, 150).</item>
+    /// (<c>evidence/r-q53-conv-abspos-subq-loc/groupby-expr-decagg-dao-accdb</c> and
+    /// <c>evidence/r-q53-conv-abspos-subq-loc/groupby-expr-decagg-dao-mdb</c> calls 94, 136, 150).</item>
     /// <item>Grouped Decimal aggregate snapshot (<c>HasGroupBy</c>, <c>Type == 20</c>, <c>DECIMAL(18,4)</c> source):
     /// <c>SUM</c>/<c>AVG</c> return <c>VT_I2 28</c>, <c>MIN</c>/<c>MAX</c> return <c>VT_I2 18</c>
-    /// (<c>groupby-expr-decagg-dao-{accdb,mdb}</c> calls 108, 122).</item>
+    /// (<c>groupby-expr-decagg-dao-accdb</c>, <c>groupby-expr-decagg-dao-mdb</c> calls 108, 122).</item>
     /// <item>Long (4) and Text (10) with collating order 1033 (base, group key, single-column expression, scalar subquery):
-    /// <c>VT_I2 1033</c> (<c>r-sql-1/sub-scalar</c> calls 8, 18, 48; <c>groupby-expr-decagg-dao-{accdb,mdb}</c> calls 108[0], 122[0];
-    /// <c>r-def-cursor-dao/recordset-field-properties</c>).</item>
+    /// <c>VT_I2 1033</c> (<c>r-sql-1/sub-scalar</c> calls 8, 18, 48; <c>groupby-expr-decagg-dao-accdb</c>,
+    /// <c>groupby-expr-decagg-dao-mdb</c> calls 108[0], 122[0]; <c>r-def-cursor-dao/recordset-field-properties</c>).</item>
     /// </list>
     /// </summary>
     private CallResult PropertyPrecision(short fieldType)

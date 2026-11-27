@@ -210,8 +210,9 @@ internal static unsafe class SelectRoute
 
     /// <summary>
     /// Open a derived recordset via <c>Recordset.OpenRecordset([Type], [Options])</c> applying the parent's
-    /// <c>Filter</c> and <c>Sort</c> (r-q53-conv-abspos-subq-loc/filter-sort-openrs-read-{accdb,mdb},
-    /// filter-sort-edit-errors-{accdb,mdb}). Errors are published from <c>DAO.Recordset</c> without IErrorInfo.
+    /// <c>Filter</c> and <c>Sort</c> (r-q53-conv-abspos-subq-loc/filter-sort-openrs-read-accdb,
+    /// filter-sort-openrs-read-mdb, filter-sort-edit-errors-accdb, filter-sort-edit-errors-mdb).
+    /// Errors are published from <c>DAO.Recordset</c> without IErrorInfo.
     /// </summary>
     public static CallResult OpenDerived(
         DatabaseObject database,
@@ -327,7 +328,7 @@ internal static unsafe class SelectRoute
                 cursor.MoveFirst();
             }
             var childSpec = new DerivedSourceSpec(source.TableName, source.SelectList, combinedWhere, combinedOrderBy);
-            var recordset = new SelectRecordsetObject(database, plan, cursor, recordsetType, singleTableRowSelect, hasOrderBy, snapshotView, snapshotOverlay, options, database.Engine.NextSequence(), innerJoin: null, hasGroupBy, childSpec);
+            var recordset = new SelectRecordsetObject(database, plan, cursor, recordsetType, singleTableRowSelect, hasOrderBy, snapshotView, snapshotOverlay, options, database.Engine.NextSequence(), innerJoin: null, hasGroupBy, childSpec, isDerived: true);
             adopted = true;
             return database.Adopt(recordset);
         }

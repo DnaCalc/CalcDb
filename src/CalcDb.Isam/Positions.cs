@@ -566,7 +566,8 @@ public sealed class OccurrenceStore<T> : IOrderedSource<int> where T : struct
     /// <summary>
     /// The monotonic keyset slot assigned when the occurrence at <paramref name="ordinal"/> entered the store.
     /// Deleting earlier occurrences shifts ordinals down while preserving surviving occurrences' keyset bookmarks
-    /// and advancing new AddNew slots monotonically (r-q53-conv-abspos-subq-loc/abspos-delete-edit-{accdb,mdb} calls 138, 219).
+    /// and advancing new AddNew slots monotonically (r-q53-conv-abspos-subq-loc/abspos-delete-edit-accdb,
+    /// abspos-delete-edit-mdb calls 138, 219).
     /// </summary>
     public int KeysetSlotAt(int ordinal) => _keysetSlots[ordinal];
 

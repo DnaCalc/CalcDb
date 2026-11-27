@@ -1910,7 +1910,7 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
     /// <summary>
     /// AbsolutePosition: the zero-based ordinal on a dynaset or snapshot, the deleted ordinal after a sibling delete
     /// including the last populated row (r-def-cursor-dao/delete-by-other-cursor-current-row,
-    /// r-q53-conv-abspos-subq-loc/abspos-delete-edit-{accdb,mdb} call 112), or -1 at BOF, EOF, empty, or after own
+    /// r-q53-conv-abspos-subq-loc/abspos-delete-edit-accdb, abspos-delete-edit-mdb call 112), or -1 at BOF, EOF, empty, or after own
     /// Delete (CUR-POS); forward-only refuses it with 3219 and table-type with 3251 (r-cursor-1/pos-moves-dynaset,
     /// pos-moves-forwardonly, pop-count-table).
     /// </summary>
@@ -1926,7 +1926,8 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
     };
 
     /// <summary>
-    /// AbsolutePosition put (r-q53-conv-abspos-subq-loc/abspos-get-put-read-{accdb,mdb}, abspos-delete-edit-{accdb,mdb}):
+    /// AbsolutePosition put (r-q53-conv-abspos-subq-loc/abspos-get-put-read-accdb, abspos-get-put-read-mdb,
+    /// abspos-delete-edit-accdb, abspos-delete-edit-mdb):
     /// table-type fails 3251, forward-only 3219; coerced VT_I4 is checked against the populated RecordCount without
     /// populating forward (&lt;0 or &gt;RecordCount -> 3001; empty with 0 -> 3021; ==RecordCount clamps to RecordCount-1).
     /// A valid put cancels any pending Edit/AddNew (EditMode -> 0) and repositions.
@@ -1963,8 +1964,9 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
     }
 
     /// <summary>
-    /// OpenRecordset([Type], [Options]) (r-q53-conv-abspos-subq-loc/filter-sort-openrs-read-{accdb,mdb},
-    /// filter-sort-edit-errors-{accdb,mdb}): derives a filtered/sorted recordset from this table recordset.
+    /// OpenRecordset([Type], [Options]) (r-q53-conv-abspos-subq-loc/filter-sort-openrs-read-accdb,
+    /// filter-sort-openrs-read-mdb, filter-sort-edit-errors-accdb, filter-sort-edit-errors-mdb):
+    /// derives a filtered/sorted recordset from this table recordset.
     /// Forward-only refuses with 3219; table-type derives a dynaset (type 2) by default.
     /// </summary>
     private CallResult OpenDerivedRecordset(nint typeArg, nint optionsArg)
