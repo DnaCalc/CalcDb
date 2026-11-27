@@ -433,9 +433,14 @@ public sealed unsafe class DaoFieldValidationPutTests : IDisposable
         SelectFieldObject rsw = Recover<SelectFieldObject>(Get(Recover<SelectFieldsObject>(Get(rs, "Fields")), "Item", "W"));
         Assert.Equal(0, Get(rs, "EditMode").Scalar.Int64);
 
-        // Unrecorded depth-0 SELECT dynaset states refuse by name: Field.Value put without Edit and CancelUpdate without Edit.
+        // Unrecorded depth-0 SELECT dynaset Field.Value put without Edit refuses by name; CancelUpdate without Edit
+        // fails DAO 3020 from DAO.Recordset (evidence/r-str-ado-act/str-edit-requery call 32).
         Assert.Equal(FailureKind.NotModelled, Put(rsw, "Value", "x").Failure!.Kind);
-        Assert.Equal(FailureKind.NotModelled, Method(rs, "CancelUpdate").Failure!.Kind);
+        CallResult cancelNoEdit = Method(rs, "CancelUpdate");
+        Assert.Equal(FailureKind.Dao, cancelNoEdit.Failure!.Kind);
+        Assert.Equal(3020, cancelNoEdit.Failure.Number);
+        Assert.Equal("DAO.Recordset", cancelNoEdit.Failure.Source);
+        Assert.False(cancelNoEdit.Failure.PublishesErrorInfo);
 
         // Violating value fails Update with DAO 3317, keeps EditMode == 1, CancelUpdate restores EditMode == 0;
         // nested Edit while EditMode == 1 refuses by name.

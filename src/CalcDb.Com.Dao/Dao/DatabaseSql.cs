@@ -117,7 +117,7 @@ internal static unsafe class SelectRoute
     /// <paramref name="values"/> are a QueryDef's parameter values, one per parameter of the statement in its order, null
     /// where none was assigned (SelectCursor.Open fails 3061 then); the cursor keeps copies.
     /// </summary>
-    public static CallResult Open(DatabaseObject database, string sql, int? type, int options, IReadOnlyList<NativeVariant?>? values = null, string? name = null, bool pessimistic = true)
+    public static CallResult Open(DatabaseObject database, string sql, int? type, int options, IReadOnlyList<NativeVariant?>? values = null, string? name = null, bool pessimistic = true, CatalogEntry? queryEntry = null)
     {
         if (database.PendingDeferredTableDefRefusal("NotModelled.OpenRecordsetWithPendingDeferredTableDef", "OpenRecordset") is { } deferredRefusal)
         {
@@ -186,7 +186,7 @@ internal static unsafe class SelectRoute
                     ? BuildSubqueryDerivedSpec(plan, sql)
                     : null;
             string? resolvedName = name ?? (sql.Length <= 256 ? sql : null);
-            var recordset = new SelectRecordsetObject(database, plan, cursor, recordsetType, singleTableRowSelect, hasOrderBy, snapshotView, snapshotOverlay, options, database.Engine.NextSequence(), joinKeys, hasGroupBy, derivedSpec, name: resolvedName, pessimistic: pessimistic);
+            var recordset = new SelectRecordsetObject(database, plan, cursor, recordsetType, singleTableRowSelect, hasOrderBy, snapshotView, snapshotOverlay, options, database.Engine.NextSequence(), joinKeys, hasGroupBy, derivedSpec, name: resolvedName, pessimistic: pessimistic, queryEntry: queryEntry);
             adopted = true;
             return database.Adopt(recordset);
         }
@@ -735,6 +735,21 @@ internal static class ActionRoute
             outcome = ActionExecutor.Execute(sql, database.Sql, options, values, source);
         }
         bool isRecordedInsertValuesAlone = !ddl && IsInsertValues(sql);
+        if (ddl
+            && source == ActionErrorSource.Database
+            && database.Profile.IsAce
+            && database.Workspace.Transactions.Depth == 0
+            && options == 0
+            && outcome.Failure is { IsNotModelled: true, NotModelled: "NotModelled.DdlTableInUsePrecedence" } tableInUseFailure
+            && tableInUseFailure.Message.Contains("in ALTER TABLE (AddColumnsAlterAction)", StringComparison.Ordinal)
+            && DdlParser.Parse(sql, out _) is AlterTableStatement { Action: AddColumnsAlterAction { Columns.Count: 1 } addCols } alterAdd
+            && addCols.Columns[0] is { Constraints.Count: 0, Nullability: DdlNullability.Unspecified, WithCompression: false, DefaultExpression: null })
+        {
+            // r-str-ado-act/str-schema-change call 9: single-column ALTER TABLE ADD COLUMN on ACCDB depth 0 (options 0)
+            // while a SELECT dynaset on the table is open fails 3211 from DAO.Database without IErrorInfo.
+            recordsAffected.Fail();
+            return caller.Fail(3211, SqlMessages.TableInUse(alterAdd.TableName));
+        }
         return Published(database, caller, outcome, source, options, isRecordedInsertValuesAlone, ref recordsAffected);
     }
 

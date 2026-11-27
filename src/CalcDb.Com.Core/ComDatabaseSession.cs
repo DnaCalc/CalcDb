@@ -72,6 +72,9 @@ public sealed class ComDatabaseSession : IPublicationTarget
         _onEditContextCreated = onEditContextCreated;
     }
 
+    /// <summary>Page number of the pending deferred TableDef commit created by <c>TableDef.Fields.Append</c>, if any (shared across pooled handles; r-dao-1b/coll-append-field-existing-rows).</summary>
+    public ulong? LastDeferredFieldAppendPage { get; set; }
+
     public PageCache Cache { get; }
 
     public FileProfile Profile { get; }
