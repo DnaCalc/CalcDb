@@ -220,12 +220,12 @@ public sealed unsafe class DaoMembersAndQueryDefTests : IDisposable
 
         Assert.Equal((VarType.I2, 1L), Scalar(Get(rsets, "Count")));
         Assert.Equal("QSel", Text(Get(srs, "Name")));
-        SelectRecordsetObject byIndex = Recover<SelectRecordsetObject>(Get(rsets, "Item", 0));
-        Assert.Same(srs, byIndex);
+        Assert.Contains("NotModelled.RecordsetsItem", Get(rsets, "Item", 0).Failure?.Description);
 
         Ok(Method(srs, "Close"));
         Assert.Equal((VarType.I2, 0L), Scalar(Get(rsets, "Count")));
         Ok(Method(db, "Close"));
+        Assert.Contains("NotModelled.RecordsetsClosed", Get(rsets, "Count").Failure?.Description);
     }
 
     [Fact]
@@ -352,8 +352,10 @@ public sealed unsafe class DaoMembersAndQueryDefTests : IDisposable
         Ok(Method(idxs, "Refresh"));
         Assert.Equal((VarType.I4, 1L), Scalar(Get(rx, "DistinctCount")));
         Assert.Equal((VarType.I4, 1L), Scalar(Get(nx, "DistinctCount")));
+        Assert.Contains("NotModelled.AttachedIndexFieldPut", Put(f0, "Name", "Other").Failure?.Description);
 
         Ok(Method(db, "Close"));
+        FailDao(Get(f0, "Name"), 3420, "DAO.Field", DaoErrors.ObjectInvalid, publishesErrorInfo: false);
     }
 
     [Fact]
@@ -413,7 +415,9 @@ public sealed unsafe class DaoMembersAndQueryDefTests : IDisposable
         FailDao(Get(fId, "FieldSize"), 3267, "DAO.Field", DaoErrors.RecordsetFieldOnly, publishesErrorInfo: false);
         FailDao(Get(fId, "OriginalValue"), 3251, "DAO.Field", DaoErrors.NotSupportedForType, publishesErrorInfo: false);
         FailDao(Get(fId, "Value"), 3219, "DAO.Field", DaoErrors.InvalidOperation, publishesErrorInfo: true);
-        Assert.Equal((VarType.I2, 24L), Scalar(Get(Recover<PropertiesObject>(Get(fId, "Properties")), "Count")));
+        PropertiesObject fIdProps = Recover<PropertiesObject>(Get(fId, "Properties"));
+        Assert.Equal((VarType.I2, 24L), Scalar(Get(fIdProps, "Count")));
+        Assert.Contains("NotModelled.PropertyEntries", Get(fIdProps, "Item", 0).Failure?.Description);
 
         QueryFieldObject fName = Recover<QueryFieldObject>(Get(qsf, "Item", 1));
         Assert.Equal((VarType.I4, 34L), Scalar(Get(fName, "Attributes")));

@@ -1527,7 +1527,12 @@ internal sealed unsafe class DatabaseObject : DaoObject
                 return fields.Fail(3265, DaoErrors.ItemNotFound);
             }
             // r-dao-1b/coll-delete-field-indexed calls 43, 51: relationship check precedes index check -> 3303 from DAO.Fields.
-            if (Relationships(out _) is { } rels && rels.Any(r =>
+            var rels = Relationships(out string? relFailure);
+            if (relFailure is not null)
+            {
+                return CallResult.Fail(Failure.NotImplemented("TableDef.Fields.Delete could not read MSysRelationships: " + relFailure));
+            }
+            if (rels is not null && rels.Any(r =>
                 (string.Equals(r.Table, tableDef.Name, StringComparison.OrdinalIgnoreCase) && r.Columns.Any(c => string.Equals(c.Referenced, col.Name, StringComparison.OrdinalIgnoreCase)))
                 || (string.Equals(r.ForeignTable, tableDef.Name, StringComparison.OrdinalIgnoreCase) && r.Columns.Any(c => string.Equals(c.Foreign, col.Name, StringComparison.OrdinalIgnoreCase)))))
             {
@@ -2973,8 +2978,8 @@ internal sealed unsafe class RecordsetsObject : DaoObject
     private static readonly nint Vtable = DualEntries.Build(Decl);
     private static readonly OperationTable Operations = new OperationTable(Decl)
         .Get("Count", (self, args) => Live(self, r => Int16(r._database.OpenRecordsets.Count)))
-        .Get("Item", (self, args) => { nint index = args[0]; return Live(self, r => r.Item(index)); })
-        .Method("Refresh", (self, args) => Live(self, _ => CallResult.Nothing));
+        .Get("Item", (self, args) => Live(self, _ => CallResult.Fail(Failure.NotModelled("NotModelled.RecordsetsItem", "Database.Recordsets.Item is not recorded (r-dao-1b/db-members-* and querydef-state-after-execute only read Count)"))))
+        .Method("Refresh", (self, args) => Live(self, _ => CallResult.Fail(Failure.NotModelled("NotModelled.RecordsetsRefresh", "Database.Recordsets.Refresh is not recorded"))));
 
     private readonly DatabaseObject _database;
 
@@ -2990,17 +2995,8 @@ internal sealed unsafe class RecordsetsObject : DaoObject
     private static CallResult Live(ComObject self, Func<RecordsetsObject, CallResult> op)
     {
         var r = (RecordsetsObject)self;
-        return r.Invalid ? r.Fail(3420, DaoErrors.ObjectInvalid) : op(r);
-    }
-
-    private CallResult Item(nint index)
-    {
-        IReadOnlyList<IDatabaseRecordset> members = _database.OpenRecordsets;
-        int? found = CollectionLookup.Find(index, new CollectionNames([.. members.Select(m => m.RecordsetName)]), out bool objectIndex);
-        if (objectIndex)
-        {
-            return CallResult.Fail(Failure.NotImplemented("Recordsets.Item with an object index"));
-        }
-        return found is int i && members[i] is ComObject com ? Object(com) : Fail(3265, DaoErrors.ItemNotFound);
+        return r.Invalid
+            ? CallResult.Fail(Failure.NotModelled("NotModelled.RecordsetsClosed", "Database.Recordsets after Database.Close is not recorded"))
+            : op(r);
     }
 }

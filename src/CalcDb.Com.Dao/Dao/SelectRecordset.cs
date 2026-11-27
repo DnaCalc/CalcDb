@@ -3067,8 +3067,6 @@ internal sealed unsafe class SelectFieldsObject : DaoObject
     private static readonly OperationTable Operations = new OperationTable(Decl)
         .Get("Count", (self, args) => Live(self, f => Int16(f.Recordset.Cursor.Columns.Count)))
         .Get("Item", static (self, args) => (SelectFieldsObject)self is { Recordset.Closed: true } closed ? closed.Recordset.Fail(3420, DaoErrors.ObjectInvalid) : ((SelectFieldsObject)self).Item(args[0]))
-        .Method("Append", (self, args) => Live(self, f => f.Fail(3273, DaoErrors.MethodNotApplicable)))
-        .Method("Delete", (self, args) => Live(self, f => f.Fail(3273, DaoErrors.MethodNotApplicable)))
         .Method("Refresh", (self, args) => Live(self, f => CallResult.Nothing));
 
     private readonly Dictionary<int, SelectFieldObject> _held = [];

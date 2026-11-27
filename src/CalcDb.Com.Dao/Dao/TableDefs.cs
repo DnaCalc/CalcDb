@@ -585,6 +585,16 @@ internal sealed unsafe class TableDefObject : DaoObject
                 Denied = IsSystem ? (3110, DaoErrors.NoReadDefinitions(_entry.Name)) : null,
                 ClosedSource = "DAO.TableDef", // 3420 after Close from the owner (r-dao-1-err-1/life-database-workspace-close)
                 Membership = () => IndexesMembership(reload: true),
+                Refreshed = static (_, held) =>
+                {
+                    foreach ((string _, DaoObject wrapper) in held)
+                    {
+                        if (wrapper is NewIndexObject nix)
+                        {
+                            nix.MarkRefreshed();
+                        }
+                    }
+                },
                 PreserveHeldByName = true,
                 Appender = (c, arg) => c.Database.AppendIndex(this, c, arg),
                 Deleter = (c, nameArg) => c.Database.DeleteIndex(this, c, nameArg),

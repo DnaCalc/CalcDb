@@ -182,7 +182,11 @@ internal static class BuiltInProperties
         {
             foreach (StoredProperty p in inherited.Properties)
             {
-                if (!specs.Any(b => string.Equals(b.Name, p.Name, StringComparison.OrdinalIgnoreCase)))
+                // r-dao-1b/querydef-properties-enumerated: only source-table user properties (Flags == 0, not TableDef
+                // built-ins such as ValidationRule/ValidationText) are inherited onto QueryDef.Properties.
+                if (p.Flags == 0
+                    && !TableDef.Any(b => string.Equals(b.Name, p.Name, StringComparison.OrdinalIgnoreCase))
+                    && !specs.Any(b => string.Equals(b.Name, p.Name, StringComparison.OrdinalIgnoreCase)))
                 {
                     specs.Add(PropertySpec.InheritedUser(p));
                 }
@@ -268,12 +272,16 @@ internal sealed unsafe class PropertiesObject : DaoObject
         }
         if (ordinal is not int i)
         {
-            // r-dao-1b/coll-item-query-family #51, #53: out-of-range integer ordinal on Properties returns 3265
-            // ("Item not found in this collection."), while a missing BSTR name returns 3270 ("Property not found.").
+            // r-dao-1b/coll-item-query-family #51, #53, #59: out-of-range integer ordinal on Properties returns 3265
+            // ("Item not found in this collection."), missing BSTR name returns 3270 ("Property not found.");
+            // other variant types on miss are unrecorded.
             VarType indexVt = index == 0 ? VarType.Empty : (VarType)Args.Cell(index)->Vt & ~VarType.ByRef;
-            return indexVt is VarType.I2 or VarType.I4
-                ? Fail(3265, DaoErrors.ItemNotFound)
-                : Fail(3270, DaoErrors.PropertyNotFound);
+            return indexVt switch
+            {
+                VarType.I2 or VarType.I4 => Fail(3265, DaoErrors.ItemNotFound),
+                VarType.Bstr => Fail(3270, DaoErrors.PropertyNotFound),
+                _ => CallResult.Fail(Failure.NotModelled("NotModelled.PropertiesItemIndexType", $"Properties.Item miss for variant type {indexVt} is not recorded")),
+            };
         }
         if (_held.TryGetValue(i, out PropertyObject? held))
         {

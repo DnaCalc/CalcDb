@@ -1748,7 +1748,7 @@ internal sealed unsafe class WorkspacesObject : DaoObject
     {
         if (Args.ObjectOf<WorkspaceObject>(arg) is not { } workspace)
         {
-            if (Args.ObjectOf<DaoObject>(arg) is not null)
+            if (Args.ObjectOf<DatabaseObject>(arg) is not null)
             {
                 // r-dao-1b/coll-append-delete-unsupported call 32: wss.Append(db) -> 3219 from DAO.Workspaces.
                 return Fail(3219, DaoErrors.InvalidOperation);

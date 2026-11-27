@@ -439,6 +439,8 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
     /// <summary>RecordsetTypeEnum: 1 table, 2 dynaset, 4 snapshot, 8 forward-only.</summary>
     public int RecordsetType { get; }
 
+    public string RecordsetName => _entry.Name;
+
     public bool Closed { get; private set; }
 
     protected override OperationTable Table => Operations;

@@ -484,6 +484,10 @@ internal sealed unsafe class QueryDefObject : DaoObject
         {
             return CallResult.Fail(Failure.NotModelled("NotModelled.QueryDefMaxRecordsPutUnsaved", "QueryDef.MaxRecords put on an unsaved QueryDef is not recorded"));
         }
+        if (EffectiveFamily != QueryFamily.Select)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.QueryDefMaxRecordsPutFamily", $"QueryDef.MaxRecords put on a {EffectiveFamily?.ToString() ?? "unclassified"} QueryDef is not recorded"));
+        }
         if (Database.ReadOnly)
         {
             return CallResult.Fail(Failure.NotModelled("NotModelled.QueryDefMaxRecordsPutReadOnly", "QueryDef.MaxRecords put on a read-only Database is not recorded"));
@@ -492,9 +496,10 @@ internal sealed unsafe class QueryDefObject : DaoObject
         {
             return DatabaseObject.InheritedWriteRefusal("QueryDef.MaxRecords put");
         }
-        if (Args.Int32(value, omitted: null) is not int maxRecords)
+        VarType vt = value == 0 ? VarType.Empty : (VarType)Args.Cell(value)->Vt & ~VarType.ByRef;
+        if (vt != VarType.I4 || Args.Int32(value, omitted: null) is not int maxRecords || maxRecords < 0)
         {
-            return Fail(3421, DaoErrors.ConversionError);
+            return CallResult.Fail(Failure.NotModelled("NotModelled.QueryDefMaxRecordsPutValue", $"QueryDef.MaxRecords put of non-negative VT_I4 only is recorded (got {vt})"));
         }
         CatalogEntry entry = Database.Catalog.Entries.FirstOrDefault(e => e.Id == _query!.Entry.Id) ?? _query!.Entry;
         byte[] payload = new byte[4];
@@ -515,8 +520,6 @@ internal sealed unsafe class QueryDefObject : DaoObject
         }
         CatalogEntry refreshed = Database.Catalog.Entries.FirstOrDefault(e => e.Id == _query.Entry.Id) ?? entry;
         _stored = Database.StoredProperties(refreshed, out _storedFailure);
-        _properties?.Release();
-        _properties = null;
         return CallResult.Nothing;
     }
 
@@ -628,7 +631,7 @@ internal sealed unsafe class QueryDefObject : DaoObject
                     "NotModelled.QueryDefExecuteAfterParameterTypeChange",
                     "opening a QueryDef after QueryDef.SQL changed a surviving parameter's declared type is not recorded (r-cat-1/held-sql-replace)"));
             }
-            result = plan is not null && QuerySql.Render(_query!).Text is { } text
+            result = EffectiveFamily == QueryFamily.Select && plan is not null && QuerySql.Render(_query!).Text is { } text
                 ? SelectRoute.Open(Database, text, type, options.Value, _values, name: _query!.Name)
                 : Database.OpenSaved(_query!, type, options.Value);
         }
@@ -731,7 +734,8 @@ internal sealed unsafe class QueryDefObject : DaoObject
     private CallResult Execute(nint optionsArg)
     {
         QueryFamily? family = EffectiveFamily;
-        if (family is QueryFamily.Select or QueryFamily.Crosstab or QueryFamily.Union or QueryFamily.PassThrough)
+        if (family is QueryFamily.Select or QueryFamily.Crosstab or QueryFamily.Union
+            || (family == QueryFamily.PassThrough && _mode == QueryDefMode.Saved))
         {
             _recordsAffected = 0;
             return Fail(3065, SelectRoute.CannotExecuteSelect);
@@ -1038,8 +1042,8 @@ internal sealed unsafe class QueryFieldObject : DaoObject
         .Get("Size", (self, args) => Live(self, f => f.Size()))
         .Get("Attributes", (self, args) => Live(self, f => f.Attributes()))
         .Get("CollatingOrder", (self, args) => Live(self, f => f.CollatingOrder()))
-        .Get("CollectionIndex", (self, args) => Live(self, _ => Int16(0)))
-        .Get("OrdinalPosition", (self, args) => Live(self, f => Int16(f._ordinal)))
+        .Get("CollectionIndex", (self, args) => Live(self, f => f.RecordedMember("CollectionIndex", () => Int16(0))))
+        .Get("OrdinalPosition", (self, args) => Live(self, f => f.RecordedMember("OrdinalPosition", () => Int16(f._ordinal))))
         .Get("DataUpdatable", (self, args) => Live(self, f => f.DataUpdatable()))
         .Get("SourceTable", (self, args) => Live(self, f => f.OriginText(f.Column.SourceTable, "SourceTable")))
         .Get("SourceField", (self, args) => Live(self, f => f.OriginText(f.Column.SourceField, "SourceField")))
@@ -1048,14 +1052,14 @@ internal sealed unsafe class QueryFieldObject : DaoObject
         .Get("DefaultValue", (self, args) => Live(self, f => f.BaseStored("DefaultValue", Text(""))))
         .Get("ValidationRule", (self, args) => Live(self, f => f.BaseStored("ValidationRule", Text(""))))
         .Get("ValidationText", (self, args) => Live(self, f => f.BaseStored("ValidationText", Text(""))))
-        .Get("Expression", (self, args) => Live(self, _ => Text("")))
-        .Get("ComplexType", (self, args) => Live(self, f => f.Fail(3219, DaoErrors.InvalidOperation)))
-        .Get("ForeignName", (self, args) => Live(self, f => f.Fail(3219, DaoErrors.InvalidOperation)))
-        .Get("ValidateOnSet", (self, args) => Live(self, f => f.Fail(3219, DaoErrors.InvalidOperation)))
-        .Get("Value", (self, args) => Live(self, f => f.Fail(3219, DaoErrors.InvalidOperation, publishesErrorInfo: true)))
-        .Get("FieldSize", (self, args) => Live(self, f => f.Fail(3267, DaoErrors.RecordsetFieldOnly)))
-        .Get("OriginalValue", (self, args) => Live(self, f => f.Fail(3251, DaoErrors.NotSupportedForType)))
-        .Get("VisibleValue", (self, args) => Live(self, f => f.Fail(3251, DaoErrors.NotSupportedForType)))
+        .Get("Expression", (self, args) => Live(self, f => f.RecordedMember("Expression", () => Text(""))))
+        .Get("ComplexType", (self, args) => Live(self, f => f.RecordedMember("ComplexType", () => f.Fail(3219, DaoErrors.InvalidOperation))))
+        .Get("ForeignName", (self, args) => Live(self, f => f.RecordedMember("ForeignName", () => f.Fail(3219, DaoErrors.InvalidOperation))))
+        .Get("ValidateOnSet", (self, args) => Live(self, f => f.RecordedMember("ValidateOnSet", () => f.Fail(3219, DaoErrors.InvalidOperation))))
+        .Get("Value", (self, args) => Live(self, f => f.RecordedMember("Value", () => f.Fail(3219, DaoErrors.InvalidOperation, publishesErrorInfo: true))))
+        .Get("FieldSize", (self, args) => Live(self, f => f.RecordedMember("FieldSize", () => f.Fail(3267, DaoErrors.RecordsetFieldOnly))))
+        .Get("OriginalValue", (self, args) => Live(self, f => f.RecordedMember("OriginalValue", () => f.Fail(3251, DaoErrors.NotSupportedForType))))
+        .Get("VisibleValue", (self, args) => Live(self, f => f.RecordedMember("VisibleValue", () => f.Fail(3251, DaoErrors.NotSupportedForType))))
         .Get("Properties", (self, args) => Live(self, f => f.PropertiesCollection()));
 
     private readonly QueryFieldsObject _fields;
@@ -1090,8 +1094,28 @@ internal sealed unsafe class QueryFieldObject : DaoObject
             f._fields.Query);
     }
 
+    private bool IsSingleTableNonDistinctSelect() =>
+        _fields.Query.Plan() is { Sources.Count: 1 } plan
+        && plan.TryColumnDataUpdatable(_ordinal, ResultKind.Dynaset, out _) == true;
+
+    private bool IsRecordedUnionColumn() =>
+        Column.Origin == ColumnOrigin.Union && Column is { TypeRule: ColumnTypeRule.Bound, FieldType: 4 };
+
+    private bool IsRecordedQueryField() =>
+        (Column.Origin == ColumnOrigin.BaseColumn && Column.SourceColumn is not null)
+        || IsRecordedUnionColumn();
+
+    private CallResult RecordedMember(string member, Func<CallResult> op) =>
+        IsRecordedQueryField()
+            ? op()
+            : CallResult.Fail(Failure.NotModelled("NotModelled.QueryFieldMember", $"QueryDef Field.{member} of {Column.Origin} column {Column.Name} is not recorded"));
+
     private CallResult Size()
     {
+        if (!IsRecordedQueryField())
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.QueryFieldSize", $"QueryDef Field.Size of {Column.Origin} column {Column.Name} is not recorded"));
+        }
         if (Column.Size is int s)
         {
             return Int32(s);
@@ -1105,33 +1129,33 @@ internal sealed unsafe class QueryFieldObject : DaoObject
 
     private CallResult DataUpdatable() => Column.Origin switch
     {
-        ColumnOrigin.BaseColumn when Column.SourceColumn is not null => Bool(true),
-        ColumnOrigin.Union => Bool(false),
-        _ => CallResult.Fail(Failure.NotModelled("NotModelled.QueryFieldDataUpdatable", $"QueryDef Field.DataUpdatable of {Column.Origin} column {Column.Name}")),
+        ColumnOrigin.BaseColumn when Column.SourceColumn is not null && IsSingleTableNonDistinctSelect() => Bool(true),
+        _ when IsRecordedUnionColumn() => Bool(false),
+        _ => CallResult.Fail(Failure.NotModelled("NotModelled.QueryFieldDataUpdatable", $"QueryDef Field.DataUpdatable of {Column.Origin} column {Column.Name} is not recorded")),
     };
 
     private CallResult Attributes() => Column.Origin switch
     {
-        ColumnOrigin.BaseColumn when Column.SourceColumn is { } sc =>
+        ColumnOrigin.BaseColumn when Column.SourceColumn is { } sc && IsSingleTableNonDistinctSelect() =>
             ColumnFacts.Attributes(sc.Column, updatable: true) is int attrs
                 ? Int32(attrs)
                 : CallResult.Fail(Failure.NotModelled("NotModelled.FieldAttributes", $"QueryDef Field.Attributes of column {Column.Name}")),
-        ColumnOrigin.Union when Column is { TypeRule: ColumnTypeRule.Bound, FieldType: 4 } => Int32(1),
-        _ => CallResult.Fail(Failure.NotModelled("NotModelled.QueryFieldAttributes", $"QueryDef Field.Attributes of {Column.Origin} column {Column.Name}")),
+        _ when IsRecordedUnionColumn() => Int32(1),
+        _ => CallResult.Fail(Failure.NotModelled("NotModelled.QueryFieldAttributes", $"QueryDef Field.Attributes of {Column.Origin} column {Column.Name} is not recorded")),
     };
 
     private CallResult CollatingOrder() => Column.Origin switch
     {
         ColumnOrigin.BaseColumn when Column.SourceColumn is { } sc => Int32(ColumnFacts.CollatingOrder(sc.Column)),
-        ColumnOrigin.Union => Int32(_fields.Query.Database.Header.SortOrder.Identifier),
-        _ => CallResult.Fail(Failure.NotModelled("NotModelled.QueryFieldCollatingOrder", $"QueryDef Field.CollatingOrder of {Column.Origin} column {Column.Name}")),
+        _ when IsRecordedUnionColumn() => Int32(_fields.Query.Database.Header.SortOrder.Identifier),
+        _ => CallResult.Fail(Failure.NotModelled("NotModelled.QueryFieldCollatingOrder", $"QueryDef Field.CollatingOrder of {Column.Origin} column {Column.Name} is not recorded")),
     };
 
     private CallResult OriginText(string? value, string member) => Column.Origin switch
     {
         ColumnOrigin.BaseColumn when value is not null => Text(value),
-        ColumnOrigin.Union => Text(""),
-        _ => CallResult.Fail(Failure.NotModelled("NotModelled.QueryFieldSource", $"QueryDef Field.{member} of {Column.Origin} column {Column.Name}")),
+        _ when IsRecordedUnionColumn() => Text(""),
+        _ => CallResult.Fail(Failure.NotModelled("NotModelled.QueryFieldSource", $"QueryDef Field.{member} of {Column.Origin} column {Column.Name} is not recorded")),
     };
 
     private PropertyBlob? BaseTableBlob(string tableName, out string? failure)
@@ -1145,7 +1169,7 @@ internal sealed unsafe class QueryFieldObject : DaoObject
 
     private CallResult BaseStored(string propName, CallResult unset)
     {
-        if (Column.Origin == ColumnOrigin.Union)
+        if (IsRecordedUnionColumn())
         {
             return unset;
         }
@@ -1158,14 +1182,14 @@ internal sealed unsafe class QueryFieldObject : DaoObject
             }
             return ColumnFacts.Stored(blob, sc.Column, propName, unset);
         }
-        return CallResult.Fail(Failure.NotModelled("NotModelled.QueryFieldProperty", $"QueryDef Field.{propName} of {Column.Origin} column {Column.Name}"));
+        return CallResult.Fail(Failure.NotModelled("NotModelled.QueryFieldProperty", $"QueryDef Field.{propName} of {Column.Origin} column {Column.Name} is not recorded"));
     }
 
     private CallResult PropertiesCollection()
     {
-        if (Column is not { TypeRule: ColumnTypeRule.Bound, FieldType: int type })
+        if (Column is not { TypeRule: ColumnTypeRule.Bound, FieldType: int type } || !IsRecordedQueryField())
         {
-            return CallResult.Fail(Failure.NotModelled(Column.TypeOpen ?? "NotModelled.ExpressionFieldType", $"QueryDef Field.Properties of column {Column.Name}"));
+            return CallResult.Fail(Failure.NotModelled(Column.TypeOpen ?? "NotModelled.QueryFieldProperties", $"QueryDef Field.Properties of {Column.Origin} column {Column.Name} is not recorded"));
         }
         if (_properties is null)
         {
@@ -1179,11 +1203,9 @@ internal sealed unsafe class QueryFieldObject : DaoObject
                 }
                 columnMap = blob?.Map(PropertySectionKind.ColumnValues, sc.Column.Name);
             }
-            else if (Column.Origin != ColumnOrigin.Union)
-            {
-                return CallResult.Fail(Failure.NotModelled("NotModelled.QueryFieldProperties", $"QueryDef Field.Properties of {Column.Origin} column {Column.Name}"));
-            }
-            _properties = new PropertiesObject(this, BuiltInProperties.With(BuiltInProperties.TableDefField((short)type), columnMap));
+            // r-dao-1b/querydef-fields-members only reads fProperties.Count (24/25/24); entries are not enumerated.
+            int count = BuiltInProperties.With(BuiltInProperties.TableDefField((short)type), columnMap).Length;
+            _properties = new PropertiesObject(this, count, "QueryDef.Field.Properties entries are not enumerated in r-dao-1b/querydef-fields-members");
         }
         return Object(_properties);
     }
