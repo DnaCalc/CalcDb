@@ -74,10 +74,19 @@ internal sealed class CollationLikePrefix
     /// <summary>Whether <paramref name="prefix"/> under <paramref name="sort"/> is in the recorded collation-prefix domain.</summary>
     public static bool IsSupportedPrefix(SortDescriptor sort, string prefix)
     {
-        if (sort.Family is not (TextSortFamily.General or TextSortFamily.GeneralLegacy)
+        // All sealed indexed-LIKE records use GeneralLegacy (1033/0, dbVersion 128); General (1033/1) and General 97 are unrecorded.
+        if (sort.Family != TextSortFamily.GeneralLegacy
             || prefix.Length == 0
-            || prefix.Length > 255
-            || prefix[^1] == ' ')
+            || prefix.Length > 255)
+        {
+            return false;
+        }
+        int lastSignificant = prefix.Length - 1;
+        while (lastSignificant >= 0 && sort.ClassOf(prefix[lastSignificant]) == TextRecordClass.Ignored)
+        {
+            lastSignificant--;
+        }
+        if (lastSignificant >= 0 && prefix[lastSignificant] == ' ')
         {
             return false;
         }
@@ -199,8 +208,11 @@ internal sealed class CollationLikePrefix
         return new CollationLikePrefix(sort, codec, primary, secondary, flags, offsetCount);
     }
 
-    /// <summary>Whether <paramref name="subject"/> (up to 255 indexed UTF-16 units) begins with this prefix's weights across levels 1–4.</summary>
-    public bool Matches(ReadOnlyMemory<char> subject)
+    /// <summary>
+    /// Whether <paramref name="subject"/> (up to 255 indexed UTF-16 units) begins with this prefix's weights across levels 1–4.
+    /// Returns <see langword="null"/> when a subject has an interior positional entry inside an unrecorded multi-char or expansion prefix boundary.
+    /// </summary>
+    public bool? TryMatch(ReadOnlyMemory<char> subject)
     {
         int maxBytes = _codec.MaxFieldBytesFor(Math.Min(subject.Length, 255));
         byte[]? rented = maxBytes > StackKeyBytes ? ArrayPool<byte>.Shared.Rent(maxBytes) : null;
@@ -266,9 +278,10 @@ internal sealed class CollationLikePrefix
                         if (uStart + 2 <= written)
                         {
                             int firstOffset = (BinaryPrimitives.ReadUInt16BigEndian(buf.Slice(uStart, 2)) - PositionBase) / 4;
-                            if (firstOffset < _offsetCount)
+                            bool? posDecision = CheckPositionalOffset(firstOffset);
+                            if (posDecision is not true)
                             {
-                                return false;
+                                return posDecision;
                             }
                         }
                     }
@@ -287,9 +300,10 @@ internal sealed class CollationLikePrefix
                     if (_offsetCount > 0 && pos + 3 <= written)
                     {
                         int firstOffset = (BinaryPrimitives.ReadUInt16BigEndian(buf.Slice(pos + 1, 2)) - PositionBase) / 4;
-                        if (firstOffset < _offsetCount)
+                        bool? posDecision = CheckPositionalOffset(firstOffset);
+                        if (posDecision is not true)
                         {
-                            return false;
+                            return posDecision;
                         }
                     }
                 }
@@ -313,6 +327,24 @@ internal sealed class CollationLikePrefix
                 ArrayPool<byte>.Shared.Return(rented);
             }
         }
+    }
+
+    /// <summary>
+    /// Check the subject's earliest positional offset against the prefix boundary:
+    /// offset 0 before any non-empty prefix is rejected (r-sort-3/like-prefix-accdb ID 189 "\u0001a" excluded from 'a*');
+    /// interior positional offsets (firstOffset > 0) inside a multi-char or expansion prefix boundary are unrecorded (null).
+    /// </summary>
+    private bool? CheckPositionalOffset(int firstOffset)
+    {
+        if (firstOffset == 0)
+        {
+            return false;
+        }
+        if ((_offsetCount > 1 || _primary.Length > _offsetCount) && firstOffset < Math.Max(_offsetCount, _primary.Length))
+        {
+            return null;
+        }
+        return true;
     }
 
     private static byte ReadPackedFlag(ReadOnlySpan<byte> packed, int index)

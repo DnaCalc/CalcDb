@@ -201,14 +201,35 @@ public sealed class IndexedLikeAndDerivedSortTests(ITestOutputHelper output)
         AssertBindNotModelled(db, "SELECT ID FROM A WHERE K LIKE 'a' & '*'", "NotModelled.IndexedLike");
         AssertBindNotModelled(db, "SELECT ID FROM A WHERE K LIKE 'a**'", "NotModelled.IndexedLike");
         AssertBindNotModelled(db, "SELECT ID FROM A WHERE K LIKE 'a *'", "NotModelled.IndexedLike");
+        AssertBindNotModelled(db, "SELECT ID FROM A WHERE K LIKE 'a \uD840\uDC00*'", "NotModelled.IndexedLike");
 
         // Positional unprintable character ('-') in prefix refuses at bind time with NotModelled.IndexedLike.
         AssertBindNotModelled(db, "SELECT ID FROM A WHERE K LIKE 'a-b*'", "NotModelled.IndexedLike");
 
-        // DAO FindCriteria keeps NotModelled.FindIndexedText untouched.
+        // Interior positional character inside a multi-char or expansion prefix boundary refuses at evaluation time (F2).
+        Assert.True(ActionExecutor.Execute("INSERT INTO A (ID, K, P) VALUES (2, '\u00E6-b', 'x')", db).Succeeded);
+        using (BoundSelect? aePlan = BoundSelect.Prepare("SELECT ID FROM A WHERE K LIKE 'ae*'", db, out SqlFailure? aeBindFail))
+        {
+            Assert.Null(aeBindFail);
+            using SelectCursor? aeCur = SelectCursor.Open(aePlan!, db, ResultKind.Snapshot, null, out SqlFailure? aeOpenFail);
+            Assert.Null(aeCur);
+            Assert.NotNull(aeOpenFail);
+            Assert.True(aeOpenFail!.IsNotModelled, aeOpenFail.ToString());
+        }
+
+        // TextSortFamily.General (1033/1) is unrecorded and refuses at bind time with NotModelled.IndexedLike (F1).
         TableDefinition? tableA = db.Table("A");
         Assert.NotNull(tableA);
         var schema = new ExpressionSchema(tableA!);
+        var generalContext = new CalcDb.Values.Scalar.ExpressionContext(
+            db.Context.Lcid,
+            db.Context.Compare,
+            new DatabaseCollation(SortDescriptors.General, "1033/1"),
+            CalcDb.Values.Scalar.ExpressionUse.Query);
+        Assert.Null(BoundExpression.Compile("K LIKE 'a*'", schema, generalContext, out ExpressionFailure? generalFail));
+        Assert.Equal("NotModelled.IndexedLike", generalFail?.NotModelled);
+
+        // DAO FindCriteria keeps NotModelled.FindIndexedText untouched.
         var findContext = new CalcDb.Values.Scalar.ExpressionContext(
             db.Context.Lcid,
             db.Context.Compare,

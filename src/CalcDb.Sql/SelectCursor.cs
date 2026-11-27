@@ -3196,8 +3196,8 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                 ResultKind.Dynaset => (descending ? -1 : 1, null),
                 ResultKind.Snapshot when count <= 9 => (-1, null),
                 ResultKind.Snapshot => (1, "a snapshot of more than 9 rows lists ties in a permutation not identified"),
-                // evidence/r-cursor-1b/filter-derived-types calls 76[3..4].0, 176[3..4].0: forward-only ORDER BY DESC
-                // on <= 9 rows lists ties in reverse storage order (-1).
+                // evidence/r-cursor-1b/filter-derived-types calls 76[3..4].0, 176[3..4].0 (derived forward-only):
+                // forward-only ORDER BY DESC on <= 9 rows lists ties in reverse storage order (-1).
                 ResultKind.ForwardOnly when !mixed && descending && count <= 9 => (-1, null),
                 _ => (1, "a forward-only result's tie order is not recorded"),
             };

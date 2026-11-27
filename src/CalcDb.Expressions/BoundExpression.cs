@@ -1320,8 +1320,13 @@ public sealed unsafe partial class BoundExpression : IDisposable
         int len = Math.Min(chars.Length, 255);
         _likeSubjectScratch ??= new char[255];
         chars[..len].CopyTo(_likeSubjectScratch);
-        bool matched = compiled.Matches(_likeSubjectScratch.AsMemory(0, len));
-        result = ScalarOutcome.Of(new NativeVariant { Vt = (ushort)VarType.Bool, Int64 = matched ? -1 : 0 });
+        bool? matched = compiled.TryMatch(_likeSubjectScratch.AsMemory(0, len));
+        if (matched is null)
+        {
+            LastFailure = ExpressionFailure.Open(ExpressionPhase.Evaluate, "NotModelled.IndexedLike", "indexed Text LIKE multi-char or expansion prefix against a subject with an interior positional character");
+            return false;
+        }
+        result = ScalarOutcome.Of(new NativeVariant { Vt = (ushort)VarType.Bool, Int64 = matched.Value ? -1 : 0 });
         return true;
     }
 
