@@ -771,9 +771,9 @@ public sealed unsafe partial class BoundExpression
     }
 
     /// <summary>
-    /// Chr$(n) (r-expr-1b/str-chr-asc-range, r-expr-1b/null-propagation-functions): Null is unrecorded (named
-    /// NotModelledCase.NullArgument); converts via CLng; &lt; 0 or &gt; 255 fails 5; 0..127 emits one ASCII unit;
-    /// 128..255 names NotModelledCase.ChrCodePage.
+    /// Chr$(n) (r-expr-1b/str-chr-asc-range, r-expr-1b/null-propagation-functions, r-q47-bigint-expr-edges/meta-dollar-str-dao-ado-accdb):
+    /// Null fails 3464; converts via CLng; &lt; 0 or &gt; 255 fails 5; 0..127 emits one ASCII unit;
+    /// 128..255 maps via Windows-1252 when ACP is 1252 (other code pages name NotModelledCase.ChrCodePage).
     /// </summary>
     private ScalarOutcome ChrDollar(ref int sp, Instruction ins)
     {
@@ -825,7 +825,8 @@ public sealed unsafe partial class BoundExpression
     /// <summary>
     /// Asc(s) and AscW(s) (r-expr-1b/str-chr-asc-range, r-expr-1b/null-propagation-functions, r-expr-1/inv-string-functions,
     /// r-def-expr-sql/str-stored-length-and-codes): Null fails 3464; non-text converts via CStr; empty string fails 5;
-    /// AscW returns signed VT_I2 (short)s[0]; Asc returns VT_I2 for ASCII (0..127) and names NotModelled.AscCodePage above 127.
+    /// AscW returns signed VT_I2 (short)s[0]; Asc returns VT_I2 for ASCII (0..127) and CP-1252 characters when ACP is 1252,
+    /// and names NotModelled.AscCodePage otherwise.
     /// </summary>
     private bool Asc(ref int sp, Instruction ins, bool wide, out ScalarOutcome result)
     {
@@ -1011,8 +1012,9 @@ public sealed unsafe partial class BoundExpression
 
     /// <summary>
     /// LCase(s) and LCase$(s) (r-expr-1b/null-propagation-functions, r-expr-1b/str-case-folding):
-    /// ASCII lowers A..Z; non-ASCII names NotModelledCase.NonAsciiCase (matching ScalarKernel.UpperCase);
-    /// Null yields Null for LCase and NotModelledCase.NullArgument for LCase$.
+    /// ASCII lowers A..Z; non-ASCII uses Windows LCMapStringW (matching ScalarKernel.UpperCase, refusing as
+    /// NotModelledCase.NonAsciiCase when the platform library is absent); Null yields Null for LCase and
+    /// NotModelledCase.NullArgument for LCase$.
     /// </summary>
     private ScalarOutcome LowerCase(ref int sp, Instruction ins, bool dollar)
     {

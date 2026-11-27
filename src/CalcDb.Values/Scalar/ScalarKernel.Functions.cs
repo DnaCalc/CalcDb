@@ -255,7 +255,9 @@ public static unsafe partial class ScalarKernel
     {
         if (Tag(b) == VarType.Null)
         {
-            return Fail(d, AceError.TypeMismatch);
+            return Tag(a) == VarType.Null
+                ? Open(d, NotModelledCase.NullArgument)
+                : Fail(d, AceError.TypeMismatch);
         }
         if (Tag(a) == VarType.Null)
         {
@@ -275,8 +277,8 @@ public static unsafe partial class ScalarKernel
     /// <summary>
     /// Mid (qualified.md EXPR-INVENTORY; <c>r-expr-1b/null-propagation-functions</c> call 51): the start converts as a Long
     /// and must be 1 to 2^30 (0 and 1073741825 fail 5; a start past the text gives ""); the optional length is bounded as in
-    /// <see cref="EdgePart"/>. Null text gives Null; a Null length fails 94 (Invalid use of Null); a Null start stays
-    /// <see cref="NotModelledCase.NullArgument"/>.
+    /// <see cref="EdgePart"/>. Null text gives Null; a Null length with non-Null text fails 94 (Invalid use of Null);
+    /// a Null start or Null text with Null length stays <see cref="NotModelledCase.NullArgument"/>.
     /// </summary>
     private static ScalarOutcome MidPart(in ScalarDescriptor d, NativeVariant* a, NativeVariant* start, NativeVariant* length, ExpressionContext c)
     {
@@ -286,7 +288,9 @@ public static unsafe partial class ScalarKernel
         }
         if (length is not null && Tag(length) == VarType.Null)
         {
-            return Fail(d, AceError.InvalidUseOfNull);
+            return Tag(a) == VarType.Null
+                ? Open(d, NotModelledCase.NullArgument)
+                : Fail(d, AceError.InvalidUseOfNull);
         }
         if (Tag(a) == VarType.Null)
         {

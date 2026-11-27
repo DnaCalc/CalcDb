@@ -141,7 +141,10 @@ public sealed class W14ExprStopsTests
         AssertEvalAce("DateSerial(Null, 1, 1)", 3464);
         AssertEvalAce("DateSerial(2024, Null, 1)", 3464);
 
-        // Unrecorded Null argument positions stay refused by name.
+        // Unrecorded Null argument positions and Null+Null precedence stay refused by name.
+        AssertEvalOpen("Left(Null, Null)", "NotModelled.Scalar.NullArgument");
+        AssertEvalOpen("Right(Null, Null)", "NotModelled.Scalar.NullArgument");
+        AssertEvalOpen("Mid(Null, 1, Null)", "NotModelled.Scalar.NullArgument");
         AssertEvalOpen("Mid('a', Null, 1)", "NotModelled.Scalar.NullArgument");
         AssertEvalOpen("DateSerial(2024, 1, Null)", "NotModelled.Scalar.NullArgument");
     }

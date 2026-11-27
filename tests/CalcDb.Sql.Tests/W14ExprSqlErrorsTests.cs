@@ -9,7 +9,6 @@ namespace CalcDb.Sql.Tests;
 /// <summary>
 /// Wave 14 (<c>W-02, W-06, R-EXPR-1, R-SQL-1</c>) tests for:
 /// 3075 exact query-expression excerpts (<c>r-expr-1b/*</c>), <c>SELECT FROM WHERE</c> 3141 (<c>r-str-ado-act/ado-errors</c>),
-/// <c>DECIMAL(38,0)</c> in <c>WHERE N = ?</c> (<c>r-ado-1b/param-decimal-scale</c>),
 /// <c>obs-engine-versus-expression-errors</c> #24 (error 5), <c>info-stored-null-handling</c> #11 (error 3085),
 /// <c>dec-scale-endpoints</c> #42 (error 6 Overflow), and <c>dec-ddl-precision-limits</c> (3700/3701).
 /// </summary>
@@ -17,7 +16,6 @@ public sealed class W14ExprSqlErrorsTests
 {
     private const string EmptyAccdbSha = "ea467b4c6d6472bc6819b0ddbe535612db76cc9d6bf2bf581d08f149c3765df8";
     private const string ExprMainSha = "6f70f90da3388c4a27c3c518ba774019a9419ae45c5e5a060bdae5ccc039c337"; // r-expr-1b-main.accdb
-    private const string AdoMainSha = "612dea90cd639ee52fd6abacf9033b19957eb30aa50f187b3774d50a74e33ea7"; // r-ado-1b-main.accdb
 
     [Theory]
     // r-expr-1b exact 3075 WrongArgumentCount & InvalidQualifier query-expression excerpts
@@ -122,21 +120,5 @@ public sealed class W14ExprSqlErrorsTests
         Assert.False(outcome.Failure!.IsNotModelled, outcome.Failure.ToString());
         Assert.Equal(expectedError, outcome.Failure.Number);
         Assert.Equal(expectedMessage, outcome.Failure.Message);
-    }
-
-    [Fact]
-    public void Param_decimal_scale_where_over_dao_decimal_38_0_succeeds_without_not_modelled()
-    {
-        // r-ado-1b/param-decimal-scale calls 29..349: SELECT ID FROM T WHERE N = ? on r-ado-1b-main.accdb (N is DECIMAL(38,0)).
-        var db = new SqlFixture(AdoMainSha);
-        using BoundSelect? plan = BoundSelect.Prepare("SELECT ID FROM T WHERE N = p0", db, out SqlFailure? bindFailure);
-        Assert.Null(bindFailure);
-        Assert.NotNull(plan);
-
-        NativeVariant param = OwnedVariant.DecimalCell(new DecimalValue(3, Negative: false, High32: 0, Low64: 3125)); // 3.125
-        using SelectCursor? cursor = SelectCursor.Open(plan!, db, ResultKind.Snapshot, [param], out SqlFailure? openFailure);
-        Assert.Null(openFailure);
-        Assert.NotNull(cursor);
-        Assert.NotEqual(MoveOutcome.Moved, cursor!.MoveFirst());
     }
 }

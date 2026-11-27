@@ -400,7 +400,7 @@ public static unsafe class ScalarFormat
         {
             return false;
         }
-        if (OleAut.Binding == OleAutBinding.Platform && GetAnsiCodePage(lcid) != 1252)
+        if (OleAut.Binding != OleAutBinding.Platform || GetAnsiCodePage(lcid) != 1252)
         {
             return false;
         }
@@ -420,7 +420,7 @@ public static unsafe class ScalarFormat
         {
             return false;
         }
-        if (OleAut.Binding == OleAutBinding.Platform && GetAnsiCodePage(lcid) != 1252)
+        if (OleAut.Binding != OleAutBinding.Platform || GetAnsiCodePage(lcid) != 1252)
         {
             return false;
         }

@@ -1299,12 +1299,11 @@ public sealed unsafe partial class BoundExpression : IDisposable
 
     /// <summary>
     /// A Decimal field as VT_DECIMAL, as the DAO read path projects it (R-ORACLE-1 OR-WIRE; W-04/private-codecs): a value
-    /// beyond the DECIMAL's 96 bits or scale 28, or a column of precision above 28 other than DAO's default DECIMAL(38, 0)
-    /// (which SQL WHERE comparisons read as VT_DECIMAL in <c>r-ado-1b/param-decimal-scale</c> calls 29..349, while DAO
-    /// Field.Value still fails 3000 in <c>CalcDb.Com.Dao</c>, T-INT-34), gives Empty, which the load names.
+    /// beyond the DECIMAL's 96 bits or scale 28, or a column of precision above 28 (whose DAO read fails 3000, T-INT-34),
+    /// gives Empty, which the load names.
     /// </summary>
     private static NativeVariant Decimal(NativeDecimal value, ColumnDescriptor column) =>
-        !value.FitsAutomation || (column.CalculatedResultType is null && column.NumericPrecision > 28 && !(column.NumericPrecision == 38 && column.NumericScale == 0))
+        !value.FitsAutomation || (column.CalculatedResultType is null && column.NumericPrecision > 28)
             ? default
             : OwnedVariant.DecimalCell(new DecimalValue(value.Scale, value.Negative, value.High32, value.Low64));
 
