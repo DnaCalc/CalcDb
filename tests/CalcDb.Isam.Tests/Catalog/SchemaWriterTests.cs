@@ -1450,7 +1450,7 @@ public sealed class SchemaWriterTests
             Assert.False(ixAdo.PublishedAny);
             Assert.Contains("ADO", ixAdo.Refused?.NotWritten);
             session.CreateIndex(new("T", new("IX_T", ["n"], PrimaryKey: false), SchemaRoute.Sql), 2);
-            Assert.NotNull(session.Writer().DropTable(session.Workspace, new("T", SchemaRoute.Sql)).Refused?.NotWritten);
+            // Jet 4 MDB DROP TABLE on an indexed table is now recorded in evidence/r-q54-excl-ddl-ix-cmd/drop-populated-indexed-lval-mdb.
         }
 
         using (var accdb = new Session(Fixture()))
@@ -1758,20 +1758,20 @@ public sealed class SchemaWriterTests
             Assert.Null(session.Workspace.Rollback().Error);
             Assert.Equal(dupImage, session.File.Snapshot());
 
-            // Existing duplicate on UNIQUE and PRIMARY refuses by name (3022 failure bytes unrecorded) and writes 0 bytes.
-            SchemaOutcome dupUq = session.Writer().CreateIndex(session.Workspace, new("T", new("UK_K", ["K"], PrimaryKey: false, Unique: true), SchemaRoute.Sql), 2);
-            Assert.False(dupUq.Succeeded);
-            Assert.False(dupUq.PublishedAny);
-            Assert.NotEqual(MutationOpen.None, dupUq.Accepted.Open);
-            Assert.Contains("duplicate", dupUq.Accepted.Detail, StringComparison.OrdinalIgnoreCase);
-            Assert.Equal(dupImage, session.File.Snapshot());
-
+            // Existing duplicate on PRIMARY refuses by name (3022 failure bytes unrecorded for PRIMARY) and writes 0 bytes;
+            // SQL CREATE UNIQUE INDEX duplicate 3022 extent rollback is now recorded in
+            // evidence/r-q54-excl-ddl-ix-cmd/ix-unique-dup-3022-bytes-accdb and ix-unique-dup-3022-bytes-mdb.
             SchemaOutcome dupPk = session.Writer().CreateIndex(session.Workspace, new("T", new("PK_K", ["K"], PrimaryKey: true, Unique: true), SchemaRoute.Sql), 2);
             Assert.False(dupPk.Succeeded);
             Assert.False(dupPk.PublishedAny);
             Assert.NotEqual(MutationOpen.None, dupPk.Accepted.Open);
             Assert.Contains("duplicate", dupPk.Accepted.Detail, StringComparison.OrdinalIgnoreCase);
             Assert.Equal(dupImage, session.File.Snapshot());
+
+            SchemaOutcome dupUq = session.Writer().CreateIndex(session.Workspace, new("T", new("UK_K", ["K"], PrimaryKey: false, Unique: true), SchemaRoute.Sql), 2);
+            Assert.False(dupUq.Succeeded);
+            Assert.True(dupUq.PublishedAny);
+            Assert.Equal(3022, dupUq.Refused?.Error);
         }
 
         // Table TI (ID, A, B, C, D) with row 2 having C = NULL and B = 10.
@@ -1780,19 +1780,16 @@ public sealed class SchemaWriterTests
         byte[] nullImage = Kept.AfterSetupImage("ix-cat1b-rows-chain-accdb-dao");
         using (var session = new Session(nullImage))
         {
-            // Existing NULL on PRIMARY, DISALLOW NULL (fresh session without prior global-map activity), UNIQUE non-IGNORE NULL,
-            // DESC non-IGNORE NULL, and 2-col non-IGNORE NULL/IGNORE NULL refuse by name (only a single ascending Long Null row in
-            // a non-unique non-IGNORE NULL index is recorded in r-q43-schema-lval-index/ix-lval-pk-rows-*; 0-byte 3058 on PRIMARY /
-            // DISALLOW NULL is recorded only on a single Long column after prior global-map activity in r-q50-jk44-ddl-vis).
+            // Existing NULL on PRIMARY, DISALLOW NULL (fresh session without prior global-map activity), and DESC
+            // non-IGNORE NULL refuse by name (0-byte 3058 on PRIMARY / DISALLOW NULL is recorded after prior global-map
+            // activity in r-q50-jk44-ddl-vis; single-col UNIQUE, 2-col non-unique, and 2-col WITH IGNORE NULL with
+            // partial Nulls are now recorded in evidence/r-q54-excl-ddl-ix-cmd/ix-existing-nulls-uniq-multi-accdb and
+            // ix-existing-nulls-uniq-multi-mdb).
             NewIndex[] nullRefused =
             [
                 new("PK_C", ["C"], PrimaryKey: true, Unique: true),
                 new("IX_C_DIS", ["C"], PrimaryKey: false, DisallowNull: true),
                 new("IX_C_DESC", ["C"], PrimaryKey: false, Descending: [true]),
-                new("IX_BC_PLAIN", ["B", "C"], PrimaryKey: false),
-                new("UK_C", ["C"], PrimaryKey: false, Unique: true),
-                // Partial-NULL (10, NULL) on 2-col IGNORE NULL refuses by name.
-                new("IX_BC_IGN", ["B", "C"], PrimaryKey: false, IgnoreNull: true),
             ];
             foreach (NewIndex idx in nullRefused)
             {
@@ -2346,25 +2343,8 @@ public sealed class SchemaWriterTests
 
             Assert.Equal(beforeExtraAlter, session.File.Snapshot());
 
-            // Adding a second FK referencing the same parent or a second distinct parent (existing negative MSysObjects.Id) refuses without writing.
-            session.Create(new("C1", [Long("ID"), Long("K")], SchemaRoute.Sql, [new("PK_C1", ["ID"], PrimaryKey: true)], new NewForeignKey("FK_C1_P", ["K"], "P", ["ID"])), 2, 2);
-            byte[] afterFirstFk = session.File.Snapshot();
-            SchemaOutcome secondFkSameParent = session.Writer().AddForeignKey(
-                session.Workspace,
-                new("T", new NewForeignKey("FK_T_P2", ["K"], "P", ["ID"]), SchemaRoute.Sql),
-                3, 3);
-            Assert.False(secondFkSameParent.Succeeded);
-            Assert.False(secondFkSameParent.PublishedAny);
-            Assert.Contains("already has relationship", secondFkSameParent.Refused?.NotWritten);
-
-            SchemaOutcome secondFkOtherParent = session.Writer().AddForeignKey(
-                session.Workspace,
-                new("T", new NewForeignKey("FK_T_P2B", ["K"], "P2", ["ID"]), SchemaRoute.Sql),
-                3, 3);
-            Assert.False(secondFkOtherParent.Succeeded);
-            Assert.False(secondFkOtherParent.PublishedAny);
-            Assert.Contains("negative-Id", secondFkOtherParent.Refused?.NotWritten);
-            Assert.Equal(afterFirstFk, session.File.Snapshot());
+            // Multi-FK referencing the same parent or distinct parents (ascending negative MSysObjects.Id) is now recorded in
+            // evidence/r-q54-excl-ddl-ix-cmd/second-fk-negid-and-lvalchild-accdb and second-fk-negid-and-lvalchild-mdb.
         }
 
         // Populated child table with orphan rows (T holds K in {20, 10}, while P_Empty has no rows) refuses ALTER TABLE ADD CONSTRAINT FOREIGN KEY without writing.
@@ -2983,13 +2963,14 @@ public sealed class SchemaWriterTests
         Assert.Contains("outside a SQL statement", outsideStmtAccept.Detail);
         Assert.Equal(beforeTx, session.File.Snapshot());
 
-        // 3. Unrecorded CREATE TABLE shapes while a session reserved extent is pending (DAO, ADO, NOT NULL, FK) refuse without writing.
+        // 3. Unrecorded CREATE TABLE shapes while a session reserved extent is pending (DAO, ADO, NOT NULL) refuse without writing
+        // (SQL CREATE TABLE with PK + FK while a session reserved extent is pending is now recorded in
+        // evidence/r-q54-excl-ddl-ix-cmd/second-fk-negid-and-lvalchild-accdb and second-fk-negid-and-lvalchild-mdb).
         foreach (CreateTableRequest badCreate in new CreateTableRequest[]
         {
             new("BadDao", [Long("ID")], SchemaRoute.Dao),
             new("BadAdo", [Long("ID")], SchemaRoute.Ado),
             new("BadNn", [Long("ID"), new("V", NewFieldType.Long, Required: true)], SchemaRoute.Sql),
-            new("BadFk", [Long("ID"), Long("K")], SchemaRoute.Sql, [new("PKB", ["ID"], PrimaryKey: true)], new NewForeignKey("FK_B", ["K"], "T", ["ID"])),
         })
         {
             SchemaOutcome badOut = session.Writer().CreateTable(session.Workspace, badCreate, 3, 3);

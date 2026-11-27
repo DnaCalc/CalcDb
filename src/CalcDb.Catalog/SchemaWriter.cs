@@ -963,6 +963,25 @@ public sealed class SchemaWriter
         }
         if (request.ForeignKey is { } fk)
         {
+            if (firstLvalIdx >= 0)
+            {
+                foreach (string fkCol in fk.Fields)
+                {
+                    int fkColIdx = -1;
+                    for (int i = 0; i < request.Fields.Count; i++)
+                    {
+                        if (FieldNameLookupClashOf(request.Fields[i].Name, fkCol, _sortOrder, out _) == FieldNameClash.Duplicate)
+                        {
+                            fkColIdx = i;
+                            break;
+                        }
+                    }
+                    if (fkColIdx >= firstLvalIdx)
+                    {
+                        return new SchemaRefusal(null, "CREATE TABLE with a Memo/Ole column declared before a FOREIGN KEY column is not recorded (evidence/r-q54-excl-ddl-ix-cmd/second-fk-negid-and-lvalchild-accdb and second-fk-negid-and-lvalchild-mdb declare LVAL columns after FK columns)");
+                    }
+                }
+            }
             if (request.Route is not (SchemaRoute.Sql or SchemaRoute.Ado))
             {
                 return new SchemaRefusal(null, $"CREATE TABLE with FOREIGN KEY on {request.Route} route is not recorded (evidence/r-q34-ddl-sweep/fk-*)");
@@ -971,9 +990,9 @@ public sealed class SchemaWriter
             {
                 return new SchemaRefusal(null, "CREATE TABLE with FOREIGN KEY requires one single-column PRIMARY KEY (or PRIMARY KEY + UNIQUE on ADO: evidence/r-q50-jk44-ddl-vis/ddl-multi-constraint-table-*)");
             }
-            if (lvalCount > 0)
+            if (lvalCount > 0 && request.AllIndexes.Count > 1)
             {
-                return new SchemaRefusal(null, "CREATE TABLE combining FOREIGN KEY with Memo/Ole columns is not recorded (evidence/r-q34-ddl-sweep/fk-*)");
+                return new SchemaRefusal(null, "CREATE TABLE combining FOREIGN KEY, UNIQUE, and Memo/Ole columns is not recorded (evidence/r-q54-excl-ddl-ix-cmd/second-fk-negid-and-lvalchild-accdb and r-q54-excl-ddl-ix-cmd/second-fk-negid-and-lvalchild-mdb record PK + FK + Memo/LongBinary)");
             }
             if (requiredFields.Count > 0 && request.Route != SchemaRoute.Ado)
             {
@@ -1719,13 +1738,13 @@ public sealed class SchemaWriter
         }
 
         bool allowedWithReserved =
-            (request.Route == SchemaRoute.Sql && preparedFk is null && !hasExtendedType && !request.Fields.Any(f => f.Required))
+            (request.Route == SchemaRoute.Sql && !hasExtendedType && !request.Fields.Any(f => f.Required))
             || (hasDefault && preparedFk is null && !hasExtendedType)
             || (request.IsMakeTable && preparedFk is null && !request.Fields.Any(f => f.Required));
         if (sessionReserved.Count > 0 && !allowedWithReserved)
         {
             return new SchemaOutcome(
-                new SchemaRefusal(null, $"CREATE TABLE {request.Name} (route={request.Route}, fk={preparedFk is not null}, ext={hasExtendedType}, required={request.Fields.Any(f => f.Required)}, default={hasDefault}) while a session page-1 extent reservation is pending is not recorded (only SQL CREATE TABLE without FOREIGN KEY, BIGINT/DATETIME2, or NOT NULL, or ADO CREATE TABLE with DEFAULT is recorded: evidence/r-q42-field-rule-and/multirow-*, evidence/r-q49-dt2-draftprops/ddl-default-*)"),
+                new SchemaRefusal(null, $"CREATE TABLE {request.Name} (route={request.Route}, fk={preparedFk is not null}, ext={hasExtendedType}, required={request.Fields.Any(f => f.Required)}, default={hasDefault}) while a session page-1 extent reservation is pending is not recorded"),
                 default,
                 _pageCount);
         }
@@ -1736,7 +1755,12 @@ public sealed class SchemaWriter
                 default,
                 _pageCount);
         }
-        bool useSessionExtentReservation = hasDefault && sessionReserved.Count == 0;
+        bool useSessionExtentReservation =
+            workspace.Depth == 0
+            && (request.Route is SchemaRoute.Sql or SchemaRoute.Ado)
+            && !workspace.HasGlobalMapAllocationOrReservation(_cache)
+            && sessionReserved.Count == 0
+            && (hasDefault || preparedFk is not null);
         List<DaoPropertyStep> daoSteps = request.Route == SchemaRoute.Dao ? BuildDaoPropertySteps(request.Fields) : [];
         ulong extent = _pageCount;
         uint tdefPage = 0;
@@ -2099,21 +2123,8 @@ public sealed class SchemaWriter
         {
             return new SchemaOutcome(new SchemaRefusal(null, "CREATE INDEX with Long/Text DESC on a populated Jet 4 MDB table is not recorded (evidence/r-q34-ddl-sweep/*-mdb-dao; evidence/r-q44-ddl-alter-types/ixtype-double-rows-mdb-dao, ixtype-datetime-rows-mdb-dao, ixtype-guid-rows-mdb-dao record Double/DateTime/GUID DESC)"), default, _pageCount);
         }
-        if (!BuildIndexLeaf(table, request.Index, out byte[] leafBytes, out uint entryCount, out uint uniqueEntryCount, out bool duplicateMemoUnique, out bool nullInDisallowOrPrimary, out string? buildFailure))
+        if (!BuildIndexLeaf(table, request.Index, out byte[] leafBytes, out uint entryCount, out uint uniqueEntryCount, out bool duplicateUnique, out bool duplicateMemoUnique, out bool nullInDisallowOrPrimary, out string? buildFailure))
         {
-            if (nullInDisallowOrPrimary
-                && request.Route == SchemaRoute.Sql
-                && request.Index.Fields.Count == 1
-                && table.Columns.FirstOrDefault(c => string.Equals(c.Name, request.Index.Fields[0], StringComparison.OrdinalIgnoreCase))?.TypeCode == NativeTypes.Long
-                && workspace.HasGlobalMapAllocationOrReservation(_cache))
-            {
-                // evidence/r-q50-jk44-ddl-vis/ddl-index-ignore-null-rows-accdb, ddl-index-ignore-null-rows-mdb (after-dis-fail),
-                // ddl-index-disallow-primary-rows-accdb, ddl-index-disallow-primary-rows-mdb (after-pri-fail):
-                // SQL CREATE INDEX WITH DISALLOW NULL or WITH PRIMARY on a single Long column over an existing Null row
-                // in a session with prior global-map activity fails 3058 with 0 bytes written (fresh-session / Text 3058
-                // writes page 0 + page 1 in r-q54-excl-ddl-ix-cmd/ix-unique-dup-3022-bytes-* and stays refused by name).
-                return new SchemaOutcome(new SchemaRefusal(3058, null), default, _pageCount, PublishedAny: false);
-            }
             if (duplicateMemoUnique)
             {
                 // evidence/r-q44-ddl-alter-types/ixtype-memo-rows-accdb-dao (a1 & a2) and ixtype-memo-rows-mdb-dao:
@@ -2141,15 +2152,69 @@ public sealed class SchemaWriter
                 }
                 return new SchemaOutcome(new SchemaRefusal(3022, null), default, _pageCount, PublishedAny: true);
             }
+            if (((duplicateUnique && !request.Index.PrimaryKey) || nullInDisallowOrPrimary) && request.Route == SchemaRoute.Sql && !workspace.IsExclusiveSession(_cache))
+            {
+                int errNum = nullInDisallowOrPrimary ? 3058 : 3022;
+                IReadOnlyList<uint> priorRolledBack = workspace.PendingRolledBackPages(_cache);
+                IReadOnlyList<uint> failReserved = workspace.SessionReservedPages(_cache);
+                bool reserveExtent = !workspace.HasGlobalMapAllocationOrReservation(_cache) && failReserved.Count == 0;
+                if (reserveExtent || priorRolledBack.Count > 0)
+                {
+                    if (nullInDisallowOrPrimary && (reserveExtent || request.Index.PrimaryKey))
+                    {
+                        return new SchemaOutcome(null, new AcceptOutcome(false, null, MutationOpen.Publication, $"{request.Index.Name}: existing Null row in {(request.Index.PrimaryKey ? "PRIMARY" : "DISALLOW NULL")} index in this session state is not recorded (r-q50-jk44-ddl-vis/ddl-index-disallow-primary-rows-accdb and ddl-index-disallow-primary-rows-mdb record 0-byte 3058 after prior global-map activity; r-q54-excl-ddl-ix-cmd/ix-unique-dup-3022-bytes-accdb and r-q54-excl-ddl-ix-cmd/ix-unique-dup-3022-bytes-mdb record WITH DISALLOW NULL 3058 after prior extent reservation)"), _pageCount);
+                    }
+                    if (acceptsError is not null && !acceptsError(errNum))
+                    {
+                        return new SchemaOutcome(new SchemaRefusal(errNum, null), default, _pageCount, PublishedAny: false);
+                    }
+                    // evidence/r-q54-excl-ddl-ix-cmd/ix-unique-dup-3022-bytes-accdb, r-q54-excl-ddl-ix-cmd/ix-unique-dup-3022-bytes-mdb:
+                    // SQL CREATE UNIQUE INDEX (3022, with or without dbFailOnError) and post-reservation WITH DISALLOW NULL (3058)
+                    // reserve a 32-page page-1 extent on first activity, consume 1 rolled-back page (flushed on the next
+                    // failing statement or Close), and step 0xE02 +1.
+                    List<uint> newlyRolledBack = [];
+                    AcceptOutcome rollbackStep = workspace.AcceptSchemaChange(
+                        _cache,
+                        ObjectSemantics,
+                        p => CompileRelationMismatch3368Rollback(p, priorRolledBack, failReserved, reserveExtent, pagesToRollBack: 1, newlyRolledBack));
+                    if (!Published(rollbackStep))
+                    {
+                        return new SchemaOutcome(null, rollbackStep, _pageCount);
+                    }
+                    if (priorRolledBack.Count > 0)
+                    {
+                        workspace.RemoveReleasedAtClose(_cache, priorRolledBack);
+                    }
+                    workspace.SetPendingRolledBackPages(_cache, newlyRolledBack);
+                    return new SchemaOutcome(new SchemaRefusal(errNum, null), rollbackStep, _pageCount, PublishedAny: true);
+                }
+                // evidence/r-q50-jk44-ddl-vis/ddl-index-ignore-null-rows-accdb, ddl-index-ignore-null-rows-mdb,
+                // ddl-index-disallow-primary-rows-accdb, ddl-index-disallow-primary-rows-mdb:
+                // when the session already has an active reservation with 0 pending rolled-back pages, 0-byte 3058 is
+                // recorded only for single-column ascending Long PRIMARY / DISALLOW NULL (0-byte 3022 is not recorded).
+                if (nullInDisallowOrPrimary
+                    && request.Index.Fields.Count == 1
+                    && (request.Index.Descending is null || !request.Index.Descending[0])
+                    && table.Columns.FirstOrDefault(c => FieldNameLookupClashOf(c.Name, request.Index.Fields[0], _sortOrder, out _) == FieldNameClash.Duplicate)?.TypeCode == NativeTypes.Long)
+                {
+                    if (acceptsError is not null && !acceptsError(errNum))
+                    {
+                        return new SchemaOutcome(new SchemaRefusal(errNum, null), default, _pageCount, PublishedAny: false);
+                    }
+                    return new SchemaOutcome(new SchemaRefusal(errNum, null), default, _pageCount, PublishedAny: false);
+                }
+            }
             return new SchemaOutcome(null, new AcceptOutcome(false, null, MutationOpen.Publication, buildFailure), _pageCount);
         }
         IReadOnlyList<uint> sessionReserved = workspace.SessionReservedPages(_cache);
-        // r-q50-jk44-ddl-vis/ddl-index-opts-empty-mdb, ddl-index-ignore-null-rows-accdb, ddl-index-ignore-null-rows-mdb,
-        // ddl-index-disallow-primary-rows-accdb, ddl-index-disallow-primary-rows-mdb: live snapshots after WITH IGNORE NULL /
-        // DISALLOW NULL / PRIMARY reserve the 32-page session extent on page 1 on first global-map activity.
+        // evidence/r-q50-jk44-ddl-vis/ddl-index-opts-empty-mdb, r-q54-excl-ddl-ix-cmd/ix-existing-nulls-uniq-multi-accdb,
+        // r-q54-excl-ddl-ix-cmd/ix-existing-nulls-uniq-multi-mdb:
+        // CREATE UNIQUE / WITH IGNORE NULL / DISALLOW NULL / PRIMARY INDEX reserves the 32-page session extent on page 1 on first global-map activity.
         bool useSessionExtentReservation =
-            (request.Index.IgnoreNull || request.Index.DisallowNull || request.Index.PrimaryKey)
-            && !workspace.HasGlobalMapAllocationOrReservation(_cache);
+            workspace.Depth == 0
+            && (request.Index.IgnoreNull || request.Index.DisallowNull || request.Index.PrimaryKey || (request.Index.Unique && !isExtendedKeyType))
+            && !workspace.HasGlobalMapAllocationOrReservation(_cache)
+            && sessionReserved.Count == 0;
         ulong extent = _pageCount;
         AcceptOutcome accepted = workspace.AcceptSchemaChange(
             _cache,
@@ -2268,6 +2333,7 @@ public sealed class SchemaWriter
             }
         }
 
+        IReadOnlyList<uint> sessionReserved = workspace.SessionReservedPages(_cache);
         ulong extent = _pageCount;
         AcceptOutcome accepted = workspace.AcceptSchemaChange(
             _cache,
@@ -2283,6 +2349,7 @@ public sealed class SchemaWriter
                 newPropMaps,
                 dateCreateBits,
                 dateUpdateBits,
+                sessionReserved,
                 out extent));
         if (updatesExistingLvProp
             && (!isJet4Mdb || !hadExistingCheckConstraints)
@@ -2400,9 +2467,9 @@ public sealed class SchemaWriter
         {
             return new SchemaOutcome(new SchemaRefusal(null, childFailure), default, _pageCount);
         }
-        if (childTable.LongValueMaps.Count > 0)
+        if (isDao && childTable.LongValueMaps.Count > 0)
         {
-            return new SchemaOutcome(new SchemaRefusal(null, $"adding a FOREIGN KEY / Relation on child table '{childEntry.Name}' with Memo/Ole columns is not recorded (evidence/r-q34-ddl-sweep/alt-fk-*, evidence/r-q46-dao-ddl-multi/rel-*)"), default, _pageCount);
+            return new SchemaOutcome(new SchemaRefusal(null, $"adding a DAO Relation on child table '{childEntry.Name}' with Memo/Ole columns is not recorded (evidence/r-q46-dao-ddl-multi/rel-*)"), default, _pageCount);
         }
         (string Name, byte TypeCode, bool IsAutoNumber)[] childCols = [.. childTable.Columns.Select(c => (c.Name, c.TypeCode, c.IsAutoNumber))];
         if (PrepareForeignKeyState(childEntry.Name, childTable, childCols, fk, isAlterTable: true, request.Route, out PreparedForeignKey? prepared) is { } fkRefusal)
@@ -2441,8 +2508,8 @@ public sealed class SchemaWriter
             }
         }
 
-        IReadOnlyList<uint> sessionReserved = isDao ? workspace.SessionReservedPages(_cache) : [];
-        bool useExtentReservation = isDao && !workspace.HasGlobalMapActivity(_cache);
+        IReadOnlyList<uint> sessionReserved = workspace.SessionReservedPages(_cache);
+        bool useExtentReservation = workspace.Depth == 0 && !workspace.IsExclusiveSession(_cache) && !workspace.HasGlobalMapActivity(_cache);
         IReadOnlyList<PageEdit> deferredCloseEdits = isDao ? workspace.PeekDeferredCloseEdits(_cache) : [];
         ulong extent = _pageCount;
         AcceptOutcome accepted = workspace.AcceptSchemaChange(
@@ -2774,10 +2841,6 @@ public sealed class SchemaWriter
         {
             return new SchemaOutcome(new SchemaRefusal(null, "ALTER TABLE ADD COLUMN inside BeginTrans is not recorded (evidence/r-q44-ddl-alter-types/add-*, evidence/r-q49-dt2-draftprops/ddl-default-alter-*)"), default, _pageCount);
         }
-        if (workspace.IsExclusiveSession(_cache))
-        {
-            return new SchemaOutcome(new SchemaRefusal(null, "ALTER TABLE ADD COLUMN in an exclusive session is not recorded"), default, _pageCount);
-        }
         if (request.Route is not (SchemaRoute.Sql or SchemaRoute.Ado))
         {
             return new SchemaOutcome(new SchemaRefusal(null, $"AlterAddColumn on {request.Route} route is not recorded"), default, _pageCount);
@@ -2824,9 +2887,12 @@ public sealed class SchemaWriter
         }
         else if (isMemo)
         {
-            if (isJet4Mdb || request.Route != SchemaRoute.Sql || table.RowCount > 0 || f.Required || f.DefaultValue is not null)
+            if (f.Required
+                || f.DefaultValue is not null
+                || (request.Route == SchemaRoute.Sql && table.RowCount > 0)
+                || (request.Route == SchemaRoute.Ado && table.RowCount == 0))
             {
-                return new SchemaOutcome(new SchemaRefusal(null, $"ALTER TABLE ADD COLUMN MEMO on {(isJet4Mdb ? "Jet 4 MDB" : "ACCDB")} {request.Route} (rows={table.RowCount}, required={f.Required}, default={f.DefaultValue is not null}) is not recorded (evidence/r-q44-ddl-alter-types/add-memo-empty-accdb-dao records empty ACCDB SQL without NOT NULL/DEFAULT)"), default, _pageCount);
+                return new SchemaOutcome(new SchemaRefusal(null, $"ALTER TABLE ADD COLUMN MEMO on {(isJet4Mdb ? "Jet 4 MDB" : "ACCDB")} {request.Route} (rows={table.RowCount}, required={f.Required}, default={f.DefaultValue is not null}) is not recorded (evidence/r-q44-ddl-alter-types/add-memo-empty-accdb-dao, r-q54-excl-ddl-ix-cmd/excl-alter-add-drop-accdb, r-q54-excl-ddl-ix-cmd/excl-alter-add-drop-mdb record empty SQL MEMO; r-q54-excl-ddl-ix-cmd/ado-alter-add-text-nodef-accdb, r-q54-excl-ddl-ix-cmd/ado-alter-add-text-nodef-mdb record populated ADO MEMO)"), default, _pageCount);
             }
         }
         else if (f.Type == NewFieldType.DateTime)
@@ -2854,17 +2920,13 @@ public sealed class SchemaWriter
         if (f.Required)
         {
             bool admittedRequired =
-                (f.Type == NewFieldType.Long && !isJet4Mdb && request.Route == SchemaRoute.Sql && f.DefaultValue is null)
+                (f.Type == NewFieldType.Long && request.Route == SchemaRoute.Sql && f.DefaultValue is null && (!isJet4Mdb || table.RowCount == 0))
                 || (f.Type == NewFieldType.Long && request.Route == SchemaRoute.Ado && f.DefaultValue is not null)
-                || (f.Type == NewFieldType.Text && !isJet4Mdb && request.Route == SchemaRoute.Sql && table.RowCount == 0 && f.DefaultValue is null);
+                || (f.Type == NewFieldType.Text && table.RowCount == 0 && f.DefaultValue is null);
             if (!admittedRequired)
             {
-                return new SchemaOutcome(new SchemaRefusal(null, $"ALTER TABLE ADD COLUMN '{f.Name}' {f.Type} NOT NULL on {(isJet4Mdb ? "Jet 4 MDB" : "ACCDB")} {request.Route} (rows={table.RowCount}, default={f.DefaultValue is not null}) is not recorded (recorded: ACCDB SQL Long NOT NULL, empty ACCDB SQL Text NOT NULL, ADO Long NOT NULL DEFAULT)"), default, _pageCount);
+                return new SchemaOutcome(new SchemaRefusal(null, $"ALTER TABLE ADD COLUMN '{f.Name}' {f.Type} NOT NULL on {(isJet4Mdb ? "Jet 4 MDB" : "ACCDB")} {request.Route} (rows={table.RowCount}, default={f.DefaultValue is not null}) is not recorded (recorded: SQL Long NOT NULL, empty SQL/ADO Text NOT NULL, ADO Long NOT NULL DEFAULT)"), default, _pageCount);
             }
-        }
-        else if (f.Type == NewFieldType.Text && request.Route == SchemaRoute.Ado && f.DefaultValue is null)
-        {
-            return new SchemaOutcome(new SchemaRefusal(null, $"ALTER TABLE ADD COLUMN '{f.Name}' TEXT without DEFAULT on ADO route is not recorded (evidence/r-q44-ddl-alter-types/add-cols-rows-accdb-dao, add-cols-rows-mdb-dao record SQL/DAO; evidence/r-q49-dt2-draftprops/ddl-default-alter-ado-accdb, ddl-default-alter-ado-mdb record ADO TEXT DEFAULT)"), default, _pageCount);
         }
         if (f.DefaultValue is not null)
         {
@@ -2887,15 +2949,16 @@ public sealed class SchemaWriter
         {
             return new SchemaOutcome(new SchemaRefusal(null, $"{entry.Name}'s TableDef page {table.FirstPage} holds bytes its re-encoding does not reproduce (R-PRESERVE-1)"), default, _pageCount);
         }
-        if (table.MaxColumns != table.Columns.Count)
+        if (table.MaxColumns < table.Columns.Count)
         {
-            return new SchemaOutcome(new SchemaRefusal(null, $"ALTER TABLE ADD COLUMN on '{entry.Name}' with MaxColumns ({table.MaxColumns}) != Columns.Count ({table.Columns.Count}) (e.g. after DROP/ALTER COLUMN) is not recorded"), default, _pageCount);
+            return new SchemaOutcome(new SchemaRefusal(null, $"ALTER TABLE ADD COLUMN on '{entry.Name}' with MaxColumns ({table.MaxColumns}) < Columns.Count ({table.Columns.Count}) is not valid"), default, _pageCount);
         }
         for (int i = 0; i < table.Columns.Count; i++)
         {
-            if (table.Columns[i].ColumnId != i || table.Columns[i].PhysicalNumber != i)
+            if (table.Columns[i].PhysicalNumber >= table.MaxColumns
+                || (i > 0 && table.Columns[i].PhysicalNumber <= table.Columns[i - 1].PhysicalNumber))
             {
-                return new SchemaOutcome(new SchemaRefusal(null, $"ALTER TABLE ADD COLUMN on '{entry.Name}' with non-contiguous column numbering is not recorded"), default, _pageCount);
+                return new SchemaOutcome(new SchemaRefusal(null, $"ALTER TABLE ADD COLUMN on '{entry.Name}' with out-of-order physical column numbering is not recorded"), default, _pageCount);
             }
         }
 
@@ -2907,7 +2970,11 @@ public sealed class SchemaWriter
                 fixedEnd = Math.Max(fixedEnd, existingCol.FixedOffset + existingCol.Length);
             }
         }
-        ushort nextColNum = (ushort)table.Columns.Count;
+        // evidence/r-q54-excl-ddl-ix-cmd/excl-alter-add-drop-accdb, r-q54-excl-ddl-ix-cmd/excl-alter-add-drop-mdb (after-s6-ado-excl-add-def):
+        // after DROP COLUMN leaves a gap (MaxColumns > Columns.Count), ADD COLUMN assigns PhysicalNumber = MaxColumns,
+        // re-sequences ColumnId on existing columns to 0..Columns.Count-1, and assigns the new column ColumnId = Columns.Count.
+        ushort nextPhysNum = (ushort)table.MaxColumns;
+        ushort nextColId = (ushort)table.Columns.Count;
         ushort variables = spec.VariableColumns;
         uint sortInfo = (uint)_sortOrder.Identifier | ((uint)_sortOrder.Reserved << 16) | ((uint)(byte)_sortOrder.Version << 24);
         ColumnSpec newCol;
@@ -2916,36 +2983,40 @@ public sealed class SchemaWriter
         {
             case NewFieldType.Long:
                 addedFixedBytes = 4;
-                newCol = new ColumnSpec(f.Name, NativeTypes.Long, nextColNum, variables, nextColNum, sortInfo, FixedColumnFlags, 0x00, (ushort)fixedEnd, 4);
+                newCol = new ColumnSpec(f.Name, NativeTypes.Long, nextPhysNum, variables, nextColId, sortInfo, FixedColumnFlags, 0x00, (ushort)fixedEnd, 4);
                 break;
             case NewFieldType.DateTime:
                 addedFixedBytes = 8;
-                newCol = new ColumnSpec(f.Name, NativeTypes.DateTime, nextColNum, variables, nextColNum, sortInfo, FixedColumnFlags, 0x00, (ushort)fixedEnd, 8);
+                newCol = new ColumnSpec(f.Name, NativeTypes.DateTime, nextPhysNum, variables, nextColId, sortInfo, FixedColumnFlags, 0x00, (ushort)fixedEnd, 8);
                 break;
             case NewFieldType.DateTime2:
                 addedFixedBytes = 42;
-                newCol = new ColumnSpec(f.Name, NativeTypes.ExtendedDateTime, nextColNum, variables, nextColNum, DateTime2TypeInfo, FixedColumnFlags, 0x00, (ushort)fixedEnd, 42);
+                newCol = new ColumnSpec(f.Name, NativeTypes.ExtendedDateTime, nextPhysNum, variables, nextColId, DateTime2TypeInfo, FixedColumnFlags, 0x00, (ushort)fixedEnd, 42);
                 break;
             case NewFieldType.Text:
-                newCol = new ColumnSpec(f.Name, NativeTypes.Text, nextColNum, variables, nextColNum, sortInfo, VariableColumnFlags, 0x00, 0, (ushort)(f.Size * 2));
+                newCol = new ColumnSpec(f.Name, NativeTypes.Text, nextPhysNum, variables, nextColId, sortInfo, VariableColumnFlags, 0x00, 0, (ushort)(f.Size * 2));
                 variables++;
                 break;
             case NewFieldType.Memo:
-                newCol = new ColumnSpec(f.Name, NativeTypes.Memo, nextColNum, variables, nextColNum, sortInfo, VariableColumnFlags, 0x00, 0, 0);
+                newCol = new ColumnSpec(f.Name, NativeTypes.Memo, nextPhysNum, variables, nextColId, sortInfo, VariableColumnFlags, 0x00, 0, 0);
                 variables++;
                 break;
             case NewFieldType.BigInt:
-                newCol = new ColumnSpec(f.Name, NativeTypes.BigInt, nextColNum, variables, nextColNum, sortInfo, VariableColumnFlags, 0x00, 0, 8);
+                newCol = new ColumnSpec(f.Name, NativeTypes.BigInt, nextPhysNum, variables, nextColId, sortInfo, VariableColumnFlags, 0x00, 0, 8);
                 variables++;
                 break;
             case NewFieldType.Decimal:
                 // evidence/r-q51-codecs-props-compact/dec-desc-keys-accdb, dec-desc-keys-mdb, seek-args-decimal-accdb, seek-args-decimal-mdb:
                 // fixed 17-byte Numeric column with TypeInfo = precision | (scale << 8).
                 addedFixedBytes = 17;
-                newCol = new ColumnSpec(f.Name, NativeTypes.Numeric, nextColNum, variables, nextColNum, f.Precision | ((uint)f.Scale << 8), FixedColumnFlags, 0x00, (ushort)fixedEnd, 17);
+                newCol = new ColumnSpec(f.Name, NativeTypes.Numeric, nextPhysNum, variables, nextColId, f.Precision | ((uint)f.Scale << 8), FixedColumnFlags, 0x00, (ushort)fixedEnd, 17);
                 break;
             default:
                 return new SchemaOutcome(new SchemaRefusal(null, $"ALTER TABLE ADD COLUMN of unrecorded type {f.Type}"), default, _pageCount);
+        }
+        if (addedFixedBytes > 0 && table.MaxColumns > table.Columns.Count)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, $"ALTER TABLE ADD COLUMN fixed-width column '{f.Name}' after DROP COLUMN (MaxColumns={table.MaxColumns} > Columns.Count={table.Columns.Count}) is not recorded (evidence/r-q54-excl-ddl-ix-cmd/excl-alter-add-drop-accdb and excl-alter-add-drop-mdb record variable-width TEXT after DROP COLUMN)"), default, _pageCount);
         }
         if (fixedEnd + addedFixedBytes > ushort.MaxValue)
         {
@@ -2980,14 +3051,21 @@ public sealed class SchemaWriter
             {
                 return new SchemaOutcome(new SchemaRefusal(null, $"{entry.Name}'s map page {table.OwnedMap.Page} cannot append 2 LVAL maps: {mapFail1 ?? mapFail2 ?? "unexpected slot"}"), default, _pageCount);
             }
-            newLvalMaps.Add(new LvalColumnMapSpec(nextColNum, new RowLocator(table.OwnedMap.Page, lvalOwnedSlot), new RowLocator(table.OwnedMap.Page, lvalFreeSlot)));
+            newLvalMaps.Add(new LvalColumnMapSpec(nextPhysNum, new RowLocator(table.OwnedMap.Page, lvalOwnedSlot), new RowLocator(table.OwnedMap.Page, lvalFreeSlot)));
         }
 
+        List<ColumnSpec> updatedExistingCols = new(spec.Columns.Count + 1);
+        for (int i = 0; i < spec.Columns.Count; i++)
+        {
+            ColumnSpec c = spec.Columns[i];
+            updatedExistingCols.Add(c.ColumnId == (ushort)i ? c : c with { ColumnId = (ushort)i });
+        }
+        updatedExistingCols.Add(newCol);
         TableDefSpec newSpec = spec with
         {
-            MaxColumns = (ushort)(spec.Columns.Count + 1),
+            MaxColumns = (ushort)(table.MaxColumns + 1),
             VariableColumns = variables,
-            Columns = [.. spec.Columns, newCol],
+            Columns = updatedExistingCols,
             LvalColumnMaps = newLvalMaps,
         };
         int maxSinglePage = _d.PageSize - _d.TableDef.ContinuationDataOffset;
@@ -3045,7 +3123,7 @@ public sealed class SchemaWriter
         }
 
         IReadOnlyList<uint> sessionReserved = workspace.SessionReservedPages(_cache);
-        bool useSessionExtentReservation = !workspace.HasGlobalMapActivity(_cache);
+        bool useSessionExtentReservation = !workspace.IsExclusiveSession(_cache) && !workspace.HasGlobalMapActivity(_cache);
         ulong extent = _pageCount;
         AcceptOutcome accepted = workspace.AcceptSchemaChange(
             _cache,
@@ -3557,7 +3635,7 @@ public sealed class SchemaWriter
         }
 
         IReadOnlyList<uint> sessionReserved = workspace.SessionReservedPages(_cache);
-        bool useSessionExtentReservation = !workspace.HasGlobalMapActivity(_cache);
+        bool useSessionExtentReservation = !workspace.IsExclusiveSession(_cache) && !workspace.HasGlobalMapActivity(_cache);
         ulong extent = _pageCount;
         AcceptOutcome accepted = workspace.AcceptSchemaChange(
             _cache,
@@ -3700,10 +3778,6 @@ public sealed class SchemaWriter
         {
             return new SchemaOutcome(new SchemaRefusal(null, "ALTER TABLE DROP COLUMN inside BeginTrans is not recorded"), default, _pageCount);
         }
-        if (workspace.IsExclusiveSession(_cache))
-        {
-            return new SchemaOutcome(new SchemaRefusal(null, "ALTER TABLE DROP COLUMN in an exclusive session is not recorded"), default, _pageCount);
-        }
         if (request.Route is not (SchemaRoute.Sql or SchemaRoute.Ado))
         {
             return new SchemaOutcome(new SchemaRefusal(null, $"AlterDropColumn on {request.Route} route is not recorded"), default, _pageCount);
@@ -3739,13 +3813,15 @@ public sealed class SchemaWriter
         {
             return new SchemaOutcome(new SchemaRefusal(null, $"ALTER TABLE DROP COLUMN of the last remaining column '{col.Name}' on '{entry.Name}' is not recorded"), default, _pageCount);
         }
-        if (!TryReadTableLvProp(entry, out LongValuePlan? oldPlan, out _, out _, out SchemaRefusal? lvRefusal))
+        if (!TryReadTableLvProp(entry, out LongValuePlan? oldPlan, out _, out List<PropertyMap> baseMaps, out SchemaRefusal? lvRefusal))
         {
             return new SchemaOutcome(lvRefusal, default, _pageCount);
         }
-        if (oldPlan is not null)
+        if (oldPlan is not null
+            && (baseMaps.Any(m => m.Kind != PropertySectionKind.ColumnValues)
+                || baseMaps.Any(m => m.Kind == PropertySectionKind.ColumnValues && string.Equals(m.MapName, col.Name, StringComparison.OrdinalIgnoreCase))))
         {
-            return new SchemaOutcome(new SchemaRefusal(null, $"ALTER TABLE DROP COLUMN '{col.Name}' on '{entry.Name}' with existing MSysObjects.LvProp is not recorded"), default, _pageCount);
+            return new SchemaOutcome(new SchemaRefusal(null, $"ALTER TABLE DROP COLUMN '{col.Name}' on '{entry.Name}' when MSysObjects.LvProp holds non-ColumnValues sections or a ColumnValues section for '{col.Name}' is not recorded"), default, _pageCount);
         }
         if (TableDefEncoder.SpecOf(table, out string? specFailure) is not { } spec)
         {
@@ -3851,10 +3927,6 @@ public sealed class SchemaWriter
         {
             return new SchemaOutcome(new SchemaRefusal(null, "DROP INDEX / DROP CONSTRAINT inside BeginTrans is not recorded"), default, _pageCount);
         }
-        if (workspace.IsExclusiveSession(_cache))
-        {
-            return new SchemaOutcome(new SchemaRefusal(null, "DROP INDEX / DROP CONSTRAINT in an exclusive session is not recorded"), default, _pageCount);
-        }
         if (request.Route != SchemaRoute.Sql)
         {
             return new SchemaOutcome(new SchemaRefusal(null, $"DropIndex on {request.Route} route is not recorded (only DAO SQL route is recorded in r-q44-ddl-alter-types/dropcon-*)"), default, _pageCount);
@@ -3909,9 +3981,13 @@ public sealed class SchemaWriter
             return new SchemaOutcome(new SchemaRefusal(null, $"DROP INDEX '{targetLogical.Name}' whose physical index {removedPhysNum} is shared with another logical index (e.g. a relationship) is not recorded"), default, _pageCount);
         }
         List<PhysicalIndexSpec> remainingPhysicals = [.. spec.PhysicalIndexes];
-        if (removedPhysNum != remainingPhysicals.Count - 1)
+        if (removedPhysNum >= remainingPhysicals.Count)
         {
-            return new SchemaOutcome(new SchemaRefusal(null, $"DROP INDEX '{targetLogical.Name}' whose physical index {removedPhysNum} is not the last physical index on '{entry.Name}' (count {remainingPhysicals.Count}) is not recorded"), default, _pageCount);
+            return new SchemaOutcome(new SchemaRefusal(null, $"DROP INDEX '{targetLogical.Name}': physical index {removedPhysNum} is out of range ({remainingPhysicals.Count})"), default, _pageCount);
+        }
+        if (removedPhysNum != remainingPhysicals.Count - 1 && !workspace.IsExclusiveSession(_cache))
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, $"DROP INDEX '{targetLogical.Name}' of non-last physical index {removedPhysNum} of {remainingPhysicals.Count} in a shared session is not recorded (evidence/r-q54-excl-ddl-ix-cmd/excl-alter-add-drop-accdb and excl-alter-add-drop-mdb record exclusive sessions)"), default, _pageCount);
         }
         PhysicalIndexSpec removedPhys = remainingPhysicals[(int)removedPhysNum];
         if (PinCopy(removedPhys.OwnedMap.Page) is not { } idxMapPage
@@ -3924,6 +4000,15 @@ public sealed class SchemaWriter
             return new SchemaOutcome(new SchemaRefusal(null, $"DROP INDEX '{targetLogical.Name}' of multi-page index ({idxOwnedPages.Count} owned pages) is not recorded (only single-page index release is recorded)"), default, _pageCount);
         }
         remainingPhysicals.RemoveAt((int)removedPhysNum);
+        // evidence/r-q54-excl-ddl-ix-cmd/excl-alter-add-drop-accdb, r-q54-excl-ddl-ix-cmd/excl-alter-add-drop-mdb (after-s4-drop-ix):
+        // removing a non-last physical index shifts higher PhysicalNumbers down by 1 while preserving each LogicalNumber.
+        for (int i = 0; i < remainingLogicals.Count; i++)
+        {
+            if (remainingLogicals[i].PhysicalNumber > removedPhysNum)
+            {
+                remainingLogicals[i] = remainingLogicals[i] with { PhysicalNumber = remainingLogicals[i].PhysicalNumber - 1 };
+            }
+        }
         TableDefSpec newSpec = spec with
         {
             PhysicalIndexes = remainingPhysicals,
@@ -4722,7 +4807,7 @@ public sealed class SchemaWriter
     /// </summary>
     public SchemaOutcome DropTable(TransactionCoordinator workspace, DropTableRequest request)
     {
-        if (FileRefusal() is { } file)
+        if (FileRefusal(allowJet4Mdb: true) is { } file)
         {
             return new SchemaOutcome(file, default, _pageCount);
         }
@@ -4734,9 +4819,36 @@ public sealed class SchemaWriter
         {
             return new SchemaOutcome(new SchemaRefusal(null, failure), default, _pageCount);
         }
-        if (table.RowCount > 0 || table.PhysicalIndexes.Count > 0 || table.Columns.Any(c => c.TypeCode is NativeTypes.Memo or NativeTypes.Ole))
+        if (table.LogicalIndexes.Any(li => li.IndexType == _d.IndexDescriptor.ForeignKeyType || li.RelatedTable != 0))
         {
-            return new SchemaOutcome(new SchemaRefusal(null, "DROP TABLE of a table with rows, indexes or long-value columns (r-q11 records an empty one-column table)"), default, _pageCount);
+            return new SchemaOutcome(new SchemaRefusal(null, $"DROP TABLE of '{entry.Name}', which participates in a relationship, is not recorded"), default, _pageCount);
+        }
+        if (RelationshipCatalog.Read(_cache, _d, _catalog, _pageCount, out string? relReadFailure) is { } existingRels)
+        {
+            foreach (Relationship rel in existingRels)
+            {
+                if (CatalogRelationshipContext.NamesEqual(rel.Table, entry.Name)
+                    || CatalogRelationshipContext.NamesEqual(rel.ForeignTable, entry.Name))
+                {
+                    return new SchemaOutcome(new SchemaRefusal(null, $"DROP TABLE of '{entry.Name}', which participates in relationship '{rel.Name}' in MSysRelationships, is not recorded"), default, _pageCount);
+                }
+            }
+        }
+        else
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, $"DROP TABLE of '{entry.Name}': MSysRelationships could not be read: {relReadFailure}"), default, _pageCount);
+        }
+        if (table.RowCount > 0 && table.Columns.Any(c => c.IsAutoNumber))
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, $"DROP TABLE of populated table '{entry.Name}' with AutoNumber/COUNTER column is not recorded (evidence/r-q15-ddl-open/counter-drop-pages records empty Counter table; evidence/r-q54-excl-ddl-ix-cmd/drop-populated-indexed-lval-accdb and drop-populated-indexed-lval-mdb record non-Counter Long PK)"), default, _pageCount);
+        }
+        if (!TryReadTableLvProp(entry, out LongValuePlan? lvPlan, out _, out List<PropertyMap> dropLvMaps, out SchemaRefusal? lvRefusal))
+        {
+            return new SchemaOutcome(lvRefusal, default, _pageCount);
+        }
+        if (lvPlan is { Form: not LongValueForm.Inline } || dropLvMaps.Any(m => m.Kind != PropertySectionKind.ColumnValues))
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, $"DROP TABLE of '{entry.Name}' with external MSysObjects.LvProp LVAL pages or non-ColumnValues LvProp sections (e.g. CheckConstraints) is not recorded"), default, _pageCount);
         }
         AcceptOutcome accepted = workspace.AcceptSchemaChange(_cache, ObjectSemantics, p => CompileDropTable(p, entry, table));
         return new SchemaOutcome(null, accepted, _pageCount, PublishedAny: Published(accepted));
@@ -4934,6 +5046,10 @@ public sealed class SchemaWriter
                 break;
             default:
                 return new SchemaOutcome(new SchemaRefusal(null, $"attached DAO Fields.Append of unrecorded field type {f.Type}"), default, _pageCount);
+        }
+        if (addedFixedBytes > 0 && table.MaxColumns > table.Columns.Count)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, $"ALTER TABLE ADD COLUMN fixed-width column '{f.Name}' after DROP COLUMN (MaxColumns={table.MaxColumns} > Columns.Count={table.Columns.Count}) is not recorded (evidence/r-q54-excl-ddl-ix-cmd/excl-alter-add-drop-accdb and excl-alter-add-drop-mdb record variable-width TEXT after DROP COLUMN)"), default, _pageCount);
         }
         if (fixedEnd + addedFixedBytes > ushort.MaxValue)
         {
@@ -5466,7 +5582,7 @@ public sealed class SchemaWriter
         }
 
         IReadOnlyList<uint> sessionReserved = workspace.SessionReservedPages(_cache);
-        bool useSessionExtentReservation = !workspace.HasGlobalMapActivity(_cache);
+        bool useSessionExtentReservation = !workspace.IsExclusiveSession(_cache) && !workspace.HasGlobalMapActivity(_cache);
         bool allowTwoPageChain = !isJet4Mdb;
         ulong extent = _pageCount;
         PropertyMap[] finalMaps = [.. updatedMaps];
@@ -6450,7 +6566,7 @@ public sealed class SchemaWriter
             }
         }
         bool hasDefault = request.Route == SchemaRoute.Ado && request.Fields.Any(f => f.DefaultValue is not null);
-        var allocator = new PageAllocator(_cache, _d, _pageCount, sessionReserved, allowNonContiguousReserved: hasDefault);
+        var allocator = new PageAllocator(_cache, _d, _pageCount, sessionReserved, allowNonContiguousReserved: hasDefault || preparedFk is not null);
         uint firstFreeBefore = 0;
         byte[] globalMapBefore = [];
         bool captureForExtent = useSessionExtentReservation && !allocator.HasSessionReservedPages;
@@ -6636,7 +6752,9 @@ public sealed class SchemaWriter
         }
         if (preparedFk is not null)
         {
-            byte fkMapSlot = (byte)(2 + initialIndexCount);
+            // evidence/r-q54-excl-ddl-ix-cmd/second-fk-negid-and-lvalchild-accdb, r-q54-excl-ddl-ix-cmd/second-fk-negid-and-lvalchild-mdb (C3 page 58 slot 7, C4 page 63 slot 5):
+            // inline FK index map row is appended AFTER any trailing LVAL column (owned, free) map pairs.
+            byte fkMapSlot = (byte)(2 + initialIndexCount + (spec.LvalColumnMaps.Count * 2));
             if (!CompileAttachForeignKey(
                 work,
                 p.Overlay,
@@ -7898,11 +8016,12 @@ public sealed class SchemaWriter
         PropertyMap[] newPropMaps,
         ulong dateCreateBits,
         ulong dateUpdateBits,
+        IReadOnlyList<uint> sessionReserved,
         out ulong extent)
     {
         extent = _pageCount;
         var work = new Work(p);
-        var allocator = new PageAllocator(_cache, _d, _pageCount);
+        var allocator = new PageAllocator(_cache, _d, _pageCount, sessionReserved);
         List<uint> releasedAtClose = [];
         // Update the table's MSysObjects row first (resizes/rewrites LvProp and DateUpdate) so the new Type 9 row
         // lands right below it on page 17, matching alt-check-empty-*, alt-check-two-accdb-ado, and chk-lvprop-* byte-for-byte.
@@ -7915,7 +8034,7 @@ public sealed class SchemaWriter
             return work.NotWritten();
         }
         extent = PageAllocator.ExtentOf(_cache, Math.Max(_pageCount, allocator.ExtentPages), p.Overlay);
-        return work.Change(_cache, releasedAtClose);
+        return work.Change(_cache, releasedAtClose, consumedReservedPages: allocator.ConsumedReservedPages);
     }
 
     private bool InsertCheckConstraintObjectRow(
@@ -8254,10 +8373,6 @@ public sealed class SchemaWriter
                 case FieldNameClash.Undecided:
                     return new SchemaRefusal(null, relNameUndecided);
             }
-            if (!isDao && CatalogRelationshipContext.NamesEqual(rel.Table, parentEntry.Name))
-            {
-                return new SchemaRefusal(null, $"parent table '{parentEntry.Name}' already has relationship '{rel.Name}' as primary table: a parent with several SQL/ADO FOREIGN KEYs is not recorded");
-            }
         }
 
         TableDefinition objects = _catalog.ObjectTable;
@@ -8328,23 +8443,20 @@ public sealed class SchemaWriter
         {
             return new SchemaRefusal(null, "MSysObjects has no Relationships container (Id 0x0F000003, Type 3)");
         }
-        if (!isDao && maxNegativeId is not null)
-        {
-            return new SchemaRefusal(null, $"MSysObjects already has a negative-Id object (0x{(uint)maxNegativeId.Value:X8}): negative-Id allocation for a second SQL/ADO relationship is not recorded (evidence/r-q34-ddl-sweep/fk-*, alt-fk-* record the first negative Id 0x80000000 only)");
-        }
         if (maxNegativeId == -1)
         {
             return new SchemaRefusal(null, "MSysObjects negative Id range exhausted (0xFFFFFFFF)");
         }
-        // evidence/r-q47-bigint-expr-edges/rel-multi-parent-accdb, rel-multi-parent-mdb:
+        // evidence/r-q47-bigint-expr-edges/rel-multi-parent-accdb, rel-multi-parent-mdb,
+        // evidence/r-q54-excl-ddl-ix-cmd/second-fk-negid-and-lvalchild-accdb, r-q54-excl-ddl-ix-cmd/second-fk-negid-and-lvalchild-mdb:
         // MSysObjects Type 8 negative IDs step from 0x80000000 by maxNegativeId + 1 without reusing deleted IDs.
         // If no live negative-Id row exists but MSysRelationships already owns a data page (meaning a sole/highest
         // relation was previously deleted), refuse because reuse of 0x80000000 is not recorded.
-        if (isDao && maxNegativeId is null
+        if (maxNegativeId is null
             && PinCopy(relationshipsTable.OwnedMap.Page) is { } relOwnedMapPage
             && MapPages.InlinePages(relOwnedMapPage, relationshipsTable.OwnedMap.Row, _d, out _) is { Count: > 0 })
         {
-            return new SchemaRefusal(null, "DAO Relations.Append after deleting the sole/highest Relation (negative MSysObjects.Id reuse after deletion is not recorded; evidence/r-q47-bigint-expr-edges/rel-multi-parent-* deletes a middle relation only)");
+            return new SchemaRefusal(null, "adding a FOREIGN KEY / Relation after deleting the sole/highest Relation (negative MSysObjects.Id reuse after deletion is not recorded; evidence/r-q47-bigint-expr-edges/rel-multi-parent-* deletes a middle relation only)");
         }
         int nextId = maxNegativeId is int maxNeg ? maxNeg + 1 : int.MinValue;
 
@@ -8397,10 +8509,6 @@ public sealed class SchemaWriter
         {
             return new SchemaRefusal(null, $"parent table '{parentEntry.Name}' TableDef page {parentTable.FirstPage} holds bytes its re-encoding does not reproduce: rewriting it would lose them (R-PRESERVE-1)");
         }
-        if (!isDao && parentTable.LogicalIndexes.Count != parentTable.PhysicalIndexes.Count)
-        {
-            return new SchemaRefusal(null, $"parent table '{parentEntry.Name}' already has relationship or aliased logical indexes: adding a second SQL/ADO relationship to a parent is not recorded");
-        }
         int parentExtraLogicals = isSelfRef ? 2 : 1;
         if (parentTable.LogicalIndexes.Count + parentExtraLogicals > 32)
         {
@@ -8410,14 +8518,6 @@ public sealed class SchemaWriter
         for (int i = 0; i < parentIdxCount; i++)
         {
             LogicalIndex li = parentTable.LogicalIndexes[i];
-            if (!isDao)
-            {
-                if ((li.IndexType != 0 && li.IndexType != _d.IndexDescriptor.PrimaryKeyType)
-                    || li.RelatedTable != 0 || li.RelatedTableType != 0 || li.RelatedIndex != 0xFFFFFFFFu)
-                {
-                    return new SchemaRefusal(null, $"parent table '{parentEntry.Name}' already participates in a relationship ('{li.Name}'): adding another SQL/ADO FOREIGN KEY to the same parent is not recorded");
-                }
-            }
             if (!IsAsciiIndexSortName(li.Name) && !li.Name.StartsWith(".r", StringComparison.Ordinal))
             {
                 return new SchemaRefusal(null, $"parent table '{parentEntry.Name}' logical index '{li.Name}': logical index name sort order is recorded only for ASCII [A-Za-z0-9_] names under General Legacy (1033/0)");
@@ -8612,17 +8712,48 @@ public sealed class SchemaWriter
                         }
                     }
                 }
-                if (childTable.LogicalIndexes.Count != 1
-                    || childTable.PhysicalIndexes.Count != 1
-                    || childTable.LogicalIndexes[0].IndexType != _d.IndexDescriptor.PrimaryKeyType
-                    || childTable.PhysicalIndexes[0].Columns.Count != 1)
+                // evidence/r-q54-excl-ddl-ix-cmd/second-fk-negid-and-lvalchild-accdb, r-q54-excl-ddl-ix-cmd/second-fk-negid-and-lvalchild-mdb (after-fk4-alter-lval-dao):
+                // child table must hold exactly one single-column PRIMARY KEY and any additional logical indexes must be FK indexes (C3: PK_C3 + FK_C3_P1 before adding FK_C3_P2).
+                int pkCount = 0;
+                foreach (LogicalIndex li in childTable.LogicalIndexes)
                 {
-                    return new SchemaRefusal(null, $"ALTER TABLE ADD CONSTRAINT FOREIGN KEY on '{childTableName}' requires one single-column PRIMARY KEY and no other indexes (0-PK, multi-index, or 2-col PK child tables are not recorded in evidence/r-q34-ddl-sweep/alt-fk-*)");
+                    if (li.IndexType == _d.IndexDescriptor.PrimaryKeyType
+                        && childTable.PhysicalOf(li) is { } pkPhys
+                        && pkPhys.Columns.Count == 1)
+                    {
+                        pkCount++;
+                    }
+                    else if (li.IndexType != _d.IndexDescriptor.ForeignKeyType)
+                    {
+                        return new SchemaRefusal(null, $"ALTER TABLE ADD CONSTRAINT FOREIGN KEY '{fk.Name}' on child table '{childTableName}' with non-FK secondary index '{li.Name}' is not recorded");
+                    }
                 }
-                var sqlFkIndexShape = new NewIndex(fk.Name, canonicalChildCols, PrimaryKey: false);
-                if (ExistingIndexesRefusal(childTable, sqlFkIndexShape) is { } existingRefusal)
+                if (pkCount != 1)
                 {
-                    return existingRefusal;
+                    return new SchemaRefusal(null, $"ALTER TABLE ADD CONSTRAINT FOREIGN KEY '{fk.Name}' on child table '{childTableName}' without a single-column PRIMARY KEY is not recorded");
+                }
+                if (childTable.LogicalIndexes.Count + 1 > 32)
+                {
+                    return new SchemaRefusal(null, $"child table '{childTableName}' already has {childTable.LogicalIndexes.Count} logical indexes (ACE limit 32)");
+                }
+                for (int i = 0; i < childTable.LogicalIndexes.Count; i++)
+                {
+                    LogicalIndex li = childTable.LogicalIndexes[i];
+                    if (!IsAsciiIndexSortName(li.Name) && !li.Name.StartsWith(".r", StringComparison.Ordinal))
+                    {
+                        return new SchemaRefusal(null, $"child table '{childTableName}' logical index '{li.Name}': logical index name sort order is recorded only for ASCII [A-Za-z0-9_] names under General Legacy (1033/0)");
+                    }
+                    if (i > 0 && TextOrder.Compare(sort, childTable.LogicalIndexes[i - 1].Name, li.Name) >= 0)
+                    {
+                        return new SchemaRefusal(null, $"child table '{childTableName}' logical indexes '{childTable.LogicalIndexes[i - 1].Name}' and '{li.Name}' are not in General Legacy (1033/0) name order");
+                    }
+                    switch (FieldNameLookupClashOf(li.Name, fk.Name, _sortOrder, out string? clashUndecided))
+                    {
+                        case FieldNameClash.Duplicate:
+                            return new SchemaRefusal(null, $"FOREIGN KEY '{fk.Name}' clashes with existing logical index '{li.Name}' on '{childTableName}'");
+                        case FieldNameClash.Undecided:
+                            return new SchemaRefusal(null, clashUndecided);
+                    }
                 }
             }
             else
@@ -8736,7 +8867,7 @@ public sealed class SchemaWriter
                 {
                     return orphanRefusal;
                 }
-                if (!BuildIndexLeaf(childTable, fkIndexShape, out populatedLeafBytes, out entryCount, out uniqueEntryCount, out _, out _, out string? buildFailure))
+                if (!BuildIndexLeaf(childTable, fkIndexShape, out populatedLeafBytes, out entryCount, out uniqueEntryCount, out _, out _, out _, out string? buildFailure))
                 {
                     return new SchemaRefusal(null, buildFailure);
                 }
@@ -9450,6 +9581,7 @@ public sealed class SchemaWriter
         out byte[] leafBytes,
         out uint entryCount,
         out uint uniqueEntryCount,
+        out bool duplicateUnique,
         out bool duplicateMemoUnique,
         out bool nullInDisallowOrPrimary,
         out string? failure)
@@ -9457,6 +9589,7 @@ public sealed class SchemaWriter
         leafBytes = EmptyLeaf(table.FirstPage);
         entryCount = 0;
         uniqueEntryCount = 0;
+        duplicateUnique = false;
         duplicateMemoUnique = false;
         nullInDisallowOrPrimary = false;
         failure = null;
@@ -9507,14 +9640,22 @@ public sealed class SchemaWriter
                 }
                 if (index.IgnoreNull)
                 {
+                    // evidence/r-q54-excl-ddl-ix-cmd/ix-existing-nulls-uniq-multi-accdb, r-q54-excl-ddl-ix-cmd/ix-existing-nulls-uniq-multi-mdb:
+                    // WITH IGNORE NULL omits ONLY all-Null tuples; partial-Null tuples in a 2-column ascending Long/Text index ARE stored.
                     if (allNull)
                     {
                         continue;
                     }
                     if (anyNull)
                     {
-                        failure = $"{index.Name}: partial-Null key in multi-column IgnoreNulls index (ACE entry rule is not established)";
-                        return false;
+                        bool recordedPartialIgnoreNull = keyCols.Length == 2
+                            && keySpecs.All(k => k.Ascending)
+                            && keyCols.All(c => c.TypeCode is NativeTypes.Long or NativeTypes.Text);
+                        if (!recordedPartialIgnoreNull)
+                        {
+                            failure = $"{index.Name}: partial-Null key in multi-column IgnoreNulls index (ACE entry rule is recorded only for 2-column ascending Long/Text in evidence/r-q54-excl-ddl-ix-cmd/ix-existing-nulls-uniq-multi-accdb and ix-existing-nulls-uniq-multi-mdb)";
+                            return false;
+                        }
                     }
                 }
                 else if (anyNull)
@@ -9525,25 +9666,24 @@ public sealed class SchemaWriter
                         failure = $"{index.Name}: existing Null row in {(index.PrimaryKey ? "PRIMARY" : "DISALLOW NULL")} index (3058)";
                         return false;
                     }
-                    // evidence/r-q43-schema-lval-index/ix-lval-pk-rows-accdb, ix-lval-pk-rows-mdb, ix-lval-second-uq-rows-accdb:
-                    // a single ascending Null Long key in a non-unique non-IGNORE NULL bulk-built index is indexed as [0x00] and
-                    // counted once in both EntryCount and UniqueEntryCount (4 rows: {Null, 10, 20, 20} -> (4, 3, 0)).
-                    // evidence/r-q44-ddl-alter-types/ixtype-double-rows-accdb-dao, ixtype-datetime-rows-accdb-dao, ixtype-guid-rows-accdb-dao, ixtype-memo-rows-accdb-dao (and -mdb-dao twins):
-                    // a single Null key in a single-column Double/DateTime/GUID (ASC/DESC, non-unique or UNIQUE) or ascending Memo
-                    // bulk-built index is indexed as [0x00] (ASC) / [0xFF] (DESC) and counted once in both EntryCount and UniqueEntryCount.
-                    // evidence/r-q51-codecs-props-compact/dec-desc-keys-accdb, dec-desc-keys-mdb, bin-desc-keys-accdb, bin-desc-keys-mdb:
-                    // a single Null in non-unique NUMERIC (ASC/DESC) and one or more Nulls in non-unique Binary/VarBinary
-                    // (ASC/DESC, 3 Null rows in TB & TV -> UniqueEntryCount 7 and 9) collapse into one unique key count.
-                    bool recordedNull = keyCols.Length == 1 && (
-                        (nullKeyRows == 0 && (
-                            (!index.Unique && keyCols[0].TypeCode == NativeTypes.Long && keySpecs[0].Ascending)
-                            || keyCols[0].TypeCode is NativeTypes.Double or NativeTypes.DateTime or NativeTypes.Guid
-                            || (keyCols[0].TypeCode == NativeTypes.Memo && keySpecs[0].Ascending)
-                            || (!index.Unique && keyCols[0].TypeCode == NativeTypes.Numeric)))
-                        || (!index.Unique && keyCols[0].TypeCode == NativeTypes.Binary));
+                    // evidence/r-q43-schema-lval-index/ix-lval-pk-rows-accdb, ix-lval-pk-rows-mdb, ix-lval-second-uq-rows-accdb;
+                    // evidence/r-q51-codecs-props-compact/dec-desc-keys-accdb, dec-desc-keys-mdb, bin-desc-keys-accdb, bin-desc-keys-mdb;
+                    // evidence/r-q54-excl-ddl-ix-cmd/ix-existing-nulls-uniq-multi-accdb, ix-existing-nulls-uniq-multi-mdb:
+                    bool recordedNull =
+                        (keyCols.Length == 1 && (
+                            (nullKeyRows == 0 && (
+                                (!index.Unique && keyCols[0].TypeCode == NativeTypes.Long && keySpecs[0].Ascending)
+                                || keyCols[0].TypeCode is NativeTypes.Double or NativeTypes.DateTime or NativeTypes.Guid
+                                || (keyCols[0].TypeCode == NativeTypes.Memo && keySpecs[0].Ascending)
+                                || (!index.Unique && keyCols[0].TypeCode == NativeTypes.Numeric)))
+                            || (!index.Unique && keyCols[0].TypeCode == NativeTypes.Binary)
+                            || (index.Unique && keyCols[0].TypeCode == NativeTypes.Long && keySpecs[0].Ascending)))
+                        || (keyCols.Length == 2
+                            && keySpecs.All(k => k.Ascending)
+                            && keyCols.All(c => c.TypeCode is NativeTypes.Long or NativeTypes.Text));
                     if (!recordedNull)
                     {
-                        failure = $"{index.Name}: existing Null row in non-IGNORE NULL index: bulk-built UniqueEntryCount for {(nullKeyRows > 0 ? "multiple" : keyCols.Length != 1 ? "multi-column" : !keySpecs[0].Ascending ? $"DESC 0x{keyCols[0].TypeCode:X2}" : index.Unique ? $"UNIQUE 0x{keyCols[0].TypeCode:X2}" : $"0x{keyCols[0].TypeCode:X2}")} Null keys is not recorded (recorded: single Null on ascending non-unique Long in r-q43, Double/DateTime/GUID ASC/DESC and ascending Memo in r-q44, non-unique NUMERIC ASC/DESC and single/multiple Nulls on non-unique Binary ASC/DESC in r-q51)";
+                        failure = $"{index.Name}: existing Null row in non-IGNORE NULL index: bulk-built UniqueEntryCount for {(nullKeyRows > 0 ? "multiple" : keyCols.Length != 1 ? "multi-column" : !keySpecs[0].Ascending ? $"DESC 0x{keyCols[0].TypeCode:X2}" : index.Unique ? $"UNIQUE 0x{keyCols[0].TypeCode:X2}" : $"0x{keyCols[0].TypeCode:X2}")} Null keys is not recorded";
                         return false;
                     }
                     nullKeyRows++;
@@ -9555,7 +9695,10 @@ public sealed class SchemaWriter
                     return false;
                 }
                 bool isNewKey = seenKeys.Add(key);
-                if ((index.PrimaryKey || index.Unique) && !isNewKey)
+                // evidence/r-q54-excl-ddl-ix-cmd/ix-existing-nulls-uniq-multi-accdb, r-q54-excl-ddl-ix-cmd/ix-existing-nulls-uniq-multi-mdb:
+                // in UNIQUE indexes, Null tuples (single-col Null, multi-col (Null,Null), and partial Nulls like (10,Null))
+                // do NOT collide; only non-Null duplicate keys fail 3022.
+                if ((index.PrimaryKey || index.Unique) && !anyNull && !isNewKey)
                 {
                     if (!index.PrimaryKey && index.Unique && keyCols.Length == 1 && keyCols[0].TypeCode == NativeTypes.Memo && keySpecs[0].Ascending)
                     {
@@ -9563,7 +9706,8 @@ public sealed class SchemaWriter
                         failure = $"{index.Name}: duplicate 255-character Memo key prefix in UNIQUE index (3022)";
                         return false;
                     }
-                    failure = $"{index.Name}: existing duplicate key in {(index.PrimaryKey ? "PRIMARY" : "UNIQUE")} index (3022): post-failure file bytes are not recorded";
+                    duplicateUnique = true;
+                    failure = $"{index.Name}: existing duplicate key in {(index.PrimaryKey ? "PRIMARY" : "UNIQUE")} index (3022)";
                     return false;
                 }
                 byte[] entryBytes = IndexEntryInsert.EncodeEntry(key, row.Root);
@@ -9625,15 +9769,73 @@ public sealed class SchemaWriter
     private CompiledChange CompileDropTable(FileParticipant p, CatalogEntry entry, TableDefinition table)
     {
         var work = new Work(p);
-        if (table.FreeMap.Page != table.OwnedMap.Page || PinCopy(table.OwnedMap.Page) is not { } mapPage)
+        uint mapPageNumber = table.OwnedMap.Page;
+        if (table.FreeMap.Page != mapPageNumber || PinCopy(mapPageNumber) is not { } mapPage)
         {
             return NotWritten($"{entry.Name}'s maps are not on one readable map page");
         }
         uint mapRows = (uint)_d.DataPage.RowCount.Read(mapPage);
-        if (mapRows != 2 || table.OwnedMap.Row != 0 || table.FreeMap.Row != 1 || _d.DataPage.Owner.Read(mapPage) != 0)
+        if (table.OwnedMap.Row != 0 || table.FreeMap.Row != 1 || _d.DataPage.Owner.Read(mapPage) != 0)
         {
-            return NotWritten($"{entry.Name}'s map page holds {mapRows} maps: only a page of the table's own two maps is recorded (r-q11 create-then-drop)");
+            return NotWritten($"{entry.Name}'s map page {mapPageNumber} does not start with table OwnedMap=0, FreeMap=1 and Owner=0");
         }
+        int expectedMapRows = 2 + table.PhysicalIndexes.Count + (table.LongValueMaps.Count * 2);
+        if (mapRows != expectedMapRows)
+        {
+            return NotWritten($"{entry.Name}'s map page holds {mapRows} maps (expected {expectedMapRows} for table, {table.PhysicalIndexes.Count} index(es) and {table.LongValueMaps.Count} LVAL column(s))");
+        }
+
+        List<uint> releasedPages = [table.FirstPage, mapPageNumber];
+        HashSet<uint> releasedSet = [table.FirstPage, mapPageNumber];
+        void AddReleased(IReadOnlyList<uint> pages)
+        {
+            foreach (uint pg in pages)
+            {
+                if (releasedSet.Add(pg))
+                {
+                    releasedPages.Add(pg);
+                }
+            }
+        }
+
+        if (MapPages.InlinePages(mapPage, table.OwnedMap.Row, _d, out string? dataMapFail) is not { } dataPages)
+        {
+            return NotWritten($"{entry.Name}'s OwnedMap: {dataMapFail}");
+        }
+        AddReleased(dataPages);
+
+        List<byte> secondaryOwnedSlots = [];
+        List<byte> secondaryFreeSlots = [];
+        foreach (PhysicalIndex pi in table.PhysicalIndexes)
+        {
+            if (pi.OwnedMap.Page != mapPageNumber)
+            {
+                return NotWritten($"{entry.Name}'s index {pi.Number} map is on page {pi.OwnedMap.Page}, expected {mapPageNumber}");
+            }
+            if (MapPages.InlinePages(mapPage, pi.OwnedMap.Row, _d, out string? idxMapFail) is not { } idxPages)
+            {
+                return NotWritten($"{entry.Name}'s index {pi.Number} OwnedMap: {idxMapFail}");
+            }
+            AddReleased(idxPages);
+            secondaryOwnedSlots.Add(pi.OwnedMap.Row);
+        }
+        foreach (LvalColumnMapSpec lv in table.LongValueMaps)
+        {
+            if (lv.OwnedMap.Page != mapPageNumber || lv.FreeMap.Page != mapPageNumber)
+            {
+                return NotWritten($"{entry.Name}'s LVAL column {lv.PhysicalNumber} maps are not on map page {mapPageNumber}");
+            }
+            if (MapPages.InlinePages(mapPage, lv.OwnedMap.Row, _d, out string? lvMapFail) is not { } lvPages)
+            {
+                return NotWritten($"{entry.Name}'s LVAL column {lv.PhysicalNumber} OwnedMap: {lvMapFail}");
+            }
+            AddReleased(lvPages);
+            secondaryOwnedSlots.Add(lv.OwnedMap.Row);
+            secondaryFreeSlots.Add(lv.FreeMap.Row);
+        }
+        secondaryOwnedSlots.Sort();
+        secondaryFreeSlots.Sort();
+
         if (SystemTable("MSysACEs", out string? acesFailure) is not { } aces)
         {
             return NotWritten(acesFailure);
@@ -9655,25 +9857,41 @@ public sealed class SchemaWriter
             }
         }
         var allocator = new PageAllocator(_cache, _d, _pageCount);
-        uint[] releasedAtClose = [table.FirstPage, table.OwnedMap.Page];
-        foreach (uint freed in releasedAtClose)
+        foreach (uint freed in releasedPages)
         {
-            // Verify the pages are currently allocated in page 1 without editing page 1 during the statement:
-            // evidence/r-q15-ddl-open/counter-drop-pages leaves page 1 untouched at drop-at-return / drop-1500ms
-            // and frees pages 42-43 in page 1 at Database.Close (drop-then-create allocates 44-45 for the next
-            // table rather than reusing 42-43 in the same session).
+            // Verify every owned page is currently allocated in page 1 without editing page 1 during the statement:
+            // evidence/r-q15-ddl-open/counter-drop-pages, evidence/r-q54-excl-ddl-ix-cmd/drop-populated-indexed-lval-accdb,
+            // and r-q54-excl-ddl-ix-cmd/drop-populated-indexed-lval-mdb
+            // leave page 1 untouched live and free all owned pages in page 1 at Close.
             if (allocator.Free(p.Overlay, freed, out string? freeFailure) is null)
             {
                 return NotWritten(freeFailure);
             }
         }
-        if (!work.Apply(new PageEdit(table.OwnedMap.Page, new DataPageDeleteDelta(0, _d), PageRole.Map))
-            || !work.Apply(new PageEdit(table.OwnedMap.Page, new DataPageDeleteDelta(1, _d), PageRole.Map))
+        // evidence/r-q54-excl-ddl-ix-cmd/drop-populated-indexed-lval-accdb, r-q54-excl-ddl-ix-cmd/drop-populated-indexed-lval-mdb (page 43 / page 20):
+        // ACE deletes secondary OwnedMap slots in ascending slot order (e.g. PK=2, LVAL owned=3, IX=5), then
+        // secondary FreeMap slots (LVAL free=4), then table OwnedMap (0) and FreeMap (1).
+        foreach (byte slot in secondaryOwnedSlots)
+        {
+            if (!work.Apply(new PageEdit(mapPageNumber, new DataPageDeleteDelta(slot, _d), PageRole.Map)))
+            {
+                return work.NotWritten();
+            }
+        }
+        foreach (byte slot in secondaryFreeSlots)
+        {
+            if (!work.Apply(new PageEdit(mapPageNumber, new DataPageDeleteDelta(slot, _d), PageRole.Map)))
+            {
+                return work.NotWritten();
+            }
+        }
+        if (!work.Apply(new PageEdit(mapPageNumber, new DataPageDeleteDelta(0, _d), PageRole.Map))
+            || !work.Apply(new PageEdit(mapPageNumber, new DataPageDeleteDelta(1, _d), PageRole.Map))
             || !work.Apply(new PageEdit(table.FirstPage, new BytePatch(_d.DataPage.Kind.Offset, [DroppedTableDefKind]), PageRole.Catalog)))
         {
             return work.NotWritten();
         }
-        return work.Change(_cache, releasedAtClose);
+        return work.Change(_cache, releasedPages);
     }
 
     /// <summary>

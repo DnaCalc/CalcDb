@@ -692,10 +692,6 @@ public static class DdlBinder
             {
                 return Fail(BindOpen("NotModelled.DdlForeignKey", "CREATE TABLE combining FOREIGN KEY with UNIQUE on non-ADO route is not recorded (evidence/r-q50-jk44-ddl-vis/ddl-multi-constraint-table-* records ADO)"), out failure);
             }
-            if (firstLvalIdx >= 0)
-            {
-                return Fail(BindOpen("NotModelled.DdlForeignKey", "CREATE TABLE combining FOREIGN KEY with Memo/LongBinary columns is not recorded (evidence/r-q34-ddl-sweep/fk-*)"), out failure);
-            }
             if (stmt.Columns.Any(c => c.Nullability == DdlNullability.NotNull) && route != SchemaRoute.Ado)
             {
                 return Fail(BindOpen("NotModelled.DdlForeignKey", "CREATE TABLE combining FOREIGN KEY with NOT NULL columns on non-ADO route is not recorded (evidence/r-q50-jk44-ddl-vis/ddl-multi-constraint-table-* records ADO)"), out failure);
