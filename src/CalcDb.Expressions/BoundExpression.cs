@@ -319,6 +319,9 @@ public sealed unsafe partial class BoundExpression : IDisposable
     /// <summary>Whether the last evaluation failure came from a binary comparison involving a stored <c>YESNO</c> field.</summary>
     public bool LastFailureWasStoredBooleanComparison { get; private set; }
 
+    /// <summary>Whether the last evaluation failure came from a mixed-type <c>BETWEEN</c> comparison failing 3464.</summary>
+    public bool LastFailureWasBetweenTypeMismatch { get; private set; }
+
     /// <summary>Whether the last evaluation failure came from a <c>DATETIME2</c> comparison failing 3464.</summary>
     public bool LastFailureWasExtendedDateTimeComparison { get; private set; }
 
@@ -523,6 +526,7 @@ public sealed unsafe partial class BoundExpression : IDisposable
     {
         _active = context;
         LastFailureWasStoredBooleanComparison = false;
+        LastFailureWasBetweenTypeMismatch = false;
         LastFailureWasExtendedDateTimeComparison = false;
         LastFailureWasSubqueryOrDomain = false;
         if (_holdsResult)
@@ -780,6 +784,9 @@ public sealed unsafe partial class BoundExpression : IDisposable
                 LastFailureWasStoredBooleanComparison = ins.Op == Op.Binary
                     && r.Failure.Operation is >= ScalarOperation.Equal and <= ScalarOperation.GreaterOrEqual
                     && IsStoredBoolean(_descriptors[ins.Descriptor]);
+                LastFailureWasBetweenTypeMismatch = ins.Op == Op.Between
+                    && r.Failure.Kind == ScalarFailureKind.Failed
+                    && r.Failure.Number == AceError.TypeMismatch;
                 Unwind(sp);
                 return false;
             }
