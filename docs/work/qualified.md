@@ -2132,6 +2132,7 @@ is summarised in [qualification-report.md](qualification-report.md).
 - **Conditions.** ACCDB (MDB for the d1b matrix).
 - **Records.** d1e/coll-name-variants, coll-tabledefs-index-variants, coll-mutation-refresh; d1b/coll-item-top-level, coll-item-table-family, coll-item-query-family, coll-refresh-each, coll-append-delete-unsupported, coll-delete-field-indexed, coll-delete-index-in-relation, coll-fields-ordinalposition, coll-querydefs-cross-db-refresh; fix/coll-delete-field-unindexed, coll-append-field-readback; def/fields-lookup-forms-on-recordset; q/errorder-dispatch-ordinal-by-collection; q2/enum-dao-top-level-collections.
 - **Open.** External-process mutation; legacy `Connection.QueryDefs` (ODBCDirect not in ACE).
+- **Built (`w14-dao-members-qd`, `13661755`, 2026-11-27).** `Database.Recordsets.Count` + `SelectRecordset.Name`, `Workspaces.Delete` `0x800A0CC9`, unsupported collection `Append`/`Delete`, `TableDef.Fields.Delete` 3265/3303/3280 precedence, `Properties.Item` `VT_I4` 3265 vs `VT_BSTR` 3270, `NewIndex.DistinctCount` gating until explicit `Indexes.Refresh()`, and held `NewIndexFieldObject` `3420` after detach/Close.
 
 ### R-DAO-1 DAO-ENUM: `_NewEnum` returns an IEnumVARIANT over the live, stale-until-Refresh membership; Skip(1) at the end is E_FAIL
 
@@ -2153,6 +2154,7 @@ is summarised in [qualification-report.md](qualification-report.md).
 - **Conditions.** ACCDB, saved QueryDef.
 - **Records.** q/query-param-remove-reintroduce; d1e/query-parameter-values, query-sql-rewrite; d1b/parameter-members-each, querydef-state-after-execute; r-cat-1b/qd-execute-param-action; q2/enum-dao-child-collections.
 - **Open.** (T) `Recordset.Requery` on a parameter query is an access violation (c1b/requery-parameter-query), Requery argument forms, nested saved queries (R-SQL), pass-through.
+- **Built (`w14-dao-members-qd`, `13661755`, 2026-11-27).** `QueryDef.hStmt` `3251`, `QueryDef.Plan()` for Union/MakeTable, `QueryFieldObject` 25 members on single-table non-distinct `BaseColumn`/Long `Union` + count-only `Properties`, saved `OpenRecordset` action/DDL `3219` & PassThrough ODBC `3151`, saved PassThrough `Execute` `3065`, saved `ReturnsRecords` `VT_BOOL` no-op put, and saved Select `MaxRecords` non-negative `VT_I4` persisted.
 
 ### R-DAO-1 DAO-PROP: user and built-in Property lifecycle
 
@@ -2160,6 +2162,7 @@ is summarised in [qualification-report.md](qualification-report.md).
 - **Conditions.** ACCDB.
 - **Records.** fix/prop-user-appended-lifecycle; d1e/prop-enumerate-and-context; d1b/property-append-all-types, db-direct-vs-properties-item, coll-delete-builtin-property, db-properties-enumerated-*; q2/enum-dao-top-level-collections; `evidence/r-q51-codecs-props-compact/prop-{db,tdf,fld}-lifecycle-{accdb,mdb}` (kept-page MR2 `LvProp`/LVAL lifecycles across Database, TableDef, Field) & `prop-errors-{accdb,mdb}` (0-byte refusal invariance).
 - **Open.** Which queries inherit the table Description; the trailing NUL in `ValidationRule` (d1b/field-members-typed-each).
+- **Built (`w14-dao-members-qd`, `13661755`, 2026-11-27).** `Parameter.Properties` (4 built-ins) and inherited source-table user properties (`Flags == 0`, non-TableDef built-in names, `Inherited == True`) on `QueryDef.Properties`.
 
 ### R-DAO-1 DAO-PROP (inventories): each owner's built-in Properties, in ACE's order, then its stored ones
 - **Claim**: Every owner enumerates a fixed built-in list, each entry with a fixed DAO Type and `Inherited` False, followed by the stored properties of its own map that are not built-in names, in stored order: DBEngine 7 (Version, LoginTimeout, IniPath, DefaultUser, DefaultPassword, DefaultType, SystemDB), Workspace 6, Database 11 (Name ... Connection), TableDef 12, a TableDef Field 24, Index 8, Recordset 32 (table-type and dynaset alike), QueryDef 14, Container 6, Document 8, Relation 5. A built-in's Value is its direct getter's answer, failure and source included (DefaultUser 3251 from `DAO.DbEngine`; StillExecuting, CacheSize, Prepare 3251 from `DAO.QueryDef`; a Field's Value 3219, FieldSize 3267). A field's Value, Precision and Scale properties take the field's own DAO type as their Property Type. A stored property of a built-in's name (QueryDef ODBCTimeout and MaxRecords, a column's Required) gives that built-in its value and no second entry. The DBEngine error source is spelled `DAO.DbEngine`.
