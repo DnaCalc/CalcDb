@@ -338,6 +338,10 @@ public enum ResultAggregateKind : byte
     Max,
     First,
     Last,
+    Var,
+    VarP,
+    StDev,
+    StDevP,
 }
 
 /// <summary>A result column (II-11 §3 result schema): its name, its DAO metadata and the program that computes it.</summary>
@@ -426,14 +430,18 @@ internal enum AggregateKind : byte
     Max,
     First,
     Last,
+    Var,
+    VarP,
+    StDev,
+    StDevP,
 }
 
 /// <summary>An aggregate occurrence: its function, its argument over the input row, and its result type.</summary>
 internal sealed class AggregateSpec(AggregateKind kind, SyntaxNode node, BoundExpression? argument, VarType result, int fieldType, ColumnDescriptor? sourceColumn = null, bool floatingInput = false)
 {
     /// <summary>
-    /// Whether a Sum or Avg adds floating values (a Double or Single field, a Double expression or derived column), so its
-    /// result depends on the feed order (PAR-FOLD).
+    /// Whether a Sum, Avg, Var, VarP, StDev or StDevP adds floating values (a Double or Single field, a Double expression
+    /// or derived column), so its result depends on the feed order (PAR-FOLD).
     /// </summary>
     public bool FloatingInput { get; } = floatingInput;
 
@@ -1075,7 +1083,7 @@ public sealed class BoundSelect : IDisposable
 
     internal void SetTree(SourceNode tree) => Tree = tree;
 
-    /// <summary>The names of the aggregate functions (qualified.md R-SQL-1 SQL-AGG).</summary>
+    /// <summary>The names of the aggregate functions (qualified.md R-SQL-1 SQL-AGG, SQL-AGG-NUMERIC).</summary>
     internal static AggregateKind? AggregateOf(SyntaxNode node) => node is { Kind: SyntaxKind.Call } && node.Text is { } name
         ? name.ToUpperInvariant() switch
         {
@@ -1086,14 +1094,13 @@ public sealed class BoundSelect : IDisposable
             "MAX" => AggregateKind.Max,
             "FIRST" => AggregateKind.First,
             "LAST" => AggregateKind.Last,
+            "VAR" => AggregateKind.Var,
+            "VARP" => AggregateKind.VarP,
+            "STDEV" => AggregateKind.StDev,
+            "STDEVP" => AggregateKind.StDevP,
             _ => null,
         }
         : null;
-
-    /// <summary>The statistical aggregates, recognized and named (their recurrence is R-SQL-1 SQL-AGG-NUMERIC's).</summary>
-    internal static bool IsStatistic(SyntaxNode node) => node is { Kind: SyntaxKind.Call } && node.Text is { } name
-        && (name.Equals("StDev", StringComparison.OrdinalIgnoreCase) || name.Equals("StDevP", StringComparison.OrdinalIgnoreCase)
-            || name.Equals("Var", StringComparison.OrdinalIgnoreCase) || name.Equals("VarP", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>Whether two expressions are the same (a GROUP BY key and its use in the select list): same shape, names compared case-insensitively.</summary>
     internal static bool SameExpression(SyntaxNode a, SyntaxNode b)
@@ -1793,7 +1800,7 @@ public sealed class BoundSelect : IDisposable
             {
                 return joinFailure;
             }
-            bool grouped = syntax.GroupBy.Count > 0 || Expressions().Any(f => Walk(f.Syntax.Root!).Any(n => AggregateOf(n) is not null || IsStatistic(n)));
+            bool grouped = syntax.GroupBy.Count > 0 || Expressions().Any(f => Walk(f.Syntax.Root!).Any(n => AggregateOf(n) is not null));
             if (syntax.Predicate == SelectPredicate.DistinctRow && (bound.SourceList.Count != 1 || bound.SourceList[0].Subquery is not null || grouped))
             {
                 // qualified.md R-SQL-3 SQL-DR-01..05: single-table DISTINCTROW never merges equal rows (r-sql-2-3/dr-long-values,
@@ -4159,13 +4166,6 @@ public sealed class BoundSelect : IDisposable
             {
                 return Open("NotModelled.GroupedStar", "* in a grouped SELECT (ACE's answer not recorded)");
             }
-            foreach (Fragment f in Expressions())
-            {
-                if (Walk(f.Syntax.Root!).FirstOrDefault(IsStatistic) is { } stat)
-                {
-                    return Open("NotModelled.Statistic", $"{stat.Text}: the variance recurrence is R-SQL-1 SQL-AGG-NUMERIC's (W-06/relational-spill)");
-                }
-            }
             var keys = new List<SyntaxNode>();
             var keyTypes = new List<(VarType, StaticType)>();
             var keyFieldTypes = new List<ColumnBinding?>();
@@ -4405,6 +4405,10 @@ public sealed class BoundSelect : IDisposable
             AggregateKind.Max => ResultAggregateKind.Max,
             AggregateKind.First => ResultAggregateKind.First,
             AggregateKind.Last => ResultAggregateKind.Last,
+            AggregateKind.Var => ResultAggregateKind.Var,
+            AggregateKind.VarP => ResultAggregateKind.VarP,
+            AggregateKind.StDev => ResultAggregateKind.StDev,
+            AggregateKind.StDevP => ResultAggregateKind.StDevP,
             _ => ResultAggregateKind.None,
         };
 
@@ -4563,7 +4567,8 @@ public sealed class BoundSelect : IDisposable
             }
             if (Walk(node.Items[0]).Any(n => AggregateOf(n) is not null))
             {
-                return Open("NotModelled.NestedAggregate", "an aggregate inside an aggregate (ACE's answer not recorded)");
+                // r-sql-13b/agg-expression-composition calls 115, 125: Sum(Sum(v)) and Max(Count(*)) fail 3095.
+                return SqlFailure.Ace(SqlPhase.Bind, 3095, $"Cannot have aggregate function in expression ({CallText(node, fragment)}).");
             }
             if (Program(node.Items[0], fragment, _scope, out BoundExpression? argument) is { } f)
             {
@@ -4597,9 +4602,29 @@ public sealed class BoundSelect : IDisposable
                 // evidence/r-q49-dt2-draftprops/dt2-select-aggregates-dao-ado-accdb: SUM(D) and AVG(D) fail 3464.
                 return SqlFailure.Ace(SqlPhase.Bind, 3464, SqlMessages.DataTypeMismatch);
             }
+            if (t == NativeTypes.Numeric && field.Column.CalculatedResultType is null && field.Column.NumericPrecision <= 28
+                && kind is AggregateKind.Var or AggregateKind.VarP or AggregateKind.StDev or AggregateKind.StDevP
+                && field.Column.NumericScale is not (<= 4 or 20))
+            {
+                argument.Dispose();
+                // r-par-1/fold-decimal-avg-var-forms (FD scale 4), r-fix-expr-sql/fold-decimal-avg-var-forms (FD0 scale 0, FD20 scale 20):
+                // Decimal variance sum-rounding threshold between scale 4 and scale 20 is unrecorded.
+                return Open("NotModelled.DecimalVarianceScale", $"{node.Text} over DECIMAL({field.Column.NumericPrecision},{field.Column.NumericScale}): only scales 0..4 and 20 are recorded");
+            }
             (VarType result, int type)? rule = kind switch
             {
                 AggregateKind.Sum or AggregateKind.Avg when t is NativeTypes.Boolean or NativeTypes.Byte or NativeTypes.Integer or NativeTypes.Long or NativeTypes.BigInt or NativeTypes.Single or NativeTypes.DateTime or NativeTypes.Double => (VarType.R8, 7),
+                // qualified.md R-SQL-1 SQL-AGG, SQL-AGG-NUMERIC, R-PAR-1 PAR-FOLD:
+                // Var, VarP, StDev and StDevP return Double (Field.Type 7, Size 8) across Byte, Integer, Long, Single,
+                // Currency, Double, DateTime, Yes/No, Text (parsed as Double, 3464 on non-numeric), and Decimal (p <= 28, scale <= 4 or 20)
+                // (r-sql-13b/agg-stat-argument-types, r-fix-expr-sql/agg-stat-argument-types-renamed,
+                // r-par-1/fold-currency-var-stdev, r-par-1/fold-single-groups, r-par-1/fold-decimal-avg-var-forms,
+                // r-fix-expr-sql/fold-decimal-avg-var-forms, r-q-expr-sql/agg-var-recurrence, r-sql-1/agg-single).
+                AggregateKind.Var or AggregateKind.VarP or AggregateKind.StDev or AggregateKind.StDevP
+                    when t is NativeTypes.Boolean or NativeTypes.Byte or NativeTypes.Integer or NativeTypes.Long
+                        or NativeTypes.Single or NativeTypes.Currency or NativeTypes.Double or NativeTypes.DateTime or NativeTypes.Text => (VarType.R8, 7),
+                AggregateKind.Var or AggregateKind.VarP or AggregateKind.StDev or AggregateKind.StDevP
+                    when t == NativeTypes.Numeric && field.Column.CalculatedResultType is null && field.Column.NumericPrecision <= 28 => (VarType.R8, 7),
                 AggregateKind.Sum when t is NativeTypes.Currency => (VarType.Currency, 5),
                 // qualified.md R-PAR-1 PAR-FOLD: Avg of a Currency field is Currency, Field.Type 5 and Size 8
                 // (r-par-1/fold-currency-avg-minmax calls 25, 65, 75, 85, 95: Type 5, Size 8, VT_CY values); its total
@@ -4624,9 +4649,19 @@ public sealed class BoundSelect : IDisposable
                 argument.Dispose();
                 return Open("NotModelled.AggregateArgumentType", $"{node.Text} of a native type {t} field: no recorded rule");
             }
-            bool floating = kind is AggregateKind.Sum or AggregateKind.Avg && t is NativeTypes.Double or NativeTypes.Single;
+            bool floating = kind is AggregateKind.Sum or AggregateKind.Avg or AggregateKind.Var or AggregateKind.VarP or AggregateKind.StDev or AggregateKind.StDevP
+                && t is NativeTypes.Double or NativeTypes.Single;
             bound.Aggregates.Add(new AggregateSpec(kind, node, argument, r.result, r.type, field.Column, floating));
             return null;
+        }
+
+        private string CallText(SyntaxNode node, Fragment fragment)
+        {
+            if (node.Offset >= 0 && node.CloseOffset >= node.Offset && node.CloseOffset < syntax.Source.Length)
+            {
+                return syntax.Source[node.Offset..(node.CloseOffset + 1)].Trim();
+            }
+            return fragment.Text(syntax.Source).Trim();
         }
 
         private (SubqueryBinding? Binding, ExpressionFailure? Failure) BindEmbeddedSubquery(SyntaxNode node, ExpressionSchema enclosingScope, OperandContract leftContract) =>
@@ -4679,17 +4714,36 @@ public sealed class BoundSelect : IDisposable
                 return (kind, inner.FieldType) switch
                 {
                     (AggregateKind.Sum, 7) => (VarType.R8, 7, true),
+                    // r-par-1/fold-double-large-var, fold-double-routes-var-minmax: Var/VarP/StDev/StDevP over a Double derived column
+                    // (floatingInput: true so FeedOrderOpen refuses derived ORDER BY whose ACE feed order is unrecorded).
+                    (AggregateKind.Var or AggregateKind.VarP or AggregateKind.StDev or AggregateKind.StDevP, 7) => (VarType.R8, 7, true),
                     (AggregateKind.Min or AggregateKind.Max, 4) when inner.Origin is ColumnOrigin.BaseColumn or ColumnOrigin.Aggregate => (VarType.I4, 4, false),
                     _ => null,
                 };
             }
-            if (argument.UsesSlots)
+            if (argument.BareSlot is int pSlot && pSlot >= ParameterSlot0)
+            {
+                // r-sql-1/agg-arg-kinds calls 36, 61: Sum of a bare declared Currency (5), Double (7), or Long (4) parameter.
+                QueryParameter p = bound.ParameterList[pSlot - ParameterSlot0];
+                return (kind, p.FieldType) switch
+                {
+                    (AggregateKind.Sum, 5) => (VarType.Currency, 5, false),
+                    (AggregateKind.Sum, 7) => (VarType.R8, 7, true),
+                    (AggregateKind.Sum, 4) => (VarType.R8, 7, false),
+                    _ => null,
+                };
+            }
+            if (argument.UsesSlots || argument.UsesSubqueries)
             {
                 return null;
             }
             StaticTypeResult s = StaticTypeOf(root, null);
             return (kind, s.FieldType) switch
             {
+                // r-sql-1/agg-arg-kinds call 6: Sum(True) -> Double (7), Sum(2.5) -> Decimal (20), Sum('3') -> Double (7).
+                (AggregateKind.Sum, 3) when s.InnerMatchesDao && s.Kind == OperandKind.BooleanLiteral => (VarType.R8, 7, false),
+                (AggregateKind.Sum, 20) when s.InnerMatchesDao && s.Kind == OperandKind.DecimalLiteral => (VarType.Decimal, 20, false),
+                (AggregateKind.Sum, 10) when root is { Kind: SyntaxKind.Literal, Literal: LiteralKind.Text } => (VarType.R8, 7, false),
                 (AggregateKind.Sum or AggregateKind.Avg, 4) when s.InnerMatchesDao => (VarType.R8, 7, false),
                 (AggregateKind.Sum or AggregateKind.Avg, 7) when s.InnerMatchesDao => (VarType.R8, 7, true),
                 (AggregateKind.Sum, 5) when s.InnerMatchesDao => (VarType.Currency, 5, false),

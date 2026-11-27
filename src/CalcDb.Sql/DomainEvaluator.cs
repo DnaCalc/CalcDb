@@ -417,7 +417,7 @@ internal static unsafe class DomainEvaluator
     {
         foreach (SyntaxNode n in BoundSelect.Walk(root))
         {
-            if (BoundSelect.AggregateOf(n) is not null || BoundSelect.IsStatistic(n))
+            if (BoundSelect.AggregateOf(n) is not null)
             {
                 return true;
             }
