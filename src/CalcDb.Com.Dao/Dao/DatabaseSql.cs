@@ -117,7 +117,7 @@ internal static unsafe class SelectRoute
     /// <paramref name="values"/> are a QueryDef's parameter values, one per parameter of the statement in its order, null
     /// where none was assigned (SelectCursor.Open fails 3061 then); the cursor keeps copies.
     /// </summary>
-    public static CallResult Open(DatabaseObject database, string sql, int? type, int options, IReadOnlyList<NativeVariant?>? values = null, string? name = null)
+    public static CallResult Open(DatabaseObject database, string sql, int? type, int options, IReadOnlyList<NativeVariant?>? values = null, string? name = null, bool pessimistic = true)
     {
         if (database.PendingDeferredTableDefRefusal("NotModelled.OpenRecordsetWithPendingDeferredTableDef", "OpenRecordset") is { } deferredRefusal)
         {
@@ -186,7 +186,7 @@ internal static unsafe class SelectRoute
                     ? BuildSubqueryDerivedSpec(plan, sql)
                     : null;
             string? resolvedName = name ?? (sql.Length <= 256 ? sql : null);
-            var recordset = new SelectRecordsetObject(database, plan, cursor, recordsetType, singleTableRowSelect, hasOrderBy, snapshotView, snapshotOverlay, options, database.Engine.NextSequence(), joinKeys, hasGroupBy, derivedSpec, name: resolvedName);
+            var recordset = new SelectRecordsetObject(database, plan, cursor, recordsetType, singleTableRowSelect, hasOrderBy, snapshotView, snapshotOverlay, options, database.Engine.NextSequence(), joinKeys, hasGroupBy, derivedSpec, name: resolvedName, pessimistic: pessimistic);
             adopted = true;
             return database.Adopt(recordset);
         }
@@ -474,7 +474,6 @@ internal static unsafe class SelectRoute
         else if (recordsetType == 4
             && singleTableRowSelect
             && hasOrderBy
-            && database.Profile.IsAce
             && database.Workspace.Transactions.Depth == 0
             && !ProjectsMemoOrOle(plan))
         {
@@ -679,6 +678,7 @@ internal static class ActionRoute
             preParsed?.Dispose();
             return CallResult.Fail(refused);
         }
+        database.RefreshBeforeWrite(allPages: !ddl);
         ActionOutcome outcome;
         int nul = sql.IndexOf('\0', StringComparison.Ordinal);
         int effectiveLength = nul >= 0 ? nul : sql.Length;
@@ -979,6 +979,12 @@ internal static class ActionRoute
             return CallResult.Fail(Failure.NotModelled(failure.NotModelled!, failure.Message));
         }
         recordsAffected.Apply(outcome); // SQL-ACT-FAIL: RecordsAffected reads 0 after every failure without clearing last DML.
+        if (failure.Number == MutationError.LockedBySession && database.TryResolveCrossEngineLock(out string adoUser))
+        {
+            // evidence/r-q50-jk44-ddl-vis/vis-cross-conflict-accdb and vis-cross-conflict-mdb calls 87, 91:
+            // Cross-engine ADO transaction lock fails DAO 3260 ("locked by user 'Admin' on machine '...'"), not 3188.
+            return caller.Fail(3260, $"Could not update; currently locked by user '{adoUser}' on machine '{Environment.MachineName}'.");
+        }
         return caller.Fail(failure.Number, failure.Message);
     }
 

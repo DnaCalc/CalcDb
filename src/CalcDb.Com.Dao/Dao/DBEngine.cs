@@ -119,7 +119,7 @@ internal sealed class EngineState(HostBinding binding) : IPublicationTarget
         {
             if (ReferenceEquals(d.Cache, cache))
             {
-                return d.ReadOnlyFirst;
+                return d.IsSecondaryCommitSlot(cache);
             }
         }
         return false;
@@ -374,6 +374,7 @@ internal sealed unsafe class DBEngineObject : DaoObject
     /// </summary>
     private CallResult Idle(ReadOnlySpan<nint> args)
     {
+        int? idleAction = null;
         if (args.Length > 0 && args[0] != 0)
         {
             NativeVariant* cell = Args.Cell(args[0]);
@@ -383,6 +384,7 @@ internal sealed unsafe class DBEngineObject : DaoObject
                 switch (vt)
                 {
                     case VarType.I4:
+                        idleAction = Args.Int32(args[0], omitted: 0);
                         break;
                     case VarType.Null:
                         return Fail(3421, DaoErrors.ConversionError);
@@ -401,12 +403,17 @@ internal sealed unsafe class DBEngineObject : DaoObject
                 }
             }
         }
+        bool refreshCache = idleAction == 8; // dbRefreshCache (r-q50-jk44-ddl-vis/vis-ado-txn-dao-read-accdb, vis-cross-cursors-dml-accdb, vis-cross-ddl-accdb)
         for (int si = 0; si < Engine.Sessions.Count; si++)
         {
             DatabaseObject session = Engine.Sessions[si];
             if (!session.Closed)
             {
                 session.Workspace.Transactions.EndLazyBurst(session.Cache);
+                if (refreshCache)
+                {
+                    session.RefreshFromDisk();
+                }
             }
         }
         Engine.IdleCalledForDeferredQueryDef = true;
@@ -1283,6 +1290,13 @@ internal sealed unsafe class WorkspaceObject : DaoObject
         DatabaseObject[]? databasesWithSchemaChanges = level is not null
             ? [.. _databases.Where(d => !d.Closed && Transactions.HasSchemaChanges(d.Cache))]
             : null;
+        if (Transactions.Depth == 1 && databasesWithOverlay is not null)
+        {
+            foreach (DatabaseObject d in databasesWithOverlay)
+            {
+                d.RefreshBeforeWrite(allPages: false);
+            }
+        }
         ResolutionOutcome outcome = Transactions.CommitTrans(Args.Int32(options, omitted: 0) ?? 0);
         if (outcome.Succeeded)
         {

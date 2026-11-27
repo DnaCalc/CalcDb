@@ -293,16 +293,10 @@ public sealed unsafe class DaoSharedSessionTests : IDisposable
         Ok(Method(dbRwEager, "Execute", "INSERT INTO T VALUES (3, 30, 'pinned')", 128));
         Assert.Equal([(1, 10), (2, 20)], Rows(dbRoEager));
         DispatchObject snapRo = Recover<DispatchObject>(Ok(Method(dbRoEager, "OpenRecordset", "SELECT ID, V, S FROM T ORDER BY ID", 4)));
-        if (mdb)
-        {
-            FailsNotModelled(Method(snapRo, "Requery"), "NotModelled.QueryRecordsetRequery");
-        }
-        else
-        {
-            Ok(Method(snapRo, "Requery"));
-            Ok(Method(snapRo, "MoveLast"));
-            Assert.Equal(3, Int32Result(Get(snapRo, "RecordCount")));
-        }
+        // Both ACCDB and Jet 4 MDB depth-0 snapshot Requery refresh cleanly (r-q50-jk44-ddl-vis/vis-cross-cursors-dml-mdb call 83).
+        Ok(Method(snapRo, "Requery"));
+        Ok(Method(snapRo, "MoveLast"));
+        Assert.Equal(3, Int32Result(Get(snapRo, "RecordCount")));
         Ok(Method(snapRo, "Close"));
         Ok(Method(eng.Engine.DefaultWorkspace!, "BeginTrans"));
         DispatchObject dynDepth1 = Recover<DispatchObject>(Ok(Method(dbRoEager, "OpenRecordset", "SELECT ID, V, S FROM T ORDER BY ID", 2)));

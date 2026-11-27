@@ -144,13 +144,18 @@ internal sealed unsafe class DatabaseObject : DaoObject
     /// <summary>Catalog flags of rows neither TableDefs nor the Tables Documents list (the MSysComplexType_* tables; r-dao-1b/documents-members-each: 17 documents).</summary>
     public const int HiddenFromTableDefs = 0x0003_0000;
 
-    private DatabaseObject(WorkspaceObject workspace, string name, bool readOnly, bool exclusive, SessionFile file, LockFile? lockFile, PageCache cache, FileProfile profile, DatabaseHeader header, ulong pageCount, CatalogSnapshot catalog)
+    private DatabaseObject(WorkspaceObject workspace, string name, bool readOnly, bool exclusive, SessionFile file, LockFile? lockFile, PageCache cache, FileProfile profile, DatabaseHeader header, ulong pageCount, CatalogSnapshot catalog, InProcessFileCoordinator? coordinator = null)
         : base(Decl, Vtable, workspace.Engine, "DAO.Database")
     {
         _workspace = workspace;
         Name = name;
         ReadOnly = readOnly;
         _session = new ComDatabaseSession(file, lockFile, cache, profile, header, pageCount, catalog, readOnly, "Database", OnEditContextCreated, exclusive: exclusive);
+        if (coordinator is not null)
+        {
+            _session.AttachFileCoordinator(coordinator, EngineKind.Dao);
+            coordinator.RegisterLocker(workspace.Transactions.Locker, EngineKind.Dao, workspace.UserName);
+        }
         _pooled = FileSessionPool.Register(name, workspace.Engine.Binding.Identity, _session, new FileBinding(exclusive, readOnly, workspace.UserName));
         _pooled.AttachCoordinator(workspace.Transactions);
         (_openOnThread ??= []).Add(this);
@@ -173,6 +178,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
         _pooled = pooled;
         _pooled.AttachCoordinator(workspace.Transactions);
         _session = pooled.Session;
+        _session.FileCoordinator?.RegisterLocker(workspace.Transactions.Locker, EngineKind.Dao, workspace.UserName);
         (_openOnThread ??= []).Add(this);
         workspace.Engine.Sessions.Add(this);
     }
@@ -450,6 +456,13 @@ internal sealed unsafe class DatabaseObject : DaoObject
         {
             return Join(workspace, name, full, exclusive, readOnly, pooled, out database);
         }
+        if (FileSessionPool.FindCoordinator(full) is { } existingCoord
+            && existingCoord.HasExclusiveConflict(EngineKind.Dao, exclusive, out _, out _))
+        {
+            // evidence/r-q50-jk44-ddl-vis/vis-dao-ado-admit-accdb and vis-dao-ado-admit-mdb calls 166, 170:
+            // ADO Exclusive (Mode=12) blocks DAO Shared RW & RO with DAO 3045 from DAO.Workspace.
+            return workspace.Fail(3045, DaoErrors.FileAlreadyInUse(name));
+        }
         if (SessionFile.OpenReader(full, out OpenResult opened) is not { } file)
         {
             return CallResult.Fail(Failure.NotImplemented($"OpenDatabase when the file cannot be opened for reading (Win32 {opened.NativeError}, sharing violation {opened.SharingViolation})"));
@@ -466,9 +479,10 @@ internal sealed unsafe class DatabaseObject : DaoObject
             file.Dispose();
             return CallResult.Fail(Failure.NotImplemented($"OpenDatabase of this file profile ({refusal})"));
         }
+        InProcessFileCoordinator coordinator = FileSessionPool.GetOrCreateCoordinator(full);
         FormatDescriptor format = profile.Descriptor;
         ulong pages = file.GetExtent() / (ulong)format.PageSize;
-        var cache = file.CreateCache(format.PageSize, CachePages);
+        var cache = file.CreateCache(format.PageSize, CachePages, coordinator.Locks);
         CatalogSnapshot? catalog = CatalogBootstrap.Open(cache, format, pages, out CatalogFailure? failure, readProperties: true);
         if (catalog is null)
         {
@@ -487,7 +501,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
                 return CallResult.Fail(Failure.NotImplemented($"OpenDatabase when the lock file cannot be joined (Win32 {lockError}; folder and lock-file permissions are T-LOCK-11)"));
             }
         }
-        database = new DatabaseObject(workspace, full, readOnly, exclusive, file, lockFile, cache, profile, DatabaseHeader.Decode(header, format), pages, catalog);
+        database = new DatabaseObject(workspace, full, readOnly, exclusive, file, lockFile, cache, profile, DatabaseHeader.Decode(header, format), pages, catalog, coordinator);
         return CallResult.Nothing;
     }
 
@@ -774,6 +788,45 @@ internal sealed unsafe class DatabaseObject : DaoObject
     public DatabaseSql Sql => _sql ??= new DatabaseSql(this);
 
     /// <summary>
+    /// Refresh clean cached pages modified on disk by another in-process engine (e.g. ADO) when
+    /// <c>DBEngine.Idle(dbRefreshCache)</c> is called (R-LOCK-3 / r-q50-jk44-ddl-vis/vis-ado-txn-dao-read-accdb,
+    /// vis-cross-cursors-dml-accdb, vis-cross-ddl-accdb).
+    /// </summary>
+    internal void RefreshFromDisk()
+    {
+        if (_session.RefreshExternallyModifiedPages(filterPages: null))
+        {
+            CatalogSnapshot before = _session.Catalog;
+            _session.ReloadCatalogFromCache(IsTableHeld, () => OnSharedCatalogReloaded(before));
+            _sql?.Forget();
+        }
+    }
+
+    /// <summary>Refresh page 0 (and externally modified pages when <paramref name="allPages"/> is true) before a write/publication.</summary>
+    internal void RefreshBeforeWrite(bool allPages = false) => _session.RefreshBeforeWrite(allPages);
+
+    /// <summary>Whether commits on <paramref name="cache"/> target page-0 secondary slot <c>0x0E04</c> (ReadOnlyFirst or lock-file slot 2; r-q50-jk44-ddl-vis/vis-dao-ado-admit-accdb).</summary>
+    internal bool IsSecondaryCommitSlot(PageCache cache) => ((IPublicationTarget)_session).IsSecondaryCommitSlot(cache);
+
+    /// <summary>
+    /// If the most recent lock conflict on this session's cache was held by an in-process ADO Connection, return its
+    /// user name so DAO reports <c>3260</c> instead of <c>3188</c> (r-q50-jk44-ddl-vis/vis-cross-conflict-accdb).
+    /// </summary>
+    internal bool TryResolveCrossEngineLock(out string holderUserName)
+    {
+        if (Cache.LastConflictHolder is { } holder
+            && _session.FileCoordinator is { } coord
+            && coord.TryGetLockerOwner(holder, out LockerOwner owner)
+            && owner.Kind == EngineKind.Ado)
+        {
+            holderUserName = owner.UserName;
+            return true;
+        }
+        holderUserName = "";
+        return false;
+    }
+
+    /// <summary>
     /// Refuse unrecorded operations interleaved while a DAO <c>TableDefs.Append</c> deferred TableDef write is pending
     /// on this Database's cache (qualified.md <c>R-FMT-2, R-CRASH-1 r-q41</c>).
     /// </summary>
@@ -880,16 +933,20 @@ internal sealed unsafe class DatabaseObject : DaoObject
         }
         if (entry is null)
         {
-            if (lockEdit is not null)
+            string trimmed = name.TrimStart();
+            bool recordedQueryLockEdit = lockEdit is 2 or 3
+                && type == 2
+                && options == 0
+                && trimmed.StartsWith("SELECT", StringComparison.OrdinalIgnoreCase);
+            if (lockEdit is not null && !recordedQueryLockEdit)
             {
                 return CallResult.Fail(Failure.NotModelled(
                     "NotModelled.OpenRecordsetQueryLockEdit",
-                    $"OpenRecordset of a query with LockEdit {lockEdit} (only local-table LockEdit is recorded)"));
+                    $"OpenRecordset of a query with LockEdit {lockEdit} (only local-table LockEdit and SELECT dynaset LockEdit 2/3 with Options=0 are recorded)"));
             }
-            string trimmed = name.TrimStart();
             if (type != 1 && trimmed.StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
             {
-                return SelectRoute.Open(this, name, type, options.Value);
+                return SelectRoute.Open(this, name, type, options.Value, pessimistic: lockEdit != 3);
             }
             if (Queries?.Queries.FirstOrDefault(q => string.Equals(q.Name.TrimEnd(' '), name.TrimEnd(' '), StringComparison.OrdinalIgnoreCase)) is { } saved)
             {
@@ -2984,15 +3041,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
         bool lastHolder = FileSessionPool.Release(_pooled, IsOwnWriter);
         if (lastHolder)
         {
-            // This session's publications cleared a page-1 global-map bit (allocated/reserved a page) or scheduled
-            // ReleasedAtClose pages (deferred page frees or page-1 reservation return): Close commits once more and sets
-            // those global-map free bits (jh6s, nv5x, zfrp; R-CRASH-1, R-FMT-2; evidence/r-q11-ddl-closure,
-            // evidence/r-q15-ddl-open, evidence/r-q16-overflow, evidence/r-q17-growth/retire-delete-au1-read-open,
-            // evidence/r-q20-delete-pages, evidence/r-q22-lv-open/lv-free-timing-update-chain-*). Direct page-1 frees on
-            // DELETE (lv-free-timing-delete-chain, lv-op-delete-row-chain) do not trigger a Close commit.
-            // The last binding of the file publishes it whichever Workspace's publications need it, even if a non-default
-            // Workspace was already closed and released (W-05 6xzx: evidence/r-q46-dao-ddl-multi/mh-ddl-refresh-twows-accdb
-            // and r-q47-bigint-expr-edges/mh-held-tdf-after-drop-accdb; mh-twows-both-close-commit-{accdb,mdb}).
+            _session.RefreshBeforeWrite(allPages: false);
             closing = CloseCommitAll();
         }
         else

@@ -157,10 +157,12 @@ internal readonly record struct EffectiveProvider(ProviderRoute Route, string Na
 }
 
 /// <summary>
-/// Shared native <see cref="ComDatabaseSession"/> pooled per canonical database file path within this process
-/// so multiple open ADO <see cref="ConnectionObject"/>s on the same file share one <see cref="SessionFile"/>,
-/// <see cref="PageCache"/>, <see cref="LockTable"/>, and <see cref="TableEditContext"/> set (enabling cross-connection
-/// lock conflicts 3218, optimistic write conflicts 3197, and immediate visibility across connections).
+/// Per-connection native <see cref="ComDatabaseSession"/> holder (R-LOCK-3 / R-TXN-1;
+/// <c>evidence/r-q50-jk44-ddl-vis/vis-*</c>): each open ADO <see cref="ConnectionObject"/> owns its own
+/// <see cref="ComDatabaseSession"/> (own <c>.laccdb</c>/<c>.ldb</c> slot, own <see cref="PageCache"/>, own
+/// <see cref="CatalogSnapshot"/>, own <see cref="TableEditContext"/>s), while coordinating cross-session page locks,
+/// exclusive admission, and disk-flush notifications through <see cref="FileSessionPool"/>'s
+/// <see cref="InProcessFileCoordinator"/>.
 /// </summary>
 internal sealed class SharedComSession
 {
@@ -209,19 +211,28 @@ internal sealed class SharedComSession
     }
 }
 
-/// <summary>Process-local pool of open <see cref="SharedComSession"/> instances keyed by canonical path.</summary>
+/// <summary>
+/// Process-local tracking for open ADO <see cref="SharedComSession"/> instances keyed by canonical path
+/// (R-LOCK-3 / R-TXN-1; <c>evidence/r-q50-jk44-ddl-vis/vis-two-ado-txn-*</c>, <c>vis-dao-ado-admit-*</c>):
+/// each ADO Connection owns its own <see cref="ComDatabaseSession"/> and <c>.laccdb</c>/<c>.ldb</c> slot (128 B
+/// across 2 Connections), sharing page locks and exclusive-admission checks via <see cref="FileSessionPool"/>.
+/// </summary>
 internal static class AdoFilePool
 {
     private static readonly object Gate = new();
-    private static readonly Dictionary<string, SharedComSession> Sessions = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly Dictionary<string, List<SharedComSession>> Sessions = new(StringComparer.OrdinalIgnoreCase);
 
     public static bool TryGetFormat(string fullPath, out FileFormat format)
     {
+        if (FileSessionPool.FindCoordinator(fullPath) is { } coordinator && coordinator.TryGetFormat(out format))
+        {
+            return true;
+        }
         lock (Gate)
         {
-            if (Sessions.TryGetValue(fullPath, out SharedComSession? shared))
+            if (Sessions.TryGetValue(fullPath, out List<SharedComSession>? list) && list.Count > 0)
             {
-                format = shared.Core.Profile.Format;
+                format = list[0].Core.Profile.Format;
                 return true;
             }
             format = default;
@@ -229,86 +240,69 @@ internal static class AdoFilePool
         }
     }
 
-    public static SharedComSession? AcquireExisting(string fullPath, bool exclusive, out bool conflict)
+    public static bool HasAdoExclusiveConflict(string fullPath, bool exclusive)
     {
         lock (Gate)
         {
-            if (Sessions.TryGetValue(fullPath, out SharedComSession? shared))
+            if (Sessions.TryGetValue(fullPath, out List<SharedComSession>? list) && list.Count > 0)
             {
-                if (exclusive || shared.Core.Exclusive)
+                if (exclusive)
                 {
-                    conflict = true;
-                    return null;
+                    return true;
                 }
-                shared.RefCount++;
-                conflict = false;
-                return shared;
+                foreach (SharedComSession existing in list)
+                {
+                    if (existing.Core.Exclusive)
+                    {
+                        return true;
+                    }
+                }
             }
-            conflict = false;
-            return null;
+            return false;
         }
     }
 
-    public static SharedComSession? RegisterOrJoin(string fullPath, ComDatabaseSession core, out bool joinedExisting, out bool conflict)
+    public static SharedComSession Register(string fullPath, ComDatabaseSession core)
     {
+        var created = new SharedComSession(fullPath, core) { RefCount = 1 };
         lock (Gate)
         {
-            if (Sessions.TryGetValue(fullPath, out SharedComSession? existing))
+            if (!Sessions.TryGetValue(fullPath, out List<SharedComSession>? list))
             {
-                if (core.Exclusive || existing.Core.Exclusive)
-                {
-                    joinedExisting = false;
-                    conflict = true;
-                    return null;
-                }
-                existing.RefCount++;
-                joinedExisting = true;
-                conflict = false;
-                return existing;
+                list = [];
+                Sessions[fullPath] = list;
             }
-            var created = new SharedComSession(fullPath, core) { RefCount = 1 };
-            Sessions[fullPath] = created;
-            joinedExisting = false;
-            conflict = false;
-            return created;
+            list.Add(created);
         }
+        return created;
     }
 
     public static void CancelAcquire(SharedComSession shared)
     {
-        ComDatabaseSession? toDispose = null;
-        lock (Gate)
-        {
-            shared.RefCount--;
-            if (shared.RefCount <= 0)
-            {
-                if (Sessions.TryGetValue(shared.FullPath, out SharedComSession? current) && ReferenceEquals(current, shared))
-                {
-                    Sessions.Remove(shared.FullPath);
-                }
-                toDispose = shared.Core;
-            }
-        }
-        toDispose?.DisposeAll();
+        Remove(shared);
+        shared.Core.DisposeAll();
     }
 
     public static void Release(SharedComSession shared, AdoOpenSession session)
     {
-        ComDatabaseSession? toDispose = null;
+        shared.Detach(session);
+        Remove(shared);
+        shared.Core.DisposeAll();
+    }
+
+    private static void Remove(SharedComSession shared)
+    {
         lock (Gate)
         {
-            shared.Detach(session);
-            shared.RefCount--;
-            if (shared.RefCount <= 0)
+            if (Sessions.TryGetValue(shared.FullPath, out List<SharedComSession>? list))
             {
-                if (Sessions.TryGetValue(shared.FullPath, out SharedComSession? current) && ReferenceEquals(current, shared))
+                list.Remove(shared);
+                if (list.Count == 0)
                 {
                     Sessions.Remove(shared.FullPath);
                 }
-                toDispose = shared.Core;
             }
         }
-        toDispose?.DisposeAll();
     }
 }
 
@@ -352,8 +346,11 @@ internal sealed class AdoOpenSession : ISqlSessionHost
             Publisher = readOnly ? null : shared.Core,
             WaitPolicy = LockWaitPolicy.Default,
         };
+        shared.Core.FileCoordinator?.RegisterLocker(Transactions.Locker, EngineKind.Ado, "Admin");
         shared.Attach(this);
     }
+
+    public ComDatabaseSession Core => _shared.Core;
 
     public PageCache Cache => _shared.Core.Cache;
 
@@ -510,6 +507,7 @@ internal sealed class AdoOpenSession : ISqlSessionHost
         CallResult closing = CallResult.Nothing;
         if (!ReadOnly)
         {
+            _shared.Core.RefreshBeforeWrite(allPages: false);
             (MutationOpen open, string? detail) = _shared.Core.CloseCommit(Transactions);
             if (open != MutationOpen.None)
             {
@@ -537,6 +535,7 @@ internal sealed class AdoOpenSession : ISqlSessionHost
             cmd.OnConnectionClosed();
         }
         _boundCommands.Clear();
+        _shared.Core.FileCoordinator?.UnregisterLocker(Transactions.Locker);
         Transactions.Dispose();
         AdoFilePool.Release(_shared, this);
         foreach (OwnedVariant value in OpenInitValues.Values)
@@ -1595,97 +1594,101 @@ internal sealed unsafe class ConnectionObject : AdoObject
             }
 
             bool exclusive = effectiveMode == 12;
-            SharedComSession? shared = AdoFilePool.AcquireExisting(full, exclusive, out bool poolConflict);
-            if (poolConflict)
+            if (FileSessionPool.FindCoordinator(full) is { } existingCoord
+                && existingCoord.HasExclusiveConflict(EngineKind.Ado, exclusive, out EngineKind holderKind, out FileFormat? conflictFormat))
+            {
+                DisposeValues(initValues);
+                if (holderKind == EngineKind.Dao && !exclusive)
+                {
+                    // evidence/r-q50-jk44-ddl-vis/vis-dao-ado-admit-accdb and vis-dao-ado-admit-mdb call 139:
+                    // DAO Exclusive blocks ADO Shared with 0x80004005 / SQLState "3045" / IID_IDBInitialize.
+                    bool isAceConflict = conflictFormat != FileFormat.Jet4;
+                    EmitWillConnect();
+                    return FailAceOpen(
+                        openText,
+                        persistSecurityInfo,
+                        HResultFail,
+                        isAceConflict ? $"Could not use '{dataSource}'; file already in use." : "Could not use ''; file already in use.",
+                        5003045,
+                        "3045",
+                        isAceConflict ? -534643712 : -67044352);
+                }
+                return NotImplemented(exclusive
+                    ? "Connection.Open with Mode=12 while the file is already open in this process (conflict not recorded)"
+                    : "Connection.Open while the file is already open exclusively (Mode=12) in this process (conflict not recorded)");
+            }
+            if (AdoFilePool.HasAdoExclusiveConflict(full, exclusive))
             {
                 DisposeValues(initValues);
                 return NotImplemented(exclusive
                     ? "Connection.Open with Mode=12 while the file is already open in this process (conflict not recorded)"
                     : "Connection.Open while the file is already open exclusively (Mode=12) in this process (conflict not recorded)");
             }
-            FileProfile profile;
-            if (shared is not null)
+
+            if (SessionFile.OpenReader(full, out OpenResult opened) is not { } file)
             {
-                profile = shared.Core.Profile;
+                DisposeValues(initValues);
+                return NotImplemented($"Connection.Open when the file cannot be opened for reading (Win32 {opened.NativeError}, sharing violation {opened.SharingViolation})");
             }
-            else
+
+            byte[] headerBytes = new byte[4096];
+            if (file.GetExtent() < (ulong)headerBytes.Length || file.ReadAt(0, headerBytes).Status != TransferStatus.Complete)
             {
-                if (SessionFile.OpenReader(full, out OpenResult opened) is not { } file)
-                {
-                    DisposeValues(initValues);
-                    return NotImplemented($"Connection.Open when the file cannot be opened for reading (Win32 {opened.NativeError}, sharing violation {opened.SharingViolation})");
-                }
+                file.Dispose();
+                DisposeValues(initValues);
+                return NotImplemented("Connection.Open of a file shorter than one page");
+            }
 
-                byte[] headerBytes = new byte[4096];
-                if (file.GetExtent() < (ulong)headerBytes.Length || file.ReadAt(0, headerBytes).Status != TransferStatus.Complete)
+            ProfileRefusal profileRefusal = ProfileSelector.Select(headerBytes, out FileProfile? selectedProfile);
+            if (selectedProfile is null)
+            {
+                file.Dispose();
+                DisposeValues(initValues);
+                return NotImplemented($"Connection.Open of this file profile ({profileRefusal})");
+            }
+            FileProfile profile = selectedProfile;
+
+            FormatDescriptor format = profile.Descriptor;
+            DatabaseHeader decodedHeader = DatabaseHeader.Decode(headerBytes, format);
+            if (decodedHeader.SortOrder.Identifier != TextSortOrder.GeneralIdentifier)
+            {
+                file.Dispose();
+                DisposeValues(initValues);
+                return NotImplemented($"Connection.Open of a database with sort identifier {decodedHeader.SortOrder.Identifier} (only General 1033 was asked)");
+            }
+
+            InProcessFileCoordinator coordinator = FileSessionPool.GetOrCreateCoordinator(full);
+            ulong pages = file.GetExtent() / (ulong)format.PageSize;
+            var cache = file.CreateCache(format.PageSize, CachePages, coordinator.Locks);
+            CatalogSnapshot? catalog = CatalogBootstrap.Open(cache, format, pages, out CatalogFailure? catalogFailure, readProperties: true);
+            if (catalog is null)
+            {
+                file.Dispose();
+                DisposeValues(initValues);
+                return NotImplemented(catalogFailure?.Kind == CatalogFailureKind.NotPlaintext
+                    ? "Connection.Open of an encrypted database (W-L1)"
+                    : "Connection.Open when the catalog cannot be read: " + catalogFailure);
+            }
+
+            // Exclusive ADO sessions (Mode=12, adModeShareExclusive; r-q41-create-session-counter/excl-open-ado-accdb,
+            // excl-open-ado-mdb) create no .laccdb/.ldb lock file and step page-0 offset 0x0E00 instead of 0x0E02.
+            LockFile? lockFile = null;
+            if (!exclusive)
+            {
+                lockFile = LockFile.Join(full, Environment.MachineName, "Admin", out int? lockError);
+                if (lockFile is null)
                 {
                     file.Dispose();
                     DisposeValues(initValues);
-                    return NotImplemented("Connection.Open of a file shorter than one page");
-                }
-
-                ProfileRefusal profileRefusal = ProfileSelector.Select(headerBytes, out FileProfile? selectedProfile);
-                if (selectedProfile is null)
-                {
-                    file.Dispose();
-                    DisposeValues(initValues);
-                    return NotImplemented($"Connection.Open of this file profile ({profileRefusal})");
-                }
-                profile = selectedProfile;
-
-                FormatDescriptor format = profile.Descriptor;
-                DatabaseHeader decodedHeader = DatabaseHeader.Decode(headerBytes, format);
-                if (decodedHeader.SortOrder.Identifier != TextSortOrder.GeneralIdentifier)
-                {
-                    file.Dispose();
-                    DisposeValues(initValues);
-                    return NotImplemented($"Connection.Open of a database with sort identifier {decodedHeader.SortOrder.Identifier} (only General 1033 was asked)");
-                }
-
-                ulong pages = file.GetExtent() / (ulong)format.PageSize;
-                var cache = file.CreateCache(format.PageSize, CachePages);
-                CatalogSnapshot? catalog = CatalogBootstrap.Open(cache, format, pages, out CatalogFailure? catalogFailure, readProperties: true);
-                if (catalog is null)
-                {
-                    file.Dispose();
-                    DisposeValues(initValues);
-                    return NotImplemented(catalogFailure?.Kind == CatalogFailureKind.NotPlaintext
-                        ? "Connection.Open of an encrypted database (W-L1)"
-                        : "Connection.Open when the catalog cannot be read: " + catalogFailure);
-                }
-
-                // Exclusive ADO sessions (Mode=12, adModeShareExclusive; r-q41-create-session-counter/excl-open-ado-accdb,
-                // excl-open-ado-mdb) create no .laccdb/.ldb lock file and step page-0 offset 0x0E00 instead of 0x0E02.
-                LockFile? lockFile = null;
-                if (!exclusive)
-                {
-                    lockFile = LockFile.Join(full, Environment.MachineName, "Admin", out int? lockError);
-                    if (lockFile is null)
-                    {
-                        file.Dispose();
-                        DisposeValues(initValues);
-                        return NotImplemented($"Connection.Open when the lock file cannot be joined (Win32 {lockError})");
-                    }
-                }
-
-                // Pool core always starts reader-admitted and acquires its writer lease lazily on first write,
-                // while each AdoOpenSession enforces its own effective Mode (ReadOnly).
-                var freshCore = new ComDatabaseSession(file, lockFile, cache, profile, decodedHeader, pages, catalog, readOnly: false, "ADO session", exclusive: exclusive);
-                shared = AdoFilePool.RegisterOrJoin(full, freshCore, out bool joinedExisting, out bool registerConflict);
-                if (registerConflict || shared is null)
-                {
-                    freshCore.DisposeAll();
-                    DisposeValues(initValues);
-                    return NotImplemented(exclusive
-                        ? "Connection.Open with Mode=12 while the file is already open in this process (conflict not recorded)"
-                        : "Connection.Open while the file is already open exclusively (Mode=12) in this process (conflict not recorded)");
-                }
-                if (joinedExisting)
-                {
-                    freshCore.DisposeAll();
-                    profile = shared.Core.Profile;
+                    return NotImplemented($"Connection.Open when the lock file cannot be joined (Win32 {lockError})");
                 }
             }
+
+            // Each ADO Connection owns its own ComDatabaseSession (own .laccdb/.ldb slot and PageCache;
+            // evidence/r-q50-jk44-ddl-vis/vis-two-ado-txn-*, vis-dao-ado-admit-*), sharing locks via coordinator.
+            var freshCore = new ComDatabaseSession(file, lockFile, cache, profile, decodedHeader, pages, catalog, readOnly: false, "ADO session", exclusive: exclusive);
+            freshCore.AttachFileCoordinator(coordinator, EngineKind.Ado);
+            SharedComSession shared = AdoFilePool.Register(full, freshCore);
 
             int engineType = profile.IsAce ? 6 : 5;
             int? lockingMode;
@@ -1886,6 +1889,10 @@ internal sealed unsafe class ConnectionObject : AdoObject
         if (_attributes == (131072 | 262144) && tx.Depth > 1)
         {
             return NotImplemented("Connection.CommitTrans with Attributes=393216 at nested depth > 1 (not recorded)");
+        }
+        if (tx.Depth == 1)
+        {
+            _session.Core.RefreshBeforeWrite(allPages: false);
         }
         ResolutionOutcome res = tx.CommitTrans(0);
         if (res.Error is { } mutErr)
@@ -2560,6 +2567,15 @@ internal sealed unsafe class ConnectionObject : AdoObject
             }
         }
 
+        if (!DdlParser.IsDdlLeadingKeyword(effectiveSql))
+        {
+            session.Core.RefreshBeforeWrite(allPages: true);
+        }
+        else
+        {
+            session.Core.RefreshBeforeWrite(allPages: false);
+        }
+
         MappedProviderError? TryMapFailure(SqlFailure failure, out Failure? unmodelled)
         {
             bool allowAdoCheckViolation = failure.Number == 3317
@@ -2570,7 +2586,8 @@ internal sealed unsafe class ConnectionObject : AdoObject
                 out unmodelled,
                 effectiveSql,
                 allowAdoCheckViolation,
-                isConnectionExecuteAction: allowAdoConnectionExecute);
+                isConnectionExecuteAction: allowAdoConnectionExecute,
+                session: session.Core);
         }
 
         ActionOutcome outcome;

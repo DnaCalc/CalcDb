@@ -31,6 +31,7 @@ public sealed class ComDatabaseSession : IPublicationTarget
     private SessionFile? _file;
     private LockFile? _lockFile;
     private LockFile? _writerLockFile;
+    private InProcessFileCoordinator? _fileCoordinator;
     private ulong _extentPages;
     private string? _schemaFailure;
     private QueryCatalog? _queries;
@@ -197,7 +198,104 @@ public sealed class ComDatabaseSession : IPublicationTarget
 
     bool IPublicationTarget.IsExclusiveSession(PageCache cache) => ReferenceEquals(cache, Cache) && Exclusive;
 
-    bool IPublicationTarget.IsSecondaryCommitSlot(PageCache cache) => ReferenceEquals(cache, Cache) && ReadOnlyFirst;
+    bool IPublicationTarget.IsSecondaryCommitSlot(PageCache cache) => ReferenceEquals(cache, Cache) && (ReadOnlyFirst || _lockFile?.Slot == 2);
+
+    /// <summary>The process-local cross-session coordinator for this file, if attached.</summary>
+    public InProcessFileCoordinator? FileCoordinator => _fileCoordinator;
+
+    /// <summary>
+    /// Attach this session to its process-local <see cref="InProcessFileCoordinator"/> so disk flushes are recorded
+    /// for peer sessions and write-lock acquisitions refresh externally modified target pages (R-LOCK-3 / r-q50-jk44-ddl-vis).
+    /// </summary>
+    public void AttachFileCoordinator(InProcessFileCoordinator coordinator, EngineKind kind)
+    {
+        _fileCoordinator = coordinator;
+        coordinator.RegisterSession(this, kind, Exclusive);
+        if (_file is { } file)
+        {
+            file.OnPagesWritten = (pages, extentPages) => coordinator.RecordDiskWrite(this, pages, extentPages);
+        }
+        Cache.OnWriteLockAcquired = (_, resources) =>
+        {
+            if (resources.Count == 0)
+            {
+                return;
+            }
+            ulong[] targets = new ulong[resources.Count + 1];
+            targets[0] = 0;
+            for (int i = 0; i < resources.Count; i++)
+            {
+                targets[i + 1] = resources[i].Page;
+            }
+            RefreshExternallyModifiedPages(targets);
+        };
+    }
+
+    /// <summary>
+    /// Refresh clean cached pages written to disk by other in-process sessions (targeted pages when
+    /// <paramref name="filterPages"/> is given, or all externally modified pages when null).
+    /// </summary>
+    public bool RefreshExternallyModifiedPages(IReadOnlyCollection<ulong>? filterPages = null)
+    {
+        if (_fileCoordinator is not { } coordinator)
+        {
+            return false;
+        }
+        ulong[] modified = coordinator.TakeExternallyModifiedPages(this, filterPages, out ulong diskExtent);
+        if (diskExtent > _extentPages)
+        {
+            _extentPages = diskExtent;
+            Cache.NoteExtent(diskExtent);
+        }
+        if (modified.Length == 0)
+        {
+            return false;
+        }
+        Cache.RefreshFromFile(modified);
+        return true;
+    }
+
+    /// <summary>
+    /// Refresh page 0 (commit counters) and any externally modified pages before a publication or DDL write so this
+    /// session does not clobber another in-process session's committed page-0 slot or page bytes.
+    /// </summary>
+    public void RefreshBeforeWrite(bool allPages = false)
+    {
+        if (_fileCoordinator is null)
+        {
+            return;
+        }
+        if (allPages)
+        {
+            RefreshExternallyModifiedPages(filterPages: null);
+        }
+        else
+        {
+            RefreshExternallyModifiedPages(filterPages: [0UL, 1UL]);
+        }
+    }
+
+    /// <summary>
+    /// Reload the catalog snapshot from this session's current <see cref="Cache"/> (without forcing a disk refresh
+    /// unless <see cref="RefreshExternallyModifiedPages"/> was called first, matching <c>vis-cross-ddl</c> where
+    /// <c>TableDefs.Refresh</c> alone sees stale cached catalog pages until <c>DBEngine.Idle(dbRefreshCache)</c>).
+    /// </summary>
+    public string? ReloadCatalogFromCache(Func<string, bool> isTableHeld, Action? onCatalogReloaded = null)
+    {
+        if (CatalogBootstrap.Open(Cache, Format, PageCount, out CatalogFailure? failure, readProperties: true) is not { } catalog)
+        {
+            return "the catalog cannot be read after refresh: " + failure;
+        }
+        Catalog = catalog;
+        _queries = null;
+        _queriesFailure = null;
+        _relationships = null;
+        _checkConstraints = null;
+        _relationshipContext = null;
+        onCatalogReloaded?.Invoke();
+        InvalidateEditContexts(isTableHeld);
+        return null;
+    }
 
     /// <summary>A catalog table's decoded TableDef, read through the cache (null with the reason when it cannot be read).</summary>
     public TableDefinition? Definition(CatalogEntry entry, out string? failure)
@@ -362,8 +460,20 @@ public sealed class ComDatabaseSession : IPublicationTarget
 
     public void DisposeFile()
     {
-        _file?.Dispose();
-        _file = null;
+        if (_file is { } file)
+        {
+            file.OnPagesWritten = null;
+            file.Dispose();
+            _file = null;
+        }
+        if (_fileCoordinator is { } coordinator)
+        {
+            _fileCoordinator = null;
+            if (coordinator.UnregisterSession(this, Exclusive))
+            {
+                FileSessionPool.RemoveCoordinatorIfEmpty(coordinator);
+            }
+        }
     }
 
     public void DisposeLockFile()

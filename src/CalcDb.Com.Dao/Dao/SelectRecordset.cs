@@ -218,12 +218,14 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         bool hasGroupBy = false,
         DerivedSourceSpec? derivedSpec = null,
         bool isDerived = false,
-        string? name = null) : base(Decl, Vtable, database.Engine, "DAO.Recordset")
+        string? name = null,
+        bool pessimistic = true) : base(Decl, Vtable, database.Engine, "DAO.Recordset")
     {
         Database = database;
         Plan = plan;
         Cursor = cursor;
         RecordsetType = recordsetType;
+        _pessimistic = pessimistic;
         _options = options;
         _joinKeys = joinKeys;
         OpenSequence = openSequence;
@@ -2230,7 +2232,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         // and re-reads the current row.
         bool allowNoOrderByDynasetAfterEdit = !IsMdb && !Database.ReadOnly && RecordsetType == 2 && _isSingleTableRowSelect && !_hasOrderBy && _openLevels.Length == 1 && _frame is { Mode: EditMode.Edit };
         if (_appendOnly
-            || (IsMdb && !(Database.ReadOnlyFirst && Database.ReadOnly && RecordsetType == 2 && _openLevels.Length == 0))
+            || (IsMdb && !(RecordsetType is 2 or 4 && _openLevels.Length == 0))
             || RecordsetType is not (2 or 4)
             || !_isSingleTableRowSelect
             || (!_hasOrderBy && !allowNoOrderByDynasetAfterEdit)
@@ -2766,7 +2768,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
                     "Edit on a SELECT dynaset whose source cursor has no current row (not recorded)"));
             }
             _editReader!.Position(currentRow);
-            return EditPublication.Of(frame.Edit());
+            return EditPublication.Of(frame.Edit(), Database);
         }
         PositionJoinCursorSources();
         RowId? row0 = (((IExpressionRow)Cursor).Source(0) as RowReader)?.Current;
@@ -3057,7 +3059,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
                 "Update of AddNew on a dbAppendOnly SELECT dynaset inside an active transaction (not recorded)"));
         }
         UpdateOutcome outcome = frame.Update(type: 1, force: false);
-        CallResult result = EditPublication.Of(outcome);
+        CallResult result = EditPublication.Of(outcome, Database);
         if (result.Failure is null && frame.Mode == EditMode.None)
         {
             if (mode == EditMode.AddNew && _appendOnly)

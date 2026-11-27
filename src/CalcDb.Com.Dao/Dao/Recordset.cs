@@ -1411,7 +1411,7 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         {
             return Fail(MutationError.WriteConflict, "The Microsoft Access database engine stopped the process because you and another user are attempting to change the same data at the same time.");
         }
-        return EditPublication.Of(frame.Edit());
+        return EditPublication.Of(frame.Edit(), Database);
     }
 
     /// <summary>
@@ -1461,7 +1461,7 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         }
         EditMode mode = frame.Mode;
         UpdateOutcome outcome = frame.Update(type, force);
-        CallResult result = EditPublication.Of(outcome);
+        CallResult result = EditPublication.Of(outcome, Database);
         if (result.Failure is null && frame.Mode == EditMode.None)
         {
             if (outcome.Change is { } change && Database.Workspace.Transactions.Depth == 0)

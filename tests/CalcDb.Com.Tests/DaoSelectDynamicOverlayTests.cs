@@ -867,13 +867,14 @@ public sealed unsafe class DaoSelectDynamicOverlayTests : IDisposable
         const string Txn1bMdb = "eee913ea990a36212602b75bdfa22b91ca84ed57104f48ca748c310ad79f1e75"; // r-txn-1b-main-mdb.mdb
         const string Dao1bRich = "3b512c8f10e3ab22e434d9d6e69435bf231a310044b20cdb1c03069c1be34e95"; // r-dao-1b-rich.accdb
 
-        // 1. Jet 4 MDB ORDER BY snapshot refuses SnapshotAfterPublish.
+        // 1. Jet 4 MDB ORDER BY snapshot registers a ReadView and keeps open-time values after publish
+        // (r-q50-jk44-ddl-vis/vis-cross-cursors-dml-mdb call 76).
         {
             DatabaseObject db = Open(Txn1bMdb, ".mdb");
             SelectRecordsetObject rs = OpenSelect(db, "SELECT ID, V FROM R ORDER BY ID", 4);
             Assert.Equal(10, IntValue(Ok(FieldValue(rs, "V"))));
             Ok(Method(db, "Execute", "UPDATE R SET V = 111 WHERE ID = 1", 128));
-            AssertNotModelled(FieldValue(rs, "V"), "NotModelled.Edit.SnapshotAfterPublish");
+            Assert.Equal(10, IntValue(Ok(FieldValue(rs, "V"))));
             Ok(Method(rs, "Close"));
         }
 

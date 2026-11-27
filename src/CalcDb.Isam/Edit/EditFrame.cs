@@ -326,6 +326,7 @@ public sealed class EditFrame : IDisposable
                 LockAcquisition got = _workspace.Lock(footprints.File, [page], LockLifetime.PendingEdit);
                 if (got.Conflict is { } conflict)
                 {
+                    footprints.File.LastConflictHolder = conflict.Holder;
                     return conflict.HolderLifetime == LockLifetime.UntilPublished
                         ? EditOutcome.NotModelled(MutationOpen.UnpublishedChange, $"page {conflict.Resource.Page} holds locker {conflict.Holder.Value}'s committed change, not yet published")
                         : EditOutcome.Fail(MutationError.LockedBySession, ConflictSource);
@@ -1866,6 +1867,10 @@ public sealed class EditFrame : IDisposable
     /// <summary>The outcome of a lock conflict at Update or Delete (TXN-LOCAL: 3188 from DAO.Database for Execute, DAO.Recordset for Delete).</summary>
     private UpdateOutcome ConflictOutcome(LockConflict conflict, bool reportLockedBySession = false)
     {
+        if (_table.Footprints is { } fp)
+        {
+            fp.File.LastConflictHolder = conflict.Holder;
+        }
         if (conflict.HolderLifetime == LockLifetime.UntilPublished)
         {
             return new UpdateOutcome(null, MutationOpen.UnpublishedChange, $"page {conflict.Resource.Page} ({conflict.Resource.Purpose}) holds locker {conflict.Holder.Value}'s committed change, not yet published");
@@ -1974,8 +1979,9 @@ public sealed class EditFrame : IDisposable
         if (got.Conflict is { } conflict)
         {
             footprint = [];
-            return ConflictOutcome(conflict);
+            return ConflictOutcome(conflict, reportLockedBySession: conflict.HolderLifetime == LockLifetime.Transaction);
         }
+        fp.File.OnWriteLockAcquired?.Invoke(fp.File, footprint);
         if (!LockEdits && !_conflictReported && !StoredRowUnchanged(out string? unread))
         {
             UnlockFootprint(footprint, lifetime);
