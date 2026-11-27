@@ -362,15 +362,14 @@ internal static unsafe class AdoFieldValues
     private static OwnedVariant? FromNativeDecimal(NativeDecimal d, AdoFieldDescriptor desc, bool isClientCursor, out Failure? refusal)
     {
         refusal = null;
-        // r-ado-1b/fields-meta-mdb 21[2].1[14].0 (server cursor preserves stored -0 sign 0x80) vs
-        // r-ado-1b/fields-meta-mdb 32[2].1[14].0 & r-str-ado-act/ado-rs-read-close 17[3].1[9].0
-        // (client Cursor Engine normalizes zero Decimal to positive sign 0x00).
-        bool negative = isClientCursor ? (d.Negative && (d.High32 != 0 || d.Low64 != 0)) : d.Negative;
         if (desc.IsBaseTableColumn && desc.BaseColumn is { CalculatedResultType: null, NumericPrecision: 38, NumericScale: 0 })
         {
-            // r-ado-1b/fields-meta-mdb #202, qualified.md: ACE reports precision-38/scale-0 Decimal with Lo32 shifted into Mid32.
+            // r-ado-1b/fields-meta-mdb #202, 21[2].1[14].0 (server cursor preserves stored -0 sign 0x80) vs
+            // r-ado-1b/fields-meta-mdb 32[2].1[14].0 & r-str-ado-act/ado-rs-read-close 17[3].1[9].0
+            // (client Cursor Engine normalizes zero Decimal to positive sign 0x00).
             if (d.High32 == 0 && (d.Low64 >> 32) == 0)
             {
+                bool negative = isClientCursor ? (d.Negative && d.Low64 != 0) : d.Negative;
                 return OwnedVariant.FromDecimal(new DecimalValue(0, negative, 0, (d.Low64 & 0xFFFF_FFFFUL) << 32));
             }
             refusal = Failure.NotModelled(
@@ -390,7 +389,7 @@ internal static unsafe class AdoFieldValues
             refusal = Failure.NotImplemented($"ADO Field.Value of a Decimal beyond VT_DECIMAL ({d.Magnitude} at scale {d.Scale})");
             return null;
         }
-        return OwnedVariant.FromDecimal(new DecimalValue(d.Scale, negative, d.High32, d.Low64));
+        return OwnedVariant.FromDecimal(new DecimalValue(d.Scale, d.Negative, d.High32, d.Low64));
     }
 
     /// <summary>Project a <see cref="NativeVariant"/> produced by <see cref="SelectCursor.Read"/> into an ADO <see cref="OwnedVariant"/>.</summary>

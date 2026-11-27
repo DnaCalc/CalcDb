@@ -1374,6 +1374,8 @@ internal sealed unsafe class RecordsetObject : AdoObject
 
     public bool IsOpen => _rows is not null;
 
+    internal bool IsBoundToOpenAceConnection => _activeConnection is { IsOpen: true, IsPersistenceOpen: false };
+
     public bool IsActiveConnectionOpen => _activeConnection is { IsOpen: true };
 
     public bool IsClientCursor => _effectiveCursorLocation == 3;
@@ -4737,7 +4739,11 @@ internal sealed unsafe class RecordsetObject : AdoObject
         }
         if (_rows is KeysetRowSource ks)
         {
-            int baseIndex = _viewMap is not null ? _viewMap[_position] : _position;
+            if (_viewMap is not null || ks.HasKeysetShapeMutated)
+            {
+                return NotImplemented("Recordset.Bookmark get on a filtered or mutated server keyset (not recorded)");
+            }
+            int baseIndex = _position;
             if (baseIndex < 0 || baseIndex >= ks.KeysetCount)
             {
                 return FailAdo(AdoErrors.NoCurrentRecord);
@@ -4792,18 +4798,31 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return NotImplemented("Recordset.Bookmark put while editing (not recorded)");
         }
-        if (!TryDecodeBookmarkArg(arg, out long bookmarkValue, out CallResult? decodeFailure))
+        if (_rows is KeysetRowSource ksGuard && (_viewMap is not null || ksGuard.HasKeysetShapeMutated))
+        {
+            return NotImplemented("Recordset.Bookmark put on a filtered or mutated server keyset (not recorded)");
+        }
+        if (!TryDecodePutBookmarkArg(arg, out long bookmarkValue, out CallResult? decodeFailure))
         {
             return decodeFailure!.Value;
         }
-        ConsumeDeletedCurrent();
+        // Validate bookmark before mutating any deleted-row state so invalid bookmarks fail atomically.
         if (!TryResolveBookmarkViewIndex(bookmarkValue, out int viewIndex, out CallResult? resolveFailure))
         {
             return resolveFailure!.Value;
         }
+        if (_rows is KeysetRowSource)
+        {
+            // No sealed record performs a valid Put("Bookmark", 512+i) on a server keyset (qualified.md ADO-BOOK: Still T).
+            return NotImplemented("Recordset.Bookmark put with a valid server keyset bookmark (not recorded; Still T)");
+        }
+        if (ConsumeDeletedCurrent() && !TryFindBookmarkViewIndex(bookmarkValue, out viewIndex))
+        {
+            return FailAdo(AdoErrors.NoCurrentRecord);
+        }
         if (!TrySeekView(viewIndex, out Failure? fail))
         {
-            return fail is not null ? CallResult.Fail(fail) : CallResult.Nothing;
+            return fail is not null ? CallResult.Fail(fail) : FailAdo(AdoErrors.NoCurrentRecord);
         }
         ResetServerValueReadState();
         _bof = false;
@@ -4817,7 +4836,8 @@ internal sealed unsafe class RecordsetObject : AdoObject
 
     /// <summary>
     /// Recordset.CompareBookmarks(Bookmark1, Bookmark2) (r-q2-ado-misc/book-static-exchange #45/#46/#141/#142):
-    /// returns CompareEnum (0=adCompareLessThan, 1=adCompareEqual, 2=adCompareGreaterThan, 3=adCompareNotComparable).
+    /// recorded only for VT_R8 bookmarks on client static/batch and server static cursors; returns CompareEnum
+    /// (0=adCompareLessThan, 1=adCompareEqual, 2=adCompareGreaterThan, 3=adCompareNotComparable).
     /// </summary>
     private CallResult CompareBookmarks(nint arg1, nint arg2)
     {
@@ -4829,11 +4849,15 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return FailAdo(AdoErrors.BookmarksNotSupported);
         }
-        if (!TryDecodeBookmarkArg(arg1, out long bm1, out CallResult? fail1))
+        if (_rows is not (ClientBatchRowSource or MemoryRowSource))
+        {
+            return NotImplemented("Recordset.CompareBookmarks on a non-static cursor (only client static/batch and server static are recorded)");
+        }
+        if (!TryDecodeDoubleBookmarkArg(arg1, "CompareBookmarks", out long bm1, out CallResult? fail1))
         {
             return fail1!.Value;
         }
-        if (!TryDecodeBookmarkArg(arg2, out long bm2, out CallResult? fail2))
+        if (!TryDecodeDoubleBookmarkArg(arg2, "CompareBookmarks", out long bm2, out CallResult? fail2))
         {
             return fail2!.Value;
         }
@@ -4850,7 +4874,34 @@ internal sealed unsafe class RecordsetObject : AdoObject
         return Int32(idx1 < idx2 ? 0 : idx1 > idx2 ? 2 : 1);
     }
 
-    private bool TryDecodeBookmarkArg(nint arg, out long value, out CallResult? failure)
+    private bool TryDecodeDoubleBookmarkArg(nint arg, string member, out long value, out CallResult? failure)
+    {
+        value = 0;
+        failure = null;
+        if (arg == 0)
+        {
+            failure = NotImplemented($"Recordset.{member} with omitted bookmark argument (not recorded)");
+            return false;
+        }
+        NativeVariant* raw = Args.Cell(arg);
+        NativeVariant cell = ((VarType)raw->Vt & VarType.ByRef) != 0 ? ByRefValues.Dereference(raw) : *raw;
+        VarType vt = (VarType)cell.Vt;
+        if (vt != VarType.R8)
+        {
+            failure = NotImplemented($"Recordset.{member} with VarType {vt} (only VT_R8 is recorded)");
+            return false;
+        }
+        double d = cell.Double;
+        if (!double.IsFinite(d) || d != Math.Truncate(d) || d < 0 || d > long.MaxValue)
+        {
+            failure = NotImplemented($"Recordset.{member} with non-integer or out-of-range VT_R8 value {d} (not recorded)");
+            return false;
+        }
+        value = (long)d;
+        return true;
+    }
+
+    private bool TryDecodePutBookmarkArg(nint arg, out long value, out CallResult? failure)
     {
         value = 0;
         failure = null;
@@ -4867,8 +4918,8 @@ internal sealed unsafe class RecordsetObject : AdoObject
             double d = cell.Double;
             if (!double.IsFinite(d) || d != Math.Truncate(d) || d < 0 || d > long.MaxValue)
             {
-                value = -1;
-                return true;
+                failure = NotImplemented($"Recordset.Bookmark put with non-integer or out-of-range VT_R8 value {d} (not recorded)");
+                return false;
             }
             value = (long)d;
             return true;
@@ -4892,7 +4943,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
             failure = NotImplemented($"Recordset.Bookmark with byte array of dims={shape.Length}, count={(shape.Length > 0 ? shape[0].Count : 0)} (only 4-byte 1D array is recorded)");
             return false;
         }
-        if (vt is VarType.I4 or VarType.I2 or VarType.Bstr or VarType.Empty or VarType.Null)
+        if (vt is VarType.I4 or VarType.Bstr or VarType.Empty or VarType.Null)
         {
             // r-ado-1b/book-raw-forms b2/b3/b4: VT_I4, VT_BSTR, VT_EMPTY, VT_NULL fail 0x800A0BB9.
             failure = FailAdo(AdoErrors.ArgumentsWrongType);
@@ -7300,18 +7351,24 @@ internal sealed unsafe class RecordObject : AdoObject
     private static readonly nint Vtable = DualEntries.Build(Decl);
     private static readonly OperationTable Operations = new OperationTable(Decl)
         .Get("State", (self, args) => Int32(0))
-        .Get("Mode", (self, args) => Int32(1))
+        .Get("Mode", (self, args) => ((RecordObject)self).GetMode())
         .Get("RecordType", (self, args) => ((RecordObject)self).Fail(AdoErrors.ObjectClosed))
         .Get("ParentURL", (self, args) => ((RecordObject)self).Fail(AdoErrors.ObjectClosed))
         .Get("Fields", (self, args) => ((RecordObject)self).Fail(AdoErrors.ObjectClosed))
         .Method("Open", (self, args) => ((RecordObject)self).Open(args))
         .Method("Close", (self, args) => ((RecordObject)self).Fail(AdoErrors.ObjectClosed));
 
+    private int? _modeAfterFailedRecordsetOpen;
+
     private RecordObject() : base(Decl, Vtable, "ADODB.Record")
     {
     }
 
     protected override OperationTable Table => Operations;
+
+    private CallResult GetMode() => _modeAfterFailedRecordsetOpen is int m
+        ? Int32(m)
+        : NotImplemented("Record.Mode before a recorded Record.Open(Recordset) attempt (not recorded)");
 
     private CallResult Open(ReadOnlySpan<nint> args)
     {
@@ -7332,10 +7389,11 @@ internal sealed unsafe class RecordObject : AdoObject
                 // r-q-ado-misc/record-open-forms #56: Record.Open(Command, open ACE Connection) -> 0x800A0CB3.
                 return Fail(AdoErrors.OperationNotSupported);
             }
-            if (AdoArgs.ObjectOf<RecordsetObject>(sourceArg) is { IsOpen: true }
+            if (AdoArgs.ObjectOf<RecordsetObject>(sourceArg) is { IsOpen: true, IsBoundToOpenAceConnection: true }
                 && (connArg == 0 || TypedCall.IsMissing(Args.Cell(connArg)) || Args.TypeOf(connArg) == VarType.Empty))
             {
-                // r-oledb-odbc/stream-record-from-row #15: Record.Open(open Recordset) -> 0x800A0CB3.
+                // r-oledb-odbc/stream-record-from-row #15/#19: Record.Open(open ACE Recordset) -> 0x800A0CB3, Mode reads 1.
+                _modeAfterFailedRecordsetOpen = 1;
                 return Fail(AdoErrors.OperationNotSupported);
             }
             return NotImplemented("Record.Open with this object Source/ActiveConnection form (not recorded)");

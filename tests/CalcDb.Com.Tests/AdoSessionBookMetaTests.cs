@@ -100,6 +100,10 @@ public sealed unsafe class AdoSessionBookMetaTests
                 AssertError(Put(b2, "Bookmark", DBNull.Value), unchecked((int)0x800A0BB9), "ADODB.Recordset", expectedHelpContext: 1240641u, expectedInfoGuid: IidRecordset);
                 AssertError(Put(b2, "Bookmark", 2.0), unchecked((int)0x80040E0E), "Microsoft Access Database Engine", expectedHelpContext: 5003159u, expectedInfoGuid: IidOleDbRowset);
                 AssertError(Put(b2, "Bookmark", new byte[] { 1, 0, 0, 0 }), unchecked((int)0x80040E0E), "Microsoft Access Database Engine", expectedHelpContext: 5003159u, expectedInfoGuid: IidOleDbRowset);
+                // Unrecorded neighbours refuse honestly by name (Gate 4 findings 2, 3, 5).
+                Assert.Equal(CalcDb.Com.Com.HResults.E_NOTIMPL, Put(b2, "Bookmark", 512.0).Failure!.Value.Scode);
+                Assert.Equal(CalcDb.Com.Com.HResults.E_NOTIMPL, Put(b2, "Bookmark", (short)2).Failure!.Value.Scode);
+                Assert.Equal(CalcDb.Com.Com.HResults.E_NOTIMPL, Call(b2, "CompareBookmarks", 512.0, 513.0).Failure!.Value.Scode);
                 Assert.Equal(1, Get(b2, "AbsolutePosition"));
                 Assert.Null(Call(b2, "Close").Failure);
                 Release(b2);
@@ -149,6 +153,8 @@ public sealed unsafe class AdoSessionBookMetaTests
                 Assert.Equal(0, Call(b4, "CompareBookmarks", 1.0, 3.0).Value);
                 Assert.Equal(1, Call(b4, "CompareBookmarks", 3.0, 3.0).Value);
                 Assert.Equal(2, Call(b4, "CompareBookmarks", 3.0, 1.0).Value);
+                Assert.Equal(CalcDb.Com.Com.HResults.E_NOTIMPL, Call(b4, "CompareBookmarks", 1.5, 2.5).Failure!.Value.Scode);
+                Assert.Equal(CalcDb.Com.Com.HResults.E_NOTIMPL, Call(b4, "CompareBookmarks", double.NaN, -1.0).Failure!.Value.Scode);
 
                 nint rc = (nint)Call(b4, "Clone").Value!;
                 Assert.Null(Put(b4, "Filter", "ID = 2").Failure);
@@ -198,7 +204,8 @@ public sealed unsafe class AdoSessionBookMetaTests
                 AssertError(Call(recc, "Open", new Dispatch(cmd), new Dispatch(cn)), unchecked((int)0x800A0CB3), "ADODB.Record", expectedHelpContext: 1240648u, expectedInfoGuid: IidRecord);
                 Assert.Equal(0, Get(recc, "State"));
 
-                // r-oledb-odbc/stream-record-from-row #15 (open Recordset), #19 (Mode=1).
+                // r-oledb-odbc/stream-record-from-row #15 (open Recordset), #19 (Mode=1 after failed Open(rs); unrecorded before).
+                Assert.Equal(CalcDb.Com.Com.HResults.E_NOTIMPL, TryGet(recr, "Mode").Failure!.Value.Scode);
                 AssertError(Call(recr, "Open", new Dispatch(rs)), unchecked((int)0x800A0CB3), "ADODB.Record", expectedHelpContext: 1240648u, expectedInfoGuid: IidRecord);
                 Assert.Equal(0, Get(recr, "State"));
                 Assert.Equal(1, Get(recr, "Mode"));
