@@ -121,63 +121,30 @@ scope or design, the book wins.
   stops, and tooling benchmarks in [docs/work/process-log.md](docs/work/process-log.md). A full process review runs when
   an indicator crosses its line, or during ongoing ~15% daily process/tooling improvement work (The Plan §4).
 
-## C# navigation and edits (roscli)
+## C# navigation and edits (roscli / roslynskills MCP)
 
-roscli (RoslynSkills, installed as a global tool `0.1.6-preview.33` plus NativeAOT `%LOCALAPPDATA%\RoslynSkills\bin\roscli-fast.exe`,
-and `RoslynSkills.McpServer --mode slim` 12-tool `6,016 B` facade) keeps `CalcDb.slnx` loaded in a daemon with a live
-in-memory `WorkspaceOverlayIndex` over cached `SourceText`/`SyntaxTree` and answers warm queries in ~41–87 ms via
-`roscli-fast.exe` (measured on `CalcDb.slnx`, 2026-11-26, process log: `ctx.search_text` `58.3 ms` CLI / `6.6 ms` MCP
-vs `94.7 ms` `rg`; zero-disk `ctx.read_window` `0.2–0.3 ms` host / `4.8 ms` MCP; 1-call `ctx.symbol_context` `64.1 ms`
-CLI / `13.3–15.6 ms` MCP; `--symbol` `find_invocations` `51.0 ms`, `find_references` `52.6 ms`, `nav.call_hierarchy`
-`854z` incoming `87.2 ms`). Every answer has the same JSON shape in-process and through the daemon: the payload in
-`Data`, how it ran in `Transport`. A position is `<file> <line> <column>` or `file:line:col`; `--symbol Type.Member` /
-`--symbol-name` is supported across all 6 `nav.*` commands (`nav.find_references`, `nav.find_invocations`,
-`nav.find_implementations`, `nav.find_overrides`, `nav.go_to_definition`, `nav.call_hierarchy`, with optional
-parameter-type disambiguation) as well as `edit.rename_symbol`, `edit.change_signature`, `nav.call_path`
-(`--source-symbol`/`--target-symbol`), and `analyze.impact_slice`; `--symbols` batches `nav.find_references` and
-`nav.find_invocations` in one pass, and a missed column names the symbols on that line.
+`roscli` on `PATH` (`%LOCALAPPDATA%\RoslynSkills\bin\roscli.exe`, NativeAOT) is our fast C# client (~41–87 ms warm) and automatically falls back to managed `roscli-slow` (`.dotnet\tools\roscli-slow.exe`) when no daemon is bound or for lifecycle/help/stdin verbs. Together with `RoslynSkills.McpServer --mode slim` (`12` tools, `roslynskills` MCP server), it keeps `CalcDb.slnx` loaded in a `WorkspaceHost` daemon with a live in-memory `WorkspaceOverlayIndex` over cached `SourceText`/`SyntaxTree` (`ctx.search_text` `58.3 ms` CLI / `6.6 ms` MCP vs `94.7 ms` `rg`; zero-disk `ctx.read_window` `0.2–0.3 ms` host / `4.8 ms` MCP; 1-call `ctx.symbol_context` `64.1 ms` CLI / `13.3–15.6 ms` MCP; `--symbol` `find_invocations` `51.0 ms`, `find_references` `52.6 ms`, `nav.call_hierarchy` `854z` incoming `87.2 ms`). Every answer has the same JSON shape (`Data` payload, `Transport` metadata). A position is `<file> <line> <column>` or `file:line:col`; `--symbol Type.Member` / `--symbol-name` works across all 6 `nav.*` commands (with optional parameter-type disambiguation), `edit.rename_symbol`, `edit.change_signature`, `nav.call_path`, and `analyze.impact_slice`; `--symbols` batches `nav.find_references` and `nav.find_invocations`.
 
-- **MCP slim server wired globally:** `RoslynSkills.McpServer --mode slim` (12 tools, `6,016 B`) is configured in
-  `mcp_config.json`. You choose whether to use `roslynskills` MCP (`roslyn_context`, `roslyn_search`,
-  `roslyn_diag_snapshot`, `roslyn_run`), `roscli-fast.exe`, or `rg`/`read_file` — use whatever makes your task
-  fastest. For C# work, `roslyn_context` returns definition + refs + 1-hop callers/callees + diagnostics in one
-  round trip (`~5–15 ms` over the persistent pipe once warm), `roslyn_search` filters code vs comments/strings,
-  `roslyn_run` (`ctx.read_window`) reads windows with zero disk I/O + `file_sha256` + `enclosing_symbol`, and
-  `roslyn_diag_snapshot` checks compile diagnostics without a slow MSBuild invocation. In a worktree (`CalcDb-w1`,
-  `CalcDb-w2`, `CalcDb-probe`), pass your worktree's `.slnx` as `workspace_path` so queries hit your own live index
-  rather than the integration checkout (`roslyn_*` tools are lazy-loaded: read `<appDataDir>\mcp\roslynskills\<tool>.json`
-  once if needed, then use `call_mcp_tool`). When only shell tools are mounted, follow the same workflow via
-  `roscli-fast.exe`.
-- **Overlay search & zero-disk reads first (when warm).** Once `WorkspaceHost` is warm (`workspace.use CalcDb.slnx --wait-warmup true`),
-  prefer `roslyn_search` / `ctx.search_text` (with `--syntax-filter code|declarations|invocations|identifiers|comments|strings` and batched
-  `queries`) over `rg` to eliminate false-positive comment/string hits, and use `ctx.read_window` (single or batched,
-  zero disk reads + `file_sha256` + `enclosing_symbol`) instead of repeated `read_file` calls. Use `rg -n -w` (~40–100 ms)
-  when no daemon is running or for non-C# files.
-- **One-call compound mindspace.** Prefer `roslyn_context` / `ctx.symbol_context` over chaining `rg` +
-  `read_file` + `nav.go_to_definition` + `nav.find_references` + `nav.call_hierarchy`: it returns definition, XML summary,
-  references, 1-hop interface-aware callers/callees, implementations, and file diagnostics in one round trip. For raw
-  individual queries: implementers (`roslyn_nav_implementations` / `nav.find_implementations`), member uses (`nav.find_references`/`nav.find_invocations`),
-  polymorphic callers (`nav.call_hierarchy` — `854z` fixed with `edges[].implemented_member`), definition (`nav.go_to_definition`),
-  and scoped in-memory compile checks (`roslyn_diag_snapshot` / `diag.get_workspace_snapshot --directory-path <dir> --include-diagnostics true`, ~110 ms warm;
-  pair semantic search with `ctx.search_text` / `rg` where a string literal could carry the name, 82kf trial).
-- **roscli for edits that follow a symbol:** a rename across files (`edit.rename_symbol --symbol`), a signature change
-  (`edit.change_signature --symbol`), atomic multi-file exact edits with `expected_sha256` / `expected_file_hashes`
-  preconditions (`edit.transaction` / `edit.batch_exact`), and a missing `using` or an unimplemented interface
-  (`edit.apply_code_fix`: Roslyn's own fix, or `no_fix_available`). Use `roslyn_diag_snapshot` / `diag.get_workspace_snapshot`
-  for live compile verification while writing code instead of running MSBuild on every edit.
-- **Who starts a daemon.** A writer whose brief refactors or traces code across projects, and a reviewer who checks the
-  callers of what a child changed. A prober, a bookkeeping change or a one-file fix does not: a daemon costs ~20 s bind
-  (+ ~33 s full 33-project warmup with `--wait-warmup true`) and about 1.2 GB warmed per worktree.
-- **Setup and end.** In your worktree: `dotnet restore CalcDb.slnx`, then `roscli-fast.exe workspace.use CalcDb.slnx --wait-warmup true`
-  (or `roscli workspace.use CalcDb.slnx`), which starts a detached daemon bounded by a 30-minute idle timeout and 8 daemons
-  per user (`workspace.status` reports `warmup_state` and `overlay_index`). Run subsequent calls with `ROSCLI_DAEMON=required`
-  (no `--workspace-path` needed); a dead daemon fails in about a second with its reason. The daemon sees files any tool
-  creates or deletes before its next answer and updates `WorkspaceOverlayIndex` incrementally; only a project or solution
-  file change needs `roscli workspace.refresh`. Run `roscli daemon.stop` before you end and verify `roscli daemon.list`
-  shows your worktree stopped; `daemon.prune` clears leftovers. It writes nothing into the repository.
-- **roscli is our tool** (owner, 2026-11-21): a wrong, slow or missing answer is fixed in RoslynSkills
-  (`C:\Work\RoslynSkills`, spawned as a swarm tooling worker, landed on `main`, installed globally + NativeAOT
-  `roscli-fast.exe` here), never worked around in CalcDb.
+- **When to use `roslynskills` MCP or `roscli` vs built-in tools:**
+  - Use **`roslynskills` MCP** (`call_mcp_tool` on `roslynskills`, ~5–15 ms warm over persistent pipe, auto-binds worktree on first workspace call) or **`roscli`** (`~50–70 ms` warm) whenever exploring/tracing C# symbols, reading member sources + `file_sha256`, finding callers/implementations (`nav.*`), checking multi-project compile errors (`roslyn_diag_snapshot`), or renaming/refactoring across files.
+  - Use **`rg` / `read_file`** for non-C# files (`.md`, `.slnx`, `.csproj`, `.json`, `.tsv`, `.ps1`), literal strings, and quick isolated slices when no daemon is bound. Do not `rg` common C# names (`Execute`, `Kind`, `Open`) or trace interface callers by text.
+- **Zero-schema-read `roslynskills` MCP quick reference (`ServerName: "roslynskills"`):**
+  In a worktree (`CalcDb-w1`, `CalcDb-w2`, `CalcDb-probe`), **always pass `workspace_path`** (`"C:\\Work\\DnaCalc\\CalcDb-w1\\CalcDb.slnx"` or worktree root) so calls auto-bind and hit your own live index instead of the integration checkout. Call `call_mcp_tool` **directly** using these parameter shapes without spending a turn reading `<appDataDir>\mcp\roslynskills\*.json` unless an argument is rejected:
+  - `roslyn_context`: `{ symbol | file_path, line, column, workspace_path, brief?: true }` — 1-call mindspace (def + `file_sha256` + refs + 1-hop interface-aware callers/callees + impls + file diag)
+  - `roslyn_search`: `{ pattern, queries?, workspace_path, syntax_filter?: "code"|"declarations"|"invocations"|"identifiers"|"comments"|"strings", whole_word?: true, max_results?, brief?: true }` — zero-disk overlay search (eliminates comment/string noise)
+  - `roslyn_diag_snapshot`: `{ directory_path? | file_paths?, workspace_path, include_diagnostics?: true, severity_filter?, brief?: true, require_workspace?: true }` — `~110 ms` warm compile check without slow MSBuild
+  - `roslyn_nav_symbol`: `{ symbol | file_path, line, column, symbol_name?, workspace_path }`
+  - `roslyn_nav_references` / `roslyn_nav_invocations`: `{ symbol | symbols | file_path, line, column, workspace_path, max_results?, brief? }`
+  - `roslyn_nav_call_hierarchy`: `{ symbol | file_path, line, column, workspace_path, direction?: "incoming"|"outgoing"|"both", max_depth?: 1, brief?: true }` — captures `edges[].implemented_member` (`854z`)
+  - `roslyn_nav_implementations`: `{ symbol | file_path, line, column, workspace_path, max_results? }`
+  - `roslyn_edit_rename`: `{ symbol | file_path, line, column, new_name, apply: true, workspace_path }`
+  - `roslyn_edit_transaction`: `{ operations, file_path?, expected_sha256?, expected_file_hashes?, apply: true, atomic: true, include_diagnostics: true, workspace_path }`
+  - `roslyn_edit_code_fix`: `{ file_path, diagnostic_id?, line?, column?, fix_title?, apply: true, workspace_path }`
+  - `roslyn_run`: `{ command_id, input: { ..., workspace_path } }` — any other command (`ctx.read_window` for zero-disk windows + `file_sha256`, `ctx.file_outline`, `edit.change_signature`, `nav.call_path`, `analyze.impact_slice`, `query.batch`, `workspace.*`, `daemon.list`, `daemon.stop`).
+- **One-call compound mindspace & overlay reads:** Prefer `roslyn_context` / `ctx.symbol_context` over chaining `rg` + `read_file` + `nav.go_to_definition` + `nav.find_references` + `nav.call_hierarchy`, and `roslyn_search` / `ctx.search_text` + `ctx.read_window` over comment-noisy `rg` + repeated `read_file` when warm. Pair semantic search with `ctx.search_text` / `rg` where a string literal could carry a symbol name (82kf trial).
+- **Semantic edits & fast diagnostics:** Use `roslyn_edit_rename` / `edit.rename_symbol --symbol`, `edit.change_signature --symbol`, atomic `roslyn_edit_transaction` with SHA-256 preconditions, `roslyn_edit_code_fix`, and `roslyn_diag_snapshot` / `diag.get_workspace_snapshot --directory-path <dir> --include-diagnostics true` instead of invoking MSBuild after small edits.
+- **Who starts a daemon & setup/cleanup:** A writer tracing or refactoring across projects and a Gate 4 reviewer start/auto-bind a daemon; a prober, bookkeeping edit, or one-file fix does not (~20 s bind + ~33 s full 33-project warmup, ~1.2 GB RAM per worktree). For CLI loops in a worktree: `dotnet restore CalcDb.slnx`, `roscli workspace.use CalcDb.slnx --wait-warmup true`, then set `ROSCLI_DAEMON=required`. Run `roscli daemon.stop` (or `roslyn_run` `daemon.stop` with `workspace_path`) before finishing and verify `roscli daemon.list` shows your worktree stopped; `roscli daemon.prune` clears leftovers.
+- **roscli is our tool** (owner, 2026-11-21): a wrong, slow or missing answer is fixed in RoslynSkills (`C:\Work\RoslynSkills`, landed on `main`, installed globally as `roscli` / `roscli-slow` + `mcp-p7`), never worked around in CalcDb.
 
 ## Honesty rules
 

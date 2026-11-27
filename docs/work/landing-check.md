@@ -29,9 +29,10 @@ persistent check worktree and gave code writers worktrees of their own.
    in a session other than the writer's (`gemini-4-neon-high` by default; AGENTS.md, Sub-sessions). The writer spawns
    the reviewer itself via `swarm add` (`workspace: inherit`, strictly read-only on the writer's worktree) once its
    self-check passes, applies or declines each finding, and reports the dispositions; the organizer checks them. The
-   reviewer traces the callers of every changed member with roscli (`nav.find_invocations --symbol Type.Member` or at the
+   reviewer traces the callers of every changed member with `roslynskills` MCP (`roslyn_context`, `roslyn_nav_invocations`,
+   `roslyn_nav_implementations`, `roslyn_nav_call_hierarchy` with `workspace_path`) or `roscli` (`nav.find_invocations --symbol Type.Member` or at the
    member's position, `nav.find_implementations` for an interface, `nav.call_hierarchy` kept shallow), so a rule that
-   reaches further than the brief shows, and lists each roscli call with what it decided. A stretch under about 300
+   reaches further than the brief shows, and lists each roscli/MCP call with what it decided. A stretch under about 300
    lines has the organizer's review only.
 5. **Land.** The landing check below, then the merge, the push, and the organizer's bookkeeping.
 6. **Compare.** The core compare set in the background after the landing; the wide set once a day. A probe round that
@@ -83,11 +84,14 @@ Every brief says "follow the standard brief of docs/work/landing-check.md" and a
   ByRef Move and Seek that r-q2-cursor-dao/byref-dao-move-seek records and qualified.md states; its reviewer and the
   organizer checked only what it admitted).
 - One of everything: extend the writer, reader or helper that exists; never add a second one.
-- You have `roslynskills` MCP (`roslyn_context`, `roslyn_search`, `roslyn_diag_snapshot`, `roslyn_run`) alongside
-  `roscli-fast.exe` and `rg`/`read_file` — choose whichever fits best. For multi-file C# navigation or live compile
-  diagnostics, MCP avoids shell startup, multi-turn `read_file` chains, and comment/string `rg` hits (in a worktree,
-  pass `<worktree>\CalcDb.slnx` as `workspace_path`). If you start a CLI `roscli` daemon, run `roscli daemon.stop`
-  before you end and verify `roscli daemon.list` shows your worktree stopped.
+- You have `roslynskills` MCP (`roslyn_context`, `roslyn_search`, `roslyn_diag_snapshot`, `roslyn_nav_*`,
+  `roslyn_edit_*`, `roslyn_run`) alongside fast NativeAOT `roscli` (auto-falling back to `roscli-slow`) and
+  `rg`/`read_file` — choose whichever fits best. For C# navigation, callers/implementations, overlay code search, or
+  `~110 ms` compile diagnostics, `roslynskills` MCP avoids shell startup, multi-turn `read_file` chains, and
+  comment/string `rg` hits: use the inline MCP parameter shapes in `AGENTS.md` (and server `instructions`) directly via
+  `call_mcp_tool` without reading schema `*.json` files first, and always pass `<worktree>\CalcDb.slnx` as
+  `workspace_path` so your worktree daemon auto-binds cleanly. Stop any bound daemon (`roscli daemon.stop` or
+  `roslyn_run` `daemon.stop`) before you end and verify `roscli daemon.list` shows your worktree stopped.
 - Do not touch the bookkeeping files (register.md, qualified.md, book-proposals.md, compare-baseline*.tsv,
   process-log.md): give their lines in the report.
 - Commit on your branch with `git commit -F <unique message file in $TEMP>`, the message starting with the book ID and
