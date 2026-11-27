@@ -20,9 +20,9 @@ internal sealed unsafe class ContainerObject : DaoObject
         .Get("Owner", (self, args) => Live(self, c => Text("")))
         .Get("UserName", (self, args) => Live(self, c => Text(c.Database.Workspace.UserName)))
         .Get("Inherit", (self, args) => Live(self, c => Bool(true)))
-        .Get("Permissions", (self, args) => Live(self, c => c.Fail(3358, DaoErrors.NoWorkgroupFile)))
-        .Get("AllPermissions", (self, args) => Live(self, c => c.Fail(3358, DaoErrors.NoWorkgroupFile)))
-        .Put("Permissions", (self, args) => Live(self, c => NamedSecurityRefusal()))
+        .Get("Permissions", (self, args) => Live(self, c => c._permissionsPutAttempted ? Int32(0) : c.Fail(3358, DaoErrors.NoWorkgroupFile)))
+        .Get("AllPermissions", (self, args) => Live(self, c => c._permissionsPutAttempted ? Int32(0) : c.Fail(3358, DaoErrors.NoWorkgroupFile)))
+        .Put("Permissions", (self, args) => Live(self, c => c.PutPermissions()))
         .Get("Documents", (self, args) => Live(self, c => Object(c.DocumentsCollection())))
         .Get("Properties", (self, args) => Live(self, c => Object(c._properties ??= new PropertiesObject(c, BuiltInProperties.Container))));
 
@@ -30,6 +30,7 @@ internal sealed unsafe class ContainerObject : DaoObject
     private readonly CatalogEntry _entry;
     private DefinitionCollection? _documents;
     private PropertiesObject? _properties;
+    private bool _permissionsPutAttempted;
 
     public ContainerObject(DefinitionCollection owner, CatalogEntry entry) : base(Decl, Vtable, owner.Engine, "DAO.Container")
     {
@@ -50,8 +51,16 @@ internal sealed unsafe class ContainerObject : DaoObject
         return c.Invalid ? c.Fail(3420, DaoErrors.ObjectInvalid) : op(c);
     }
 
-    public static CallResult NamedSecurityRefusal() =>
-        CallResult.Fail(Failure.NotModelled("NotModelled.Security", "a Permissions put (user-level security is excluded; DAO-SEC)"));
+    /// <summary>
+    /// Without a workgroup file, <c>Container.Permissions = value</c> fails 3358 from <c>DAO.Container</c> and leaves
+    /// subsequent <c>Permissions</c> and <c>AllPermissions</c> gets returning 0 (<c>r-q2-cursor-dao/meta-permissions-put-then-read</c>
+    /// calls 44–64).
+    /// </summary>
+    private CallResult PutPermissions()
+    {
+        _permissionsPutAttempted = true;
+        return Fail(3358, DaoErrors.NoWorkgroupFile);
+    }
 
     private DefinitionCollection DocumentsCollection()
     {
@@ -100,15 +109,16 @@ internal sealed unsafe class DocumentObject : DaoObject
         .Get("Container", (self, args) => Live(self, d => Text(d._container.Name)))
         .Get("DateCreated", (self, args) => Live(self, d => CatalogDates.Date(d._entry.DateCreateBits)))
         .Get("LastUpdated", (self, args) => Live(self, d => CatalogDates.Date(d._entry.DateUpdateBits)))
-        .Get("Permissions", (self, args) => Live(self, d => d.Fail(3358, DaoErrors.NoWorkgroupFile)))
-        .Get("AllPermissions", (self, args) => Live(self, d => d.Fail(3358, DaoErrors.NoWorkgroupFile)))
-        .Put("Permissions", (self, args) => Live(self, d => ContainerObject.NamedSecurityRefusal()))
+        .Get("Permissions", (self, args) => Live(self, d => d._permissionsPutAttempted ? Int32(0) : d.Fail(3358, DaoErrors.NoWorkgroupFile)))
+        .Get("AllPermissions", (self, args) => Live(self, d => d._permissionsPutAttempted ? Int32(0) : d.Fail(3358, DaoErrors.NoWorkgroupFile)))
+        .Put("Permissions", (self, args) => Live(self, d => d.PutPermissions()))
         .Get("Properties", (self, args) => Live(self, d => d.PropertiesCollection()));
 
     private readonly DefinitionCollection _owner;
     private readonly ContainerObject _container;
     private readonly CatalogEntry _entry;
     private PropertiesObject? _properties;
+    private bool _permissionsPutAttempted;
 
     public DocumentObject(DefinitionCollection owner, ContainerObject container, CatalogEntry entry) : base(Decl, Vtable, owner.Engine, "DAO.Document")
     {
@@ -129,6 +139,17 @@ internal sealed unsafe class DocumentObject : DaoObject
     {
         var d = (DocumentObject)self;
         return d.Invalid ? d.Fail(3420, DaoErrors.ObjectInvalid) : op(d);
+    }
+
+    /// <summary>
+    /// Without a workgroup file, <c>Document.Permissions = value</c> fails 3358 from <c>DAO.Document</c> and leaves
+    /// subsequent <c>Permissions</c> and <c>AllPermissions</c> gets returning 0 (<c>r-q2-cursor-dao/meta-permissions-put-then-read</c>
+    /// calls 16–36).
+    /// </summary>
+    private CallResult PutPermissions()
+    {
+        _permissionsPutAttempted = true;
+        return Fail(3358, DaoErrors.NoWorkgroupFile);
     }
 
     private CallResult PropertiesCollection()

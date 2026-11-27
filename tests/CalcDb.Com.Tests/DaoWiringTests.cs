@@ -419,12 +419,18 @@ public sealed unsafe class DaoWiringTests : IDisposable
         Assert.Equal((VarType.Bool, 0L), Scalar(Get(rs, "LockEdits")));
         Ok(Method(rs, "Edit"));
         Assert.False(rs.FrameIfMade!.LockEdits);
-        Named(Put(rs, "LockEdits", true)); // with an edit pending: not recorded
+        // r-def-cursor-dao/lockedits-put-after-open (calls 11-15, 27-31): LockEdits put succeeds during a pending edit on table-type and dynaset.
+        Ok(Put(rs, "LockEdits", true));
+        Assert.True(rs.FrameIfMade!.LockEdits);
         Ok(Method(rs, "CancelUpdate"));
         Ok(Put(rs, "LockEdits", true));
         Assert.True(rs.FrameIfMade!.LockEdits);
         RecordsetObject snapshot = Recover<RecordsetObject>(Ok(Method(db, "OpenRecordset", "G", 4)));
-        Named(Put(snapshot, "LockEdits", false));
+        // r-def-cursor-dao/lockedits-put-after-open (calls 39-44): LockEdits put on a snapshot fails 3251 from DAO.Recordset.
+        CallResult snapLock = Put(snapshot, "LockEdits", false);
+        Assert.Equal(FailureKind.Dao, snapLock.Failure?.Kind);
+        Assert.Equal(3251, snapLock.Failure!.Number);
+        Assert.Equal("DAO.Recordset", snapLock.Failure.Source);
     }
 
     [Fact]

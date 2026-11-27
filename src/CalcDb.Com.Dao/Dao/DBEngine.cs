@@ -1740,13 +1740,14 @@ internal sealed unsafe class WorkspaceObject : DaoObject
 /// Workspaces: the default session, then the appended ones (DAO-BOOT: a duplicate name appends and Item(name) returns
 /// the first; an empty name gives 3271 at Append, r-dao-1-err-1/boot-createworkspace).
 /// </summary>
-internal sealed unsafe class WorkspacesObject : DaoObject
+internal sealed unsafe class WorkspacesObject : DaoObject, IDaoEnumerableCollection
 {
     private static readonly InterfaceDecl Decl = DaoTypes.Workspaces;
     private static readonly nint Vtable = DualEntries.Build(Decl);
     private static readonly OperationTable Operations = new OperationTable(Decl)
         .Get("Count", (self, args) => Int16(1 + ((WorkspacesObject)self).Engine.Appended.Count))
         .Get("Item", (self, args) => ((WorkspacesObject)self).Item(args))
+        .Method("_NewEnum", (self, args) => NewEnumResult((WorkspacesObject)self))
         .Method("Append", (self, args) => ((WorkspacesObject)self).Append(args[0]))
         .Method("Delete", (self, args) => ((WorkspacesObject)self).Fail(3273, DaoErrors.MethodNotApplicable))
         .Method("Refresh", (self, args) => CallResult.Nothing);
@@ -1759,6 +1760,20 @@ internal sealed unsafe class WorkspacesObject : DaoObject
     protected override OperationTable Table => Operations;
 
     private WorkspaceObject[] Members => [Engine.DefaultWorkspace, .. Engine.Appended];
+
+    bool IDaoEnumerableCollection.IsEnumInvalid => false;
+    string IDaoEnumerableCollection.EnumClosedSource => Source;
+    int IDaoEnumerableCollection.EnumCount => 1 + Engine.Appended.Count;
+    void IDaoEnumerableCollection.AddRefCollection() => AddRef();
+    void IDaoEnumerableCollection.ReleaseCollection() => Release();
+
+    nint IDaoEnumerableCollection.EnumDispatchAt(int index)
+    {
+        WorkspaceObject member = index == 0 ? Engine.DefaultWorkspace : Engine.Appended[index - 1];
+        nint dispatch;
+        member.QueryInterface(ComIids.IDispatch, &dispatch);
+        return dispatch;
+    }
 
     internal CallResult Item(ReadOnlySpan<nint> args)
     {
@@ -1794,13 +1809,14 @@ internal sealed unsafe class WorkspacesObject : DaoObject
 }
 
 /// <summary>Databases of a Workspace: its open Databases, live (DAO-CREATE; r-dao-1-err-1/boot-open-twice: Item by full path is the first).</summary>
-internal sealed unsafe class DatabasesObject : DaoObject
+internal sealed unsafe class DatabasesObject : DaoObject, IDaoEnumerableCollection
 {
     private static readonly InterfaceDecl Decl = DaoTypes.Databases;
     private static readonly nint Vtable = DualEntries.Build(Decl);
     private static readonly OperationTable Operations = new OperationTable(Decl)
         .Get("Count", (self, args) => Live(self, d => Int16(d._workspace.Databases.Count)))
         .Get("Item", (self, args) => { nint index = args[0]; return Live(self, d => d.Item(index)); })
+        .Method("_NewEnum", (self, args) => Live(self, d => NewEnumResult(d)))
         .Method("Refresh", (self, args) => Live(self, d => CallResult.Nothing));
 
     private readonly WorkspaceObject _workspace;
@@ -1813,6 +1829,19 @@ internal sealed unsafe class DatabasesObject : DaoObject
     public override bool Invalid => _workspace.Invalid;
 
     protected override OperationTable Table => Operations;
+
+    bool IDaoEnumerableCollection.IsEnumInvalid => Invalid;
+    string IDaoEnumerableCollection.EnumClosedSource => Source;
+    int IDaoEnumerableCollection.EnumCount => _workspace.Databases.Count;
+    void IDaoEnumerableCollection.AddRefCollection() => AddRef();
+    void IDaoEnumerableCollection.ReleaseCollection() => Release();
+
+    nint IDaoEnumerableCollection.EnumDispatchAt(int index)
+    {
+        nint dispatch;
+        _workspace.Databases[index].QueryInterface(ComIids.IDispatch, &dispatch);
+        return dispatch;
+    }
 
     private static CallResult Live(ComObject self, Func<DatabasesObject, CallResult> op)
     {
@@ -1833,7 +1862,7 @@ internal sealed unsafe class DatabasesObject : DaoObject
 }
 
 /// <summary>Users and Groups of the default-Admin context: empty (R-DAO-1 DAO-SEC: Count 0, Item 3265).</summary>
-internal sealed unsafe class EmptyCollection : DaoObject
+internal sealed unsafe class EmptyCollection : DaoObject, IDaoEnumerableCollection
 {
     private static readonly Dictionary<InterfaceDecl, (nint Vtable, OperationTable Operations)> Shapes = new(ReferenceEqualityComparer.Instance);
 
@@ -1854,6 +1883,13 @@ internal sealed unsafe class EmptyCollection : DaoObject
 
     protected override OperationTable Table => _shape.Operations;
 
+    bool IDaoEnumerableCollection.IsEnumInvalid => Invalid;
+    string IDaoEnumerableCollection.EnumClosedSource => Source;
+    int IDaoEnumerableCollection.EnumCount => 0;
+    void IDaoEnumerableCollection.AddRefCollection() => AddRef();
+    void IDaoEnumerableCollection.ReleaseCollection() => Release();
+    nint IDaoEnumerableCollection.EnumDispatchAt(int index) => throw new ArgumentOutOfRangeException(nameof(index));
+
     private static (nint, OperationTable) Shape(InterfaceDecl decl)
     {
         lock (Shapes)
@@ -1863,6 +1899,7 @@ internal sealed unsafe class EmptyCollection : DaoObject
                 shape = (DualEntries.Build(decl), new OperationTable(decl)
                     .Get("Count", (self, args) => Live(self, c => Int16(0)))
                     .Get("Item", (self, args) => Live(self, c => c.Fail(3265, DaoErrors.ItemNotFound)))
+                    .Method("_NewEnum", (self, args) => Live(self, c => NewEnumResult(c)))
                     .Method("Refresh", (self, args) => Live(self, c => CallResult.Nothing)));
                 Shapes[decl] = shape;
             }

@@ -815,11 +815,12 @@ internal sealed unsafe class DatabaseObject : DaoObject
             type = Args.Int32(args[1], omitted: null);
             if (type is null)
             {
-                CalcDb.Foundation.VarType typeVt = Args.TypeOf(args[1]) & ~CalcDb.Foundation.VarType.ByRef;
+                CalcDb.Foundation.VarType typeVt = (CalcDb.Foundation.VarType)ByRefValues.Dereference(Args.Cell(args[1])).Vt;
                 if (typeVt is CalcDb.Foundation.VarType.Null or CalcDb.Foundation.VarType.Bstr)
                 {
                     // r-dao-1-err-1/err-bind-optional-cells calls 17, 34; r-dao-1-err-1/err-bind-types call 5;
-                    // r-wire/opt-openrecordset calls 22, 100: Null or non-numeric BSTR Type fails 3421 without IErrorInfo.
+                    // r-wire/opt-openrecordset calls 22, 100; r-q2-cursor-dao/byref-dao-openrecordset call 45:
+                    // Null (including VT_BYREF|VT_VARIANT -> VT_NULL) or non-numeric BSTR Type fails 3421 without IErrorInfo.
                     return Fail(3421, DaoErrors.ConversionError);
                 }
                 return CallResult.Fail(Failure.NotModelled(
@@ -849,7 +850,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
             CalcDb.Values.NativeVariant* lockCell = Args.Cell(args[3]);
             if (!CalcDb.Values.OwnedVariant.TryChangeScalar(lockCell, CalcDb.Foundation.VarType.I4, SessionLocale.Lcid, out CalcDb.Values.NativeVariant lockConverted, out _))
             {
-                CalcDb.Foundation.VarType lockVt = Args.TypeOf(args[3]) & ~CalcDb.Foundation.VarType.ByRef;
+                CalcDb.Foundation.VarType lockVt = (CalcDb.Foundation.VarType)ByRefValues.Dereference(lockCell).Vt;
                 if (lockVt is CalcDb.Foundation.VarType.Null or CalcDb.Foundation.VarType.Bstr)
                 {
                     // r-cursor-1b/open-lockedits-values: VT_NULL or non-numeric BSTR LockEdit fails 3421 without IErrorInfo.
@@ -1377,7 +1378,9 @@ internal sealed unsafe class DatabaseObject : DaoObject
             _tableDefs = new DefinitionCollection(DaoTypes.TableDefs, "DAO.TableDefs", this, names, make, holdsDatabase: false)
             {
                 Appender = static (c, arg) => c.Database.AppendTableDef(c, arg),
+                Deleter = static (c, arg) => c.Database.DeleteTableDef(c, arg),
                 Membership = TableDefsMembership,
+                AppendNewOnRelist = true, // r-q2-cursor-dao/enum-refresh-during-walk: Refresh appends newly created tables at the end
                 Refreshed = static (c, held) => c.Database.TableDefsRefreshed(held),
                 ClosedSource = "DAO.Database", // 3420 after Close from the owner (r-dao-1-err-1/life-database-workspace-close)
                 ObjectIndexFailure = (3421, DaoErrors.ConversionError), // r-dao-1-err-1/coll-tabledefs-index-variants
@@ -1388,13 +1391,37 @@ internal sealed unsafe class DatabaseObject : DaoObject
     }
 
     /// <summary>
+    /// <c>TableDefs.Delete(Name)</c>: when <paramref name="arg"/> names no member in the collection's current
+    /// (possibly stale) snapshot, ACE fails 3265 from <c>DAO.TableDefs</c> without an <c>IErrorInfo</c>
+    /// (<c>r-dao-1-err-1/coll-mutation-refresh</c> calls 17, 19: <c>tdfs.Delete("M1")</c> before <c>Refresh()</c>).
+    /// Deleting an existing table through DAO <c>TableDefs.Delete</c> remains a named gap.
+    /// </summary>
+    private CallResult DeleteTableDef(DefinitionCollection tableDefs, nint arg)
+    {
+        if (Args.Text(arg) is not { } name)
+        {
+            return CallResult.Fail(Failure.NotImplemented("DAO.TableDefs.Delete with a non-string Name"));
+        }
+        if (!tableDefs.ContainsName(name))
+        {
+            return tableDefs.Fail(3265, DaoErrors.ItemNotFound);
+        }
+        return CallResult.Fail(Failure.NotImplemented("DAO.TableDefs.Delete"));
+    }
+
+    /// <summary>
     /// The TableDefs members of the current catalog. ACE does not list the tables whose catalog flags carry 0x00030000
     /// (the MSysComplexType_* tables, flags 0x80030000 in r-cat-1b/tabledef-members-ddl; observed in that file only).
     /// </summary>
     private (IReadOnlyList<string> Names, Func<DefinitionCollection, int, DaoObject> Make, string? Failure) TableDefsMembership()
     {
         CatalogEntry[] tables = [.. Catalog.LocalTables(Format).Where(e => (e.Flags & HiddenFromTableDefs) == 0).OrderBy(e => e.Name, StringComparer.OrdinalIgnoreCase)];
-        return ([.. tables.Select(t => t.Name)], (c, i) => new TableDefObject(c, tables[i]), null);
+        return ([.. tables.Select(t => t.Name)], (c, i) =>
+        {
+            CatalogEntry entry = tables[i];
+            CatalogEntry? live = Catalog.LocalTables(Format).FirstOrDefault(e => e.Id == entry.Id && NamesEqual(e.Name, entry.Name));
+            return new TableDefObject(c, live ?? entry);
+        }, null);
     }
 
     /// <summary>
@@ -1493,6 +1520,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
             {
                 return CallResult.Fail(Failure.NotImplemented(stale));
             }
+            tableDefs.Relist();
         }
         else if (workspace.Depth > 0 && accepted.Accepted)
         {
@@ -2003,7 +2031,10 @@ internal sealed unsafe class DatabaseObject : DaoObject
     {
         _queries = null;
         _queriesFailure = null;
-        _tableDefs?.Relist();
+        // _tableDefs is intentionally not relisted here: SQL DDL (CREATE/DROP TABLE via Database.Execute) leaves a
+        // previously fetched TableDefs collection stale until Refresh() (r-dao-1-err-1/coll-mutation-refresh #11-18,
+        // r-q2-cursor-dao/enum-mutation-add-during-walk, r-q2-cursor-dao/enum-mutation-remove-during-walk).
+        // DAO TableDefs.Append relists _tableDefs explicitly in AppendTableDef.
         // _relations is intentionally not relisted here: a previously fetched Relations stays stale across SQL DDL
         // until Refresh (r-def-cat-txn/cat-drop-table-in-relation #44-45, #140, #188-189: Count stays 3 without
         // Refresh; r-fix-cat-txn/cat-drop-table-in-relation #46-48, #159, #205-207: Refresh updates Count to 2).

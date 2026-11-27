@@ -30,7 +30,9 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         .Get("BOF", (self, args) => Read(self, "BOF", r => Bool(r.Cursor.Bof)))
         .Get("NoMatch", (self, args) => Read(self, "NoMatch", r => Bool(r.Cursor.NoMatch)))
         .Get("Name", (self, args) => Live(self, r => Text(r.TableName)))
-        .Get("Fields", (self, args) => Live(self, r => Object(r.FieldsCollection)))
+        // r-def-cursor-dao/recordset-closed-member-inventory (call 28): Recordset.Fields still returns its Fields
+        // collection object after Close; subsequent Fields.Count/Item fail 3420 from DAO.Recordset.
+        .Get("Fields", (self, args) => Object(((RecordsetObject)self).FieldsCollection))
         .Method("MoveFirst", (self, args) => Moving(self, "MoveFirst", r => r.Moved(r.Cursor.MoveFirst())))
         .Method("MoveLast", (self, args) => args.Length > 0 && args[0] != 0 ? CallResult.Fail(Failure.NotImplemented("MoveLast with Options")) : Moving(self, "MoveLast", r => r.Moved(r.Cursor.MoveLast())))
         .Method("MoveNext", (self, args) => Moving(self, "MoveNext", r => r.Moved(r.Cursor.MoveNext())))
@@ -1095,21 +1097,16 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
     }
 
     /// <summary>
-    /// LockEdits put (R-CURSOR-1 CUR-EDIT conflicts; TXN-LOCAL): False makes the next Edit optimistic (the page is locked
-    /// at Update, with the row-image check and its one 3197), True pessimistic (the page is locked at Edit); the edit
-    /// frame takes it (<see cref="EditFrame.LockEdits"/>). Recorded on a dynaset before any edit (r-cursor-1/edit-conflict-
-    /// optimistic: LockEdits = False). A put on a snapshot or forward-only recordset, or with an edit pending, is not
-    /// recorded and is named.
+    /// LockEdits put (R-CURSOR-1 CUR-EDIT conflicts; TXN-LOCAL; r-def-cursor-dao/lockedits-put-after-open):
+    /// Table-type (1) and dynaset (2) accept Boolean puts both before and during a pending edit (updating
+    /// <see cref="_pessimistic"/> and <see cref="EditFrame.LockEdits"/> while preserving <c>EditMode</c>);
+    /// snapshot (4) and forward-only (8) fail 3251 from <c>DAO.Recordset</c> without an <c>IErrorInfo</c>.
     /// </summary>
     private CallResult SetLockEdits(nint value)
     {
         if (RecordsetType is not (1 or 2))
         {
-            return CallResult.Fail(Failure.NotModelled("NotModelled.Edit.LockEditsType", $"LockEdits put on a type {RecordsetType} recordset (not recorded)"));
-        }
-        if (_frame is { Mode: not EditMode.None })
-        {
-            return CallResult.Fail(Failure.NotModelled("NotModelled.Edit.LockEditsDuringEdit", "LockEdits put with an edit pending (not recorded)"));
+            return Fail(3251, DaoErrors.NotSupportedForType);
         }
         if (Args.Bool(value, omitted: true) is not bool pessimistic)
         {
@@ -1284,9 +1281,26 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
                             rowFailed = true;
                             break;
                         }
-                        return failure.Number == 3167
-                            ? CallResult.Fail(Failure.NotModelled("NotModelled.GetRowsDeletedRow", "GetRows on a row another call deleted: ACE's degenerate array (CUR-BULK) is not identified"))
-                            : CallResult.Fail(Failure.NotModelled("NotModelled.GetRowsCell", "GetRows of a cell Field.Value refuses: " + failure.Description));
+                        if (failure.Number == 3167)
+                        {
+                            if (rows > 0)
+                            {
+                                return CallResult.Fail(Failure.NotModelled(
+                                    "NotModelled.GetRowsDeletedRowLaterRow",
+                                    "GetRows meeting a deleted row after row 0 on a table recordset (only starting on a deleted row is recorded in r-q2-cursor-dao/bulk-getrows-cursor-on-deleted-row)"));
+                            }
+                            // r-q2-cursor-dao/bulk-getrows-cursor-on-deleted-row (calls 21, 32, 53 dynaset; call 74 table-type):
+                            // GetRows starting on a deleted row stops without advancing, leaving BOF=False, EOF=False and
+                            // DBEngine.Errors unchanged, and returns the degenerate [0+0, 0+colCount] Variant array.
+                            for (int i = rowStart; i < cells.Count; i++)
+                            {
+                                cells[i].Dispose();
+                            }
+                            cells.RemoveRange(rowStart, cells.Count - rowStart);
+                            rowFailed = true;
+                            break;
+                        }
+                        return CallResult.Fail(Failure.NotModelled("NotModelled.GetRowsCell", "GetRows of a cell Field.Value refuses: " + failure.Description));
                     }
                     cells.Add(Owned(cell));
                 }

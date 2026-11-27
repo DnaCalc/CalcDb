@@ -402,10 +402,12 @@ internal interface IDaoEnumerableCollection
 
 /// <summary>
 /// COM <c>IEnumVARIANT</c> (<c>{00020404-0000-0000-C000-000000000046}</c>) over a DAO collection
-/// (r-q2-wire/obs-errors-foreach-enumeration, r-q2-wire/retain-enum-dao-after-close):
+/// (r-q2-wire/obs-errors-foreach-enumeration, r-q2-wire/retain-enum-dao-after-close,
+/// r-q2-cursor-dao/enum-dao-child-collections, enum-dao-top-level-collections):
 /// <c>Next</c> returns <c>S_OK</c> with <c>VT_DISPATCH</c> items, <c>S_FALSE</c> at/past end, or <c>0x800A0D5C</c>
 /// (DAO 3420 recorded in <c>DBEngine.Errors</c> with the owner's closed source) when the collection is invalid;
-/// <c>Skip</c> returns <c>E_FAIL</c> (<c>0x80004005</c>); <c>Reset</c> and <c>Clone</c> return <c>S_OK</c>.
+/// <c>Skip</c> advances and returns <c>S_OK</c> while <c>_index + celt &lt;= count</c> on a valid collection and
+/// <c>E_FAIL</c> (<c>0x80004005</c>) when past the end or invalid; <c>Reset</c> and <c>Clone</c> return <c>S_OK</c>.
 /// </summary>
 internal sealed unsafe class DaoEnumVariant : ComObject
 {
@@ -463,11 +465,25 @@ internal sealed unsafe class DaoEnumVariant : ComObject
         return fetched == celt ? HResults.S_OK : HResults.S_FALSE;
     }
 
-    /// <summary>ACE DAO enumerators always return E_FAIL (0x80004005) on Skip (r-q2-wire/obs-errors-foreach-enumeration, retain-enum-dao-after-close).</summary>
-    private static int Skip(uint celt)
+    /// <summary>
+    /// ACE DAO enumerators advance and return S_OK when <c>_index + celt &lt;= count</c> on a valid collection
+    /// (r-q2-cursor-dao/enum-dao-child-collections, enum-dao-top-level-collections), and return E_FAIL (0x80004005)
+    /// when past the end or invalid (r-q2-wire/obs-errors-foreach-enumeration, retain-enum-dao-after-close).
+    /// </summary>
+    private int Skip(uint celt)
     {
-        _ = celt;
-        return EFailHResult;
+        if (_collection.IsEnumInvalid)
+        {
+            return EFailHResult;
+        }
+        int count = _collection.EnumCount;
+        if ((ulong)_index + celt > (ulong)count)
+        {
+            _index = count;
+            return EFailHResult;
+        }
+        _index += (int)celt;
+        return HResults.S_OK;
     }
 
     private int Reset()
@@ -518,7 +534,7 @@ internal sealed unsafe class DaoEnumVariant : ComObject
         Recover<DaoEnumVariant>(self).Next(celt, rgVar, pceltFetched);
 
     [UnmanagedCallersOnly]
-    private static int SkipEntry(nint self, uint celt) => Skip(celt);
+    private static int SkipEntry(nint self, uint celt) => Recover<DaoEnumVariant>(self).Skip(celt);
 
     [UnmanagedCallersOnly]
     private static int ResetEntry(nint self) => Recover<DaoEnumVariant>(self).Reset();
