@@ -3059,7 +3059,14 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
         {
             result = default;
             VarType vt = (VarType)value.Vt;
-            if (vt == VarType.Null || vt == to.Target)
+            if (vt == VarType.Null)
+            {
+                result = to.NullToFalse
+                    ? new NativeVariant { Vt = (ushort)VarType.Bool, Int64 = 0 }
+                    : Copy(value);
+                return null;
+            }
+            if (vt == to.Target)
             {
                 result = Copy(value);
                 return null;

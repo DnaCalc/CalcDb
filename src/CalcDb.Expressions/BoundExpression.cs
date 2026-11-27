@@ -32,7 +32,7 @@ public readonly record struct ColumnBinding(int Source, ColumnDescriptor Column)
 /// result, W-06/parser-binder-scan): its slot in <see cref="IExpressionRow.Slot"/>, its declared type, its static type,
 /// and its operand origin.
 /// </summary>
-public readonly record struct SlotBinding(int Slot, VarType Declared, StaticType Type, OperandOrigin Origin = OperandOrigin.Field, bool IsExtendedDateTime = false);
+public readonly record struct SlotBinding(int Slot, VarType Declared, StaticType Type, OperandOrigin Origin = OperandOrigin.Field, bool IsExtendedDateTime = false, bool IsGuid = false);
 
 /// <summary>The 8 SQL domain aggregate functions (II-10 §27; qualified.md R-EXPR-1 DomainFunction).</summary>
 public enum DomainFunction : byte
@@ -360,17 +360,18 @@ public sealed unsafe partial class BoundExpression : IDisposable
 
     /// <summary>
     /// Bind one node of a parsed expression, optionally admitting a bare top-level reference to a stored Binary (native
-    /// type 9) or OLE / Long Binary (native type 11) column for SELECT projection (evidence/r-wire/read-dao,
-    /// r-wire/read-sql, r-wire/ado-getrows-tags, r-ado-1b/view-sort-grammar). Any expression over such a column stays
-    /// refused as NotModelled.FieldType.
+    /// type 9) or OLE / Long Binary (native type 11) column (evidence/r-wire/read-dao, r-wire/read-sql,
+    /// r-wire/ado-getrows-tags, r-ado-1b/view-sort-grammar), and/or a bare top-level reference to a stored GUID (native
+    /// type 15) column (evidence/r-q54-excl-ddl-ix-cmd/field-meta-and-lockwait-accdb, field-meta-and-lockwait-mdb
+    /// calls 135-152) for SELECT projection. Any expression over such a column stays refused as NotModelled.FieldType.
     /// </summary>
-    public static BoundExpression? Bind(SyntaxNode root, ExpressionSchema schema, ExpressionContext context, bool allowBareBinary, out ExpressionFailure? failure)
+    public static BoundExpression? Bind(SyntaxNode root, ExpressionSchema schema, ExpressionContext context, bool allowBareBinary, out ExpressionFailure? failure, bool allowBareGuid = false)
     {
         var b = new Builder(schema, context.Use);
         StaticType type;
         try
         {
-            type = b.Bind(root, 0, allowBareBinary).Type;
+            type = b.Bind(root, 0, allowBareBinary, allowBareGuid).Type;
         }
         catch (BindError e)
         {
@@ -1262,6 +1263,16 @@ public sealed unsafe partial class BoundExpression : IDisposable
             }
             return true;
         }
+        if (v.Kind == NativeKind.Guid && v.Bytes is { Length: 16 } guidBytes)
+        {
+            // evidence/r-q54-excl-ddl-ix-cmd/field-meta-and-lockwait-accdb, field-meta-and-lockwait-mdb calls 136, 144, 152:
+            // GUID projects as VT_BSTR "{guid {XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX}}" (uppercase braced).
+            string formatted = "{guid " + new Guid(guidBytes).ToString("B").ToUpperInvariant() + "}";
+            nint ptr = Scratch(index, formatted.Length);
+            formatted.AsSpan().CopyTo(new Span<char>((void*)ptr, formatted.Length));
+            slot.Value = new NativeVariant { Vt = (ushort)VarType.Bstr, Pointer = ptr };
+            return true;
+        }
         slot.Value = v.Kind switch
         {
             NativeKind.Null => new NativeVariant { Vt = (ushort)VarType.Null },
@@ -1410,13 +1421,13 @@ public sealed unsafe partial class BoundExpression : IDisposable
         private static BindError Open(string name, string detail) => new(ExpressionFailure.Open(ExpressionPhase.Bind, name, detail));
 
         /// <summary>Bind <paramref name="node"/>, its value landing at stack position <paramref name="at"/>.</summary>
-        public Bound Bind(SyntaxNode node, int at, bool allowBinary = false)
+        public Bound Bind(SyntaxNode node, int at, bool allowBinary = false, bool allowGuid = false)
         {
             if (schema.Substitute(node) is { } slot)
             {
-                if (slot.Declared == (VarType.Array | VarType.UI1) && !slot.IsExtendedDateTime)
+                if ((slot.Declared == (VarType.Array | VarType.UI1) && !slot.IsExtendedDateTime) || slot.IsGuid)
                 {
-                    throw Open("NotModelled.FieldType", $"derived or slot field {node.Text} of binary type in an expression");
+                    throw Open("NotModelled.FieldType", $"derived or slot field {node.Text} of {(slot.IsGuid ? "GUID" : "binary")} type in an expression");
                 }
                 Program.Add(new Instruction(Op.LoadSlot, slot.Slot, 0, slot.IsExtendedDateTime));
                 UsesSlots = true;
@@ -1426,7 +1437,7 @@ public sealed unsafe partial class BoundExpression : IDisposable
             Bound result = node.Kind switch
             {
                 SyntaxKind.Literal => Literal(node),
-                SyntaxKind.Name => Field(node, allowBinary),
+                SyntaxKind.Name => Field(node, allowBinary, allowGuid),
                 SyntaxKind.Unary => Unary(node, at),
                 SyntaxKind.Binary => Binary(node, at),
                 SyntaxKind.Call => Call(node, at),
@@ -1458,7 +1469,7 @@ public sealed unsafe partial class BoundExpression : IDisposable
         /// A field by name, as the schema resolves it (the table scope: case-insensitive, a qualified name such as F.N is not
         /// resolved: 3070 with the name as written). A name the scope takes as a parameter binds as a Null placeholder.
         /// </summary>
-        private Bound Field(SyntaxNode node, bool allowBinary)
+        private Bound Field(SyntaxNode node, bool allowBinary, bool allowGuid)
         {
             if (schema.Resolve(node.Text!, out ExpressionFailure? failure) is not { } binding)
             {
@@ -1492,6 +1503,7 @@ public sealed unsafe partial class BoundExpression : IDisposable
                 NativeTypes.Numeric => VarType.Decimal,
                 NativeTypes.ExtendedDateTime when column.CalculatedResultType is null => VarType.Array | VarType.UI1,
                 NativeTypes.Binary or NativeTypes.Ole when allowBinary && column.CalculatedResultType is null => VarType.Array | VarType.UI1,
+                NativeTypes.Guid when allowGuid && column.CalculatedResultType is null => VarType.Bstr,
                 _ => throw Open("NotModelled.FieldType", $"field {column.Name} of native type {column.TypeCode} in an expression (W-04/private-codecs)"),
             };
             int index = Fields.IndexOf(binding);

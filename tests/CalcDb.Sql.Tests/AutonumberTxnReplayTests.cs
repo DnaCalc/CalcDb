@@ -182,15 +182,28 @@ public sealed class AutonumberTxnReplayTests
             Assert.Equal("NotModelled.Edit.AutoNumberReseed", inTxnUk.Failure.NotModelled);
         }
 
-        // 4. Non-3464 late expression error (error 11 division by zero on row 3) in INSERT...SELECT (dbFailOnError):
-        // stays NotModelled.InsertSelectLateExpressionFailure.
+        // 4. Late division-by-zero (error 11 on row 3) in autocommit INSERT...SELECT (dbFailOnError) targeting a
+        // generated AutoNumber streams the prefix rows, calls RecordStatementConversionFailure(11), and propagates
+        // TransactionCoordinator.Rollback()'s ResolutionOutcome (9dnf -> NotModelled.Edit.CounterWrite until
+        // TransactionCoordinator.cs admits _statementRefusal == 11 for r-q18-statements/ins-div0-fail), writing 0 bytes;
+        // the same shape inside BeginTrans stays refused as NotModelled.InsertSelectLateExpressionFailure.
         RecordPlan convPlan = LoadPlan("ins-conv-3464-fail", FirstA1("ins-conv-3464-fail"));
         using (var db = new KeptSetupDatabase(convPlan.SetupImage, convPlan.Question))
         {
+            byte[] beforeDivZero = db.Image.Snapshot();
             ActionOutcome lateDivZero = ActionExecutor.Execute("INSERT INTO An (K, S) SELECT 100 \\ (N - 3), S FROM Src ORDER BY N", db, options: 128);
             Assert.False(lateDivZero.Succeeded);
             Assert.True(lateDivZero.Failure!.IsNotModelled, lateDivZero.Failure.ToString());
-            Assert.Equal("NotModelled.InsertSelectLateExpressionFailure", lateDivZero.Failure.NotModelled);
+            Assert.Equal("NotModelled.Edit.CounterWrite", lateDivZero.Failure.NotModelled);
+            Assert.Equal(beforeDivZero, db.Image.Snapshot());
+        }
+        using (var db = new KeptSetupDatabase(convPlan.SetupImage, convPlan.Question))
+        {
+            Assert.Null(db.Workspace.BeginTrans());
+            ActionOutcome inTxnDivZero = ActionExecutor.Execute("INSERT INTO An (K, S) SELECT 100 \\ (N - 3), S FROM Src ORDER BY N", db, options: 128);
+            Assert.False(inTxnDivZero.Succeeded);
+            Assert.True(inTxnDivZero.Failure!.IsNotModelled, inTxnDivZero.Failure.ToString());
+            Assert.Equal("NotModelled.InsertSelectLateExpressionFailure", inTxnDivZero.Failure.NotModelled);
         }
 
         // 5. Jet 4 MDB existing-page Rollback (no new page taken) and Jet 4 MDB INSERT VALUES new-page Rollback:

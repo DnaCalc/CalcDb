@@ -470,10 +470,14 @@ public sealed unsafe class DaoIdleDynasetMetaTests : IDisposable
             rows.ReleaseUntaken();
             Ok(Method(rs, "Close"));
         }
-        CallResult guidSelect = Method(db, "OpenRecordset", "SELECT G FROM AllTypes", 2);
-        Assert.NotNull(guidSelect.Failure);
-        Assert.Equal(FailureKind.NotModelled, guidSelect.Failure!.Kind);
-        Assert.StartsWith("NotModelled.FieldType:", guidSelect.Failure.Description);
+        // guid-select-proj (evidence/r-q54-excl-ddl-ix-cmd/field-meta-and-lockwait-{accdb,mdb} calls 135-152):
+        // bare GUID projection succeeds cleanly; expressions over GUID stay refused as NotModelled.FieldType.
+        SelectRecordsetObject guidRs = Recover<SelectRecordsetObject>(Ok(Method(db, "OpenRecordset", "SELECT G FROM AllTypes", 2)));
+        Ok(Method(guidRs, "Close"));
+        CallResult guidExpr = Method(db, "OpenRecordset", "SELECT G + 1 FROM AllTypes", 2);
+        Assert.NotNull(guidExpr.Failure);
+        Assert.Equal(FailureKind.NotModelled, guidExpr.Failure!.Kind);
+        Assert.StartsWith("NotModelled.FieldType:", guidExpr.Failure.Description);
 
         Ok(Method(db, "Close"));
     }

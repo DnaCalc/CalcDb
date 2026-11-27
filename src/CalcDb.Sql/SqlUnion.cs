@@ -8,7 +8,7 @@ namespace CalcDb.Sql;
 /// How a union column converts each arm's value (II-11 §15: the arm-to-output conversion policy): to the column's
 /// VARIANT type, with its DAO type.
 /// </summary>
-internal readonly record struct UnionConversion(VarType Target, int DaoType);
+internal readonly record struct UnionConversion(VarType Target, int DaoType, bool NullToFalse = false);
 
 /// <summary>
 /// The output type of a union column (qualified.md R-SQL-1 SQL-UNION-01..04 and the Null-first follow-up;
@@ -81,9 +81,15 @@ internal static class UnionTypes
         }
         if (hasNull && type == 1 && armAll.Any(all => !all))
         {
-            // r-q-expr-sql/union-null-first rs17 (SELECT y AS v FROM Ut UNION SELECT Null FROM One): ACE coerces Null
-            // to False (VT_BOOL 0) in a distinct Yes/No UNION; non-literal Null expressions and mixed arms are unprobed.
-            return Open("a Null literal in a later arm of a distinct UNION over Yes/No (r-q-expr-sql/union-null-first rs17 coerces Null to False)");
+            if (armAll.Any(all => all))
+            {
+                return Open("a Null literal in a later arm of a mixed UNION / UNION ALL over Yes/No");
+            }
+            // r-q-expr-sql/union-null-first rs17 (calls 262-270: SELECT y AS v FROM Ut UNION SELECT Null FROM One):
+            // a distinct Yes/No UNION with a later Null literal arm coerces Null to False (VT_BOOL 0), Field.Type 1, Size 1.
+            conversion = new UnionConversion(VarType.Bool, 1, NullToFalse: true);
+            size = 1;
+            return null;
         }
         conversion = Of(type);
         size = type switch

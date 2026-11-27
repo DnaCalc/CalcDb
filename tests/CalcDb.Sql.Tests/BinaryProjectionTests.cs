@@ -140,11 +140,26 @@ public sealed unsafe class BinaryProjectionTests
             }
         }
 
-        // T also has a GUID column (native type 15); SELECT * FROM T must still refuse native type 15 by name.
+        // T also has a GUID column (native type 15); SELECT * FROM T binds and projects G (guid-select-proj,
+        // evidence/r-q54-excl-ddl-ix-cmd/field-meta-and-lockwait-{accdb,mdb} calls 135-152), while expressions and
+        // ORDER BY over G stay refused as NotModelled.FieldType.
         using (BoundSelect? guidStar = BoundSelect.Prepare("SELECT * FROM T", db, out SqlFailure? gf))
         {
-            Assert.Null(guidStar);
-            Assert.Equal("NotModelled.FieldType", gf?.NotModelled);
+            Assert.Null(gf);
+            int guidIndex = guidStar!.Columns.ToList().FindIndex(c => c.Name == "G");
+            Assert.True(guidIndex >= 0);
+            Assert.Equal(15, guidStar.Columns[guidIndex].FieldType);
+            Assert.Equal(16, guidStar.Columns[guidIndex].Size);
+        }
+        using (BoundSelect? guidExpr = BoundSelect.Prepare("SELECT G + 1 FROM T", db, out SqlFailure? gef))
+        {
+            Assert.Null(guidExpr);
+            Assert.Equal("NotModelled.FieldType", gef?.NotModelled);
+        }
+        using (BoundSelect? guidOrder = BoundSelect.Prepare("SELECT ID FROM T ORDER BY G", db, out SqlFailure? gof))
+        {
+            Assert.Null(guidOrder);
+            Assert.Equal("NotModelled.FieldType", gof?.NotModelled);
         }
 
         // SELECT * over W (r-wire-dao.accdb: contains FBin type 9 and FOle type 11, no GUID) binds and projects both.

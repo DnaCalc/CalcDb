@@ -231,14 +231,12 @@ public sealed unsafe class AdoImmediateEditTests
         nint cn = OpenAceConnection(dbPath);
         try
         {
-            // Upstream CalcDb.Sql refuses GUID column G (native type 15) in SELECT * FROM T ORDER BY ID.
-            // Assert the exact named refusal (tracked in Open) before exercising the remaining 36 recorded pairs on T.
+            // guid-select-proj (evidence/r-q54-excl-ddl-ix-cmd/field-meta-and-lockwait-{accdb,mdb} calls 135-152):
+            // SELECT * FROM T ORDER BY ID now projects GUID column G (native type 15) cleanly.
             nint rsStar = New(OwnRecordset);
             Assert.Null(Put(rsStar, "CursorLocation", 2).Failure);
-            AssertError(
-                Call(rsStar, "Open", "SELECT * FROM T ORDER BY ID", new Dispatch(cn), 1, 3, 1),
-                HResults.E_NOTIMPL,
-                expectedDescription: "NotModelled.FieldType: field G of native type 15 in an expression (W-04/private-codecs)");
+            Assert.Null(Call(rsStar, "Open", "SELECT * FROM T ORDER BY ID", new Dispatch(cn), 1, 3, 1).Failure);
+            Assert.Null(Call(rsStar, "Close").Failure);
             Release(rsStar);
 
             nint rs = New(OwnRecordset);
