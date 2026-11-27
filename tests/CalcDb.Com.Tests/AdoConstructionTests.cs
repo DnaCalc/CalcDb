@@ -195,7 +195,7 @@ public sealed unsafe class AdoConstructionTests
         Assert.Null(Call(prs, "Refresh").Failure);
 
         nint untyped = (nint)Call(cmd, "CreateParameter").Value!;
-        Assert.Equal("", Get(untyped, "Name"));
+        Assert.Null(Get(untyped, "Name")); // null BSTR pointer (r-ado-1b/param-create-forms #18)
         Assert.Equal(0, Get(untyped, "Type"));
         Assert.Equal(1, Get(untyped, "Direction"));
         Assert.Equal(0, Get(untyped, "Size"));

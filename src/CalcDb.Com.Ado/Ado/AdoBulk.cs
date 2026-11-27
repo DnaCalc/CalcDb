@@ -42,7 +42,7 @@ internal static unsafe class AdoBulk
             maxRows = r;
         }
 
-        if (!TryResolveStartIndex(rs, startArg, out int startIndex, out CallResult? startFailure))
+        if (!TryResolveStartIndex(rs, startArg, maxRows, out int startIndex, out CallResult? startFailure))
         {
             return startFailure!.Value;
         }
@@ -377,7 +377,7 @@ internal static unsafe class AdoBulk
         return false;
     }
 
-    private static bool TryResolveStartIndex(RecordsetObject rs, nint startArg, out int startIndex, out CallResult? failure)
+    private static bool TryResolveStartIndex(RecordsetObject rs, nint startArg, int maxRows, out int startIndex, out CallResult? failure)
     {
         startIndex = 0;
         failure = null;
@@ -385,6 +385,13 @@ internal static unsafe class AdoBulk
         {
             if (rs.IsAtBofOrEof)
             {
+                if (maxRows == -1)
+                {
+                    // r-fix-wire-ado/ado-command-parameters-fresh #115, #125:
+                    // Recordset.GetRows(-1) on an empty recordset (BOF/EOF) fails 0x800A0BCD (NoCurrentRecord).
+                    failure = rs.Fail(AdoErrors.NoCurrentRecord);
+                    return false;
+                }
                 failure = CallResult.Fail(Failure.NotImplemented("Recordset.GetRows at BOF/EOF with default Start (not recorded)"));
                 return false;
             }

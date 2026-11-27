@@ -182,7 +182,8 @@ internal sealed unsafe class SelectRowSource : IAdoRowSource
         out MappedProviderError? providerError,
         out Failure? refusal,
         out AdoFieldDescriptor[]? failedOpenColumns,
-        IReadOnlyList<AdoCommandParam>? commandParameters = null)
+        IReadOnlyList<AdoCommandParam>? commandParameters = null,
+        bool commandPrepared = false)
     {
         providerError = null;
         refusal = null;
@@ -205,7 +206,9 @@ internal sealed unsafe class SelectRowSource : IAdoRowSource
                 commandParameters,
                 isSavedQuery,
                 out providerError,
-                out refusal);
+                out refusal,
+                prepared: commandPrepared,
+                effectiveSql: effectiveSql);
             if (providerError is not null || refusal is not null)
             {
                 plan.Dispose();
@@ -5322,7 +5325,8 @@ internal sealed unsafe class RecordsetObject : AdoObject
         bool lockPessimistic = false,
         bool preferClientBatch = false,
         bool clientBatchOptimistic = false,
-        IReadOnlyList<AdoCommandParam>? commandParameters = null) =>
+        IReadOnlyList<AdoCommandParam>? commandParameters = null,
+        bool commandPrepared = false) =>
         OpenRowSource(
             session,
             originalSource,
@@ -5338,7 +5342,8 @@ internal sealed unsafe class RecordsetObject : AdoObject
             lockPessimistic,
             preferClientBatch,
             clientBatchOptimistic,
-            commandParameters);
+            commandParameters,
+            commandPrepared);
 
     private static IAdoRowSource? OpenRowSource(
         AdoOpenSession session,
@@ -5355,7 +5360,8 @@ internal sealed unsafe class RecordsetObject : AdoObject
         bool lockPessimistic = false,
         bool preferClientBatch = false,
         bool clientBatchOptimistic = false,
-        IReadOnlyList<AdoCommandParam>? commandParameters = null)
+        IReadOnlyList<AdoCommandParam>? commandParameters = null,
+        bool commandPrepared = false)
     {
         providerError = null;
         refusal = null;
@@ -5401,7 +5407,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
             try
             {
                 IReadOnlyList<AdoCommandParam>? effectiveParams = commandParameters ?? execLiteralArgs;
-                return OpenSavedQuery(session, queryName, selectContext, preferKeyset, updatableKeyset, lockPessimistic, preferClientBatch, clientBatchOptimistic, out providerError, out refusal, out failedOpenColumns, effectiveParams);
+                return OpenSavedQuery(session, queryName, selectContext, preferKeyset, updatableKeyset, lockPessimistic, preferClientBatch, clientBatchOptimistic, out providerError, out refusal, out failedOpenColumns, effectiveParams, commandPrepared);
             }
             finally
             {
@@ -5514,7 +5520,8 @@ internal sealed unsafe class RecordsetObject : AdoObject
         out MappedProviderError? providerError,
         out Failure? refusal,
         out AdoFieldDescriptor[]? failedOpenColumns,
-        IReadOnlyList<AdoCommandParam>? commandParameters = null)
+        IReadOnlyList<AdoCommandParam>? commandParameters = null,
+        bool commandPrepared = false)
     {
         failedOpenColumns = null;
         bool hasCommandParams = commandParameters is { Count: > 0 } || (!isSavedQuery && sql.Contains('?'));
@@ -5541,7 +5548,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
             }
         }
         AdoSelectContext effectiveContext = isSavedQuery ? selectContext with { Route = AdoSelectRoute.SavedQuery } : selectContext;
-        return SelectRowSource.Open(session, sql, isSavedQuery, effectiveContext, out providerError, out refusal, out failedOpenColumns, commandParameters);
+        return SelectRowSource.Open(session, sql, isSavedQuery, effectiveContext, out providerError, out refusal, out failedOpenColumns, commandParameters, commandPrepared);
     }
 
     private static IAdoRowSource? OpenSavedQuery(
@@ -5556,7 +5563,8 @@ internal sealed unsafe class RecordsetObject : AdoObject
         out MappedProviderError? providerError,
         out Failure? refusal,
         out AdoFieldDescriptor[]? failedOpenColumns,
-        IReadOnlyList<AdoCommandParam>? commandParameters = null)
+        IReadOnlyList<AdoCommandParam>? commandParameters = null,
+        bool commandPrepared = false)
     {
         providerError = null;
         refusal = null;
@@ -5572,7 +5580,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
             providerError = AdoSqlErrors.TableOrQueryNotFound(queryName);
             return null;
         }
-        return OpenSavedQueryDirect(session, saved, selectContext, preferKeyset, updatableKeyset, lockPessimistic, preferClientBatch, clientBatchOptimistic, out providerError, out refusal, out failedOpenColumns, commandParameters);
+        return OpenSavedQueryDirect(session, saved, selectContext, preferKeyset, updatableKeyset, lockPessimistic, preferClientBatch, clientBatchOptimistic, out providerError, out refusal, out failedOpenColumns, commandParameters, commandPrepared);
     }
 
     private static IAdoRowSource? OpenSavedQueryDirect(
@@ -5587,7 +5595,8 @@ internal sealed unsafe class RecordsetObject : AdoObject
         out MappedProviderError? providerError,
         out Failure? refusal,
         out AdoFieldDescriptor[]? failedOpenColumns,
-        IReadOnlyList<AdoCommandParam>? commandParameters = null)
+        IReadOnlyList<AdoCommandParam>? commandParameters = null,
+        bool commandPrepared = false)
     {
         providerError = null;
         refusal = null;
@@ -5603,7 +5612,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
             refusal = Failure.NotModelled("NotModelled.QuerySqlShape", $"the SQL of '{saved.Name}': {rendered.NotModelled}");
             return null;
         }
-        return OpenSelectOrKeyset(session, sql, isSavedQuery: true, selectContext, preferKeyset, updatableKeyset, lockPessimistic, preferClientBatch, clientBatchOptimistic, out providerError, out refusal, out failedOpenColumns, commandParameters);
+        return OpenSelectOrKeyset(session, sql, isSavedQuery: true, selectContext, preferKeyset, updatableKeyset, lockPessimistic, preferClientBatch, clientBatchOptimistic, out providerError, out refusal, out failedOpenColumns, commandParameters, commandPrepared);
     }
 
     /// <summary>

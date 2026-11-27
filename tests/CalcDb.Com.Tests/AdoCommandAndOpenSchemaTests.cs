@@ -263,9 +263,9 @@ public sealed unsafe class AdoCommandAndOpenSchemaTests
                 Assert.Null(Call(rsReuse, "Close").Failure);
                 Release(rsReuse);
 
-                // Empty Parameters.Count on an open adCmdText ?-command still refuses by name (implicit refresh; r-ado-1b/param-refresh-after-text-change).
+                // Empty Parameters.Count on an open adCmdText ?-command implicitly derives the ? parameter (r-ado-1b/param-refresh-after-text-change, r-fix-wire-ado/ado-params-manual-append).
                 nint psel = (nint)Get(cmdSel, "Parameters")!;
-                Assert.Equal(HResults.E_NOTIMPL, TryGet(psel, "Count").Failure!.Value.Scode);
+                Assert.Equal(1, Get(psel, "Count"));
                 Release(psel);
 
                 // CreateParameter wrong type -> 0x800A0D5D (#174).

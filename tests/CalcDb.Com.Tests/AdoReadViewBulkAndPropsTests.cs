@@ -1110,15 +1110,21 @@ public sealed unsafe class AdoReadViewBulkAndPropsTests
             Assert.Null(Call(prs, "Refresh").Failure);
             Assert.Equal(0, Get(prs, "Count"));
 
-            // Append a Parameter on an open connection:
-            // - Parameters.Refresh() succeeds and keeps Count == 1 (evidence/r-ado-1b/cmd-before-connection #37-38).
-            // - Connection.Close() clears the bound Command's non-empty Parameters so Count drops from 1 to 0
+            // Append a Parameter on an open adCmdStoredProc connection:
+            // - Parameters.Refresh() on adCmdStoredProc clears appended parameters and leaves Count == 0
+            //   (evidence/r-fix-wire-ado/ado-params-saved-query #19, evidence/r-ado-1b/param-refresh-after-text-change #44/#79).
+            // - Re-append a Parameter, then Connection.Close() clears the bound Command's non-empty Parameters so Count drops from 1 to 0
             //   (evidence/r-ado-1b/param-connection-change #48-49), Parameters.Refresh succeeds, and Command.Execute fails 0x800A0E7D.
             nint p = (nint)Call(cmd, "CreateParameter", "p1", 3, 1, 4, 20).Value!;
             Assert.Null(Call(prs, "Append", new Dispatch(p)).Failure);
             Release(p);
             Assert.Equal(1, Get(prs, "Count"));
             Assert.Null(Call(prs, "Refresh").Failure);
+            Assert.Equal(0, Get(prs, "Count"));
+
+            nint pClose = (nint)Call(cmd, "CreateParameter", "p2", 3, 1, 4, 20).Value!;
+            Assert.Null(Call(prs, "Append", new Dispatch(pClose)).Failure);
+            Release(pClose);
             Assert.Equal(1, Get(prs, "Count"));
 
             Assert.Null(Call(cn, "Close").Failure);

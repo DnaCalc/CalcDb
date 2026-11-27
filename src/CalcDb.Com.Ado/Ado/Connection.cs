@@ -682,46 +682,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
             synthetic.Release();
         }
         Failure f = AdoFailure(AdoErrors.ArgumentsWrongType, Source, Declaration.Iid, publishesErrorInfo: true);
-        if (OleAut.CreateErrorInfo(out nint create) >= 0 && create != 0)
-        {
-            nint** vt = (nint**)create;
-            Guid g = f.ErrorInfoIid;
-            ((delegate* unmanaged<nint, Guid*, int>)(*vt)[3])(create, &g);
-            fixed (char* s = f.Source)
-            {
-                ((delegate* unmanaged<nint, char*, int>)(*vt)[4])(create, s);
-            }
-            fixed (char* d = f.Description)
-            {
-                ((delegate* unmanaged<nint, char*, int>)(*vt)[5])(create, d);
-            }
-            if (f.HelpFile is { } file)
-            {
-                fixed (char* h = file)
-                {
-                    ((delegate* unmanaged<nint, char*, int>)(*vt)[6])(create, h);
-                }
-            }
-            ((delegate* unmanaged<nint, uint, int>)(*vt)[7])(create, (uint)f.HelpContext);
-            Guid errorInfoIid = ComIids.IErrorInfo;
-            nint errInfo = 0;
-            if (((delegate* unmanaged<nint, Guid*, nint*, int>)(*vt)[0])(create, &errorInfoIid, &errInfo) >= 0 && errInfo != 0)
-            {
-                _ = OleAut.SetErrorInfo(0, errInfo);
-                ((delegate* unmanaged<nint, uint>)(*(nint**)errInfo)[2])(errInfo);
-            }
-            ((delegate* unmanaged<nint, uint>)(*vt)[2])(create);
-        }
-        if (info is not null)
-        {
-            *info = default;
-            info->Source = OwnedVariant.FromText(f.Source).TransferBstr();
-            info->Description = OwnedVariant.FromText(f.Description).TransferBstr();
-            info->HelpFile = f.HelpFile is null ? 0 : OwnedVariant.FromText(f.HelpFile).TransferBstr();
-            info->HelpContext = (uint)f.HelpContext;
-            info->Scode = f.Scode;
-        }
-        return HResults.DISP_E_EXCEPTION;
+        return ErrorPublication.ToExcepInfo(f, info);
     }
 
     /// <summary>Mode values accepted on a closed Connection in the records (prop-modes, error-open-failures, r-q41-create-session-counter/excl-open-ado-*); 99 is refused 0x800A0C93.</summary>
@@ -2188,6 +2149,11 @@ internal sealed unsafe class ConnectionObject : AdoObject
             }
             options = parsedOpt;
         }
+        if (explicitCommand is not null && options == 12345)
+        {
+            // r-ado-1b/cmd-execute-args #96: invalid Options=12345 on Command.Execute fails 0x800A0BB9 (ADODB.Command).
+            return explicitCommand.Fail(AdoErrors.ArgumentsWrongType);
+        }
         if (!AdoSqlText.TryDecodeOptions(options, callerName, allowNoRecords: true, out int cmdType, out bool noRecords, out Failure? optRefusal))
         {
             return CallResult.Fail(optRefusal!);
@@ -2196,6 +2162,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
         {
             cmdType = defaultCommandType;
         }
+        explicitCommand?.OnCommandExecuted();
 
         void EmitWillExec() => AdoEvents.WillExecute(_events, commandText, -1, -1, options, explicitCommand, null, this);
 
@@ -2375,7 +2342,8 @@ internal sealed unsafe class ConnectionObject : AdoObject
             out MappedProviderError? providerError,
             out Failure? refusal,
             out _,
-            commandParameters: commandParameters);
+            commandParameters: commandParameters,
+            commandPrepared: explicitCommand?.PreparedValue ?? false);
 
         if (rowSource is null)
         {
