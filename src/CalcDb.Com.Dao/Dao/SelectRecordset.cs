@@ -2786,12 +2786,12 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
             _joinCurrentChildAbsent = false;
             _joinReaders![0]!.Position(r0);
             _joinReaders[1]!.Position(r1);
-            CallResult edit0 = EditPublication.Of(frame.Edit());
+            CallResult edit0 = EditPublication.Of(frame.Edit(), Database);
             if (edit0.Failure is not null)
             {
                 return edit0;
             }
-            CallResult edit1 = EditPublication.Of(frame1!.Edit());
+            CallResult edit1 = EditPublication.Of(frame1!.Edit(), Database);
             if (edit1.Failure is not null)
             {
                 frame.Discard();
@@ -2807,13 +2807,13 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
             // attempts an insert (failing 3058 when child PK is Null).
             _joinCurrentChildAbsent = true;
             _joinReaders![0]!.Position(r0);
-            CallResult edit0 = EditPublication.Of(frame.Edit());
+            CallResult edit0 = EditPublication.Of(frame.Edit(), Database);
             if (edit0.Failure is not null)
             {
                 _joinCurrentChildAbsent = false;
                 return edit0;
             }
-            CallResult add1 = EditPublication.Of(frame1!.AddNew());
+            CallResult add1 = EditPublication.Of(frame1!.AddNew(), Database);
             if (add1.Failure is not null)
             {
                 frame.Discard();
@@ -2973,7 +2973,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         }
         _editReader!.Position(rowId);
         UpdateOutcome outcome = frame.Delete();
-        CallResult result = EditPublication.Of(outcome);
+        CallResult result = EditPublication.Of(outcome, Database);
         if (result.Failure is null)
         {
             if (outcome.Change is { } change && Database.Workspace.Transactions.Depth == 0)
@@ -3025,7 +3025,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
             int active = _joinAddNew ? _joinChildSource : (_dirtyJoinSource >= 0 ? _dirtyJoinSource : 0);
             EditFrame targetFrame = _joinFrames?[active] ?? jf0;
             UpdateOutcome joinOutcome = targetFrame.Update(type: 1, force: false);
-            CallResult joinResult = EditPublication.Of(joinOutcome);
+            CallResult joinResult = EditPublication.Of(joinOutcome, Database);
             if (joinResult.Failure is null && targetFrame.Mode == EditMode.None)
             {
                 if (joinOutcome.Change is { } jChange && Database.Workspace.Transactions.Depth == 0)

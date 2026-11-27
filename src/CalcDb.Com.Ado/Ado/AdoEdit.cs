@@ -707,6 +707,16 @@ internal sealed unsafe class KeysetRowSource : IAdoRowSource
                 }
                 providerError = AdoEditErrors.MapUpdateError(mutErr, allowOptimisticLockConflict: !_lockPessimistic, out refusal, _session.Core);
             }
+            else if (res.Open == MutationOpen.Conflict && !_lockPessimistic)
+            {
+                // evidence/r-q50-jk44-ddl-vis/vis-cross-conflict-accdb call 47, vis-two-ado-txn-accdb call 71:
+                // ADO optimistic keyset Update against another session's transaction lock maps to 3260 (DAO) or 3218 (peer ADO).
+                providerError = AdoEditErrors.MapUpdateError(
+                    new MutationError(MutationError.LockedBySession, MutationErrorSource.Recordset),
+                    allowOptimisticLockConflict: true,
+                    out refusal,
+                    _session.Core);
+            }
             else
             {
                 refusal = AdoEditErrors.MapOpen(res.Open, res.Detail);

@@ -1966,7 +1966,7 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         {
             return unpublished;
         }
-        CallResult result = EditPublication.Of(frame.Delete());
+        CallResult result = EditPublication.Of(frame.Delete(), Database);
         if (result.Failure is null && Database.Workspace.Transactions.Depth > 0)
         {
             _family.DeletedInFrame = Database.Workspace.Transactions.Frames[0];

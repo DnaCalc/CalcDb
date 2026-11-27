@@ -240,28 +240,6 @@ internal static class AdoFilePool
         }
     }
 
-    public static bool HasAdoExclusiveConflict(string fullPath, bool exclusive)
-    {
-        lock (Gate)
-        {
-            if (Sessions.TryGetValue(fullPath, out List<SharedComSession>? list) && list.Count > 0)
-            {
-                if (exclusive)
-                {
-                    return true;
-                }
-                foreach (SharedComSession existing in list)
-                {
-                    if (existing.Core.Exclusive)
-                    {
-                        return true;
-                    }
-                }
-            }
-            return false;
-        }
-    }
-
     public static SharedComSession Register(string fullPath, ComDatabaseSession core)
     {
         var created = new SharedComSession(fullPath, core) { RefCount = 1 };
@@ -1594,14 +1572,15 @@ internal sealed unsafe class ConnectionObject : AdoObject
             }
 
             bool exclusive = effectiveMode == 12;
+            bool readOnly = effectiveMode == 1;
             if (FileSessionPool.FindCoordinator(full) is { } existingCoord
-                && existingCoord.HasExclusiveConflict(EngineKind.Ado, exclusive, out EngineKind holderKind, out FileFormat? conflictFormat))
+                && existingCoord.HasExclusiveConflict(EngineKind.Ado, exclusive, readOnly, out EngineKind holderKind, out bool holderExclusive, out bool holderReadOnly, out FileFormat? conflictFormat))
             {
                 DisposeValues(initValues);
-                if (holderKind == EngineKind.Dao && !exclusive)
+                if (holderKind == EngineKind.Dao && holderExclusive && !holderReadOnly && !exclusive && !readOnly)
                 {
                     // evidence/r-q50-jk44-ddl-vis/vis-dao-ado-admit-accdb and vis-dao-ado-admit-mdb call 139:
-                    // DAO Exclusive blocks ADO Shared with 0x80004005 / SQLState "3045" / IID_IDBInitialize.
+                    // DAO Exclusive RW blocks ADO Shared RW (Mode=3) with 0x80004005 / SQLState "3045" / IID_IDBInitialize.
                     bool isAceConflict = conflictFormat != FileFormat.Jet4;
                     EmitWillConnect();
                     return FailAceOpen(
@@ -1615,14 +1594,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
                 }
                 return NotImplemented(exclusive
                     ? "Connection.Open with Mode=12 while the file is already open in this process (conflict not recorded)"
-                    : "Connection.Open while the file is already open exclusively (Mode=12) in this process (conflict not recorded)");
-            }
-            if (AdoFilePool.HasAdoExclusiveConflict(full, exclusive))
-            {
-                DisposeValues(initValues);
-                return NotImplemented(exclusive
-                    ? "Connection.Open with Mode=12 while the file is already open in this process (conflict not recorded)"
-                    : "Connection.Open while the file is already open exclusively (Mode=12) in this process (conflict not recorded)");
+                    : "Connection.Open while the file is already open exclusively in this process (conflict not recorded)");
             }
 
             if (SessionFile.OpenReader(full, out OpenResult opened) is not { } file)
@@ -1664,6 +1636,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
             if (catalog is null)
             {
                 file.Dispose();
+                FileSessionPool.ReleaseCoordinatorIfEmpty(coordinator);
                 DisposeValues(initValues);
                 return NotImplemented(catalogFailure?.Kind == CatalogFailureKind.NotPlaintext
                     ? "Connection.Open of an encrypted database (W-L1)"
@@ -1679,6 +1652,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
                 if (lockFile is null)
                 {
                     file.Dispose();
+                    FileSessionPool.ReleaseCoordinatorIfEmpty(coordinator);
                     DisposeValues(initValues);
                     return NotImplemented($"Connection.Open when the lock file cannot be joined (Win32 {lockError})");
                 }
@@ -2491,7 +2465,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
             }
             if (!outcome.Succeeded)
             {
-                MappedProviderError? mapped = AdoSqlErrors.TryMap(outcome.Failure!, isSavedQuery: true, out Failure? unmodelled, sql: sql, isConnectionExecuteAction: true);
+                MappedProviderError? mapped = AdoSqlErrors.TryMap(outcome.Failure!, isSavedQuery: true, out Failure? unmodelled, sql: sql, isConnectionExecuteAction: true, session: session.Core);
                 if (mapped is null)
                 {
                     return CallResult.Fail(unmodelled!);
@@ -2569,10 +2543,18 @@ internal sealed unsafe class ConnectionObject : AdoObject
 
         if (!DdlParser.IsDdlLeadingKeyword(effectiveSql))
         {
-            session.Core.RefreshBeforeWrite(allPages: true);
+            session.Core.RefreshTableBeforeWrite(parsed?.TargetName);
         }
         else
         {
+            bool isMissingDropTable = DdlParser.Parse(effectiveSql, out _) is DropTableStatement { TableNames.Count: 1 } drop
+                && session.Sql.Table(drop.TableNames[0]) is null;
+            if (!isMissingDropTable && session.Core.HasPendingExternalCatalogWrites())
+            {
+                return CallResult.Fail(Failure.NotModelled(
+                    "NotModelled.CrossSessionDdlStaleCatalog",
+                    "DDL on an ADO Connection whose catalog pages were modified by another in-process session is not recorded"));
+            }
             session.Core.RefreshBeforeWrite(allPages: false);
         }
 

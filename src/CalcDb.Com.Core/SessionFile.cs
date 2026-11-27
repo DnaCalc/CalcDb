@@ -94,12 +94,38 @@ public sealed class SessionFile : IPositionedFile
             return opened.File is { } file ? new SharedBacking(full, file, registered: false) : null;
         }
 
-        public string? TakeWriterLease(PageCache cache, IReadOnlyCollection<ulong> pages)
+        private int _writerLeases;
+
+        public string? TakeWriterLease(PageCache cache, IReadOnlyCollection<ulong> pages, ref bool holderHasLease)
         {
+            // Pin cached pages before taking _ioGate so an in-flight native load waiting on _ioGate in ReadAt cannot deadlock.
+            ulong initialExtent = GetExtent();
+            Dictionary<ulong, byte[]>? expectedPages = null;
+            if (!Writable && pages.Count > 0)
+            {
+                expectedPages = new Dictionary<ulong, byte[]>(pages.Count);
+                foreach (ulong page in pages)
+                {
+                    if ((page + 1) * (ulong)cache.PageSize > initialExtent)
+                    {
+                        continue; // appended page: nothing on disk to compare
+                    }
+                    using PagePin? pin = cache.Pin(page).Pin;
+                    if (pin is not null)
+                    {
+                        expectedPages[page] = pin.Bytes.ToArray();
+                    }
+                }
+            }
             lock (_ioGate)
             {
                 if (_handle.Admission is Admission.Exclusive or Admission.SingleWriterShareRead)
                 {
+                    if (!holderHasLease)
+                    {
+                        holderHasLease = true;
+                        _writerLeases++;
+                    }
                     return null;
                 }
                 _handle.Dispose();
@@ -125,13 +151,20 @@ public sealed class SessionFile : IPositionedFile
                     {
                         continue; // a page the publication appends (W-07/native-metadata-write): nothing on disk to compare, its program grows the file
                     }
-                    using PagePin? pin = cache.Pin(page).Pin;
                     TransferReceipt read = _handle.ReadAt(page * (ulong)cache.PageSize, onDisk);
-                    if (pin is null || read.Status != TransferStatus.Complete || !pin.Bytes.SequenceEqual(onDisk))
+                    if (expectedPages is null
+                        || !expectedPages.TryGetValue(page, out byte[]? expected)
+                        || read.Status != TransferStatus.Complete
+                        || !expected.AsSpan().SequenceEqual(onDisk))
                     {
                         _handle.Dispose();
                         return RestoreUnderLock($"page {page} changed in the file while the session held no lease");
                     }
+                }
+                if (!holderHasLease)
+                {
+                    holderHasLease = true;
+                    _writerLeases++;
                 }
                 return null;
             }
@@ -188,7 +221,7 @@ public sealed class SessionFile : IPositionedFile
             }
         }
 
-        public void Release()
+        public void Release(bool heldWriterLease)
         {
             bool disposeHandle = false;
             lock (RegistryGate)
@@ -206,7 +239,25 @@ public sealed class SessionFile : IPositionedFile
             {
                 lock (_ioGate)
                 {
+                    _writerLeases = 0;
                     _handle.Dispose();
+                }
+            }
+            else if (heldWriterLease)
+            {
+                // R-LOCK-2 RO-ACTUAL: when the last in-process writer closes while shared readers remain,
+                // downgrade the shared OS handle back to Admission.ReaderOnly so external openers are not blocked.
+                lock (_ioGate)
+                {
+                    if (_writerLeases > 0 && --_writerLeases == 0 && _handle.Admission == Admission.SingleWriterShareRead)
+                    {
+                        _handle.Dispose();
+                        OpenResult reader = WindowsFile.Open(_fullPath, Admission.ReaderOnly);
+                        if (reader.File is { } file)
+                        {
+                            _handle = file;
+                        }
+                    }
                 }
             }
         }
@@ -215,6 +266,7 @@ public sealed class SessionFile : IPositionedFile
     private readonly SharedBacking _backing;
     private int _pageSize;
     private TemporarySpillFile? _spill;
+    private bool _holdsWriterLease;
     private bool _disposed;
 
     private SessionFile(SharedBacking backing)
@@ -269,7 +321,7 @@ public sealed class SessionFile : IPositionedFile
     /// committed images. On a refusal the reader handle is reopened; null on success, else the reason.
     /// </summary>
     public string? TakeWriterLease(PageCache cache, IReadOnlyCollection<ulong> pages) =>
-        _backing.TakeWriterLease(cache, pages);
+        _backing.TakeWriterLease(cache, pages, ref _holdsWriterLease);
 
     public TransferReceipt ReadAt(ulong offset, Memory<byte> buffer, CancellationToken cancellation = default) =>
         Own(_backing.ReadAt(offset, buffer, cancellation));
@@ -303,7 +355,9 @@ public sealed class SessionFile : IPositionedFile
         if (!_disposed)
         {
             _disposed = true;
-            _backing.Release();
+            bool heldLease = _holdsWriterLease;
+            _holdsWriterLease = false;
+            _backing.Release(heldLease);
             _spill?.Dispose();
         }
     }

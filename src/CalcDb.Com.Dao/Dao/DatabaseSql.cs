@@ -452,9 +452,10 @@ internal static unsafe class SelectRoute
         // open-time row values across later publishes (task zdh5; docs/work/qualified.md R-CURSOR-1 CUR-POP;
         // r-q-cursor-dao/pop-snapshot-change-after-open, -after-movelast, -after-first-move,
         // r-q2-cursor-dao/pop-snapshot-orderby-small; r-txn-1b/rs-types-after-rollback bs). Unordered SELECT snapshots
-        // (r-q2-cursor-dao/pop-snapshot-select-noorder-big), MDB snapshots, snapshots projecting Memo or OLE columns,
+        // (r-q2-cursor-dao/pop-snapshot-select-noorder-big), snapshots projecting Memo or OLE columns,
         // snapshots opened inside a transaction (r-txn-1b/rs-types-after-rollback ks), forward-only and complex
         // shapes keep database.Sql and refuse unrecorded transitions by name.
+        // Single-table ORDER BY Jet 4 MDB snapshots opened at depth 0 also register a ReadView (vis-cross-cursors-dml-mdb).
         ISqlDatabase scanDatabase;
         if (recordsetType == 2 && (singleTableRowSelect || dynamicJoinOverlay))
         {
@@ -678,7 +679,19 @@ internal static class ActionRoute
             preParsed?.Dispose();
             return CallResult.Fail(refused);
         }
-        database.RefreshBeforeWrite(allPages: !ddl);
+        if (ddl)
+        {
+            bool isMissingDropTable = DdlParser.Parse(sql, out _) is DropTableStatement { TableNames.Count: 1 } drop
+                && database.Sql.Table(drop.TableNames[0]) is null;
+            if (!isMissingDropTable && database.HasPendingExternalCatalogWrites())
+            {
+                preParsed?.Dispose();
+                return CallResult.Fail(Failure.NotModelled(
+                    "NotModelled.CrossSessionDdlStaleCatalog",
+                    "DDL on a DAO Database whose catalog pages were modified by another in-process session without DBEngine.Idle(dbRefreshCache) is not recorded"));
+            }
+            database.RefreshBeforeWrite(allPages: false);
+        }
         ActionOutcome outcome;
         int nul = sql.IndexOf('\0', StringComparison.Ordinal);
         int effectiveLength = nul >= 0 ? nul : sql.Length;
@@ -690,6 +703,7 @@ internal static class ActionRoute
             {
                 return Published(database, caller, ActionOutcome.Fail(parseFailure!), source, options, isInsertValues: false, ref recordsAffected);
             }
+            database.RefreshTableBeforeWrite(syntax.TargetName);
             if (DenySyntaxLockRefusal(database, caller, syntax) is { } lockRefusal)
             {
                 syntax.Dispose();

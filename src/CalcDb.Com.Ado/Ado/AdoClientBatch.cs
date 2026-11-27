@@ -857,7 +857,7 @@ internal sealed unsafe class ClientRowBuffer
     /// </summary>
     public BatchRowOutcome FlushImmediateRow(ClientRow row, int updateCriteria, int updateResync)
     {
-        _session?.Core.RefreshBeforeWrite(allPages: true);
+        _session?.Core.RefreshTableBeforeWrite(_tableName);
         BatchRowOutcome outcome = ApplySingleRow(row, updateCriteria, updateResync, isImmediate: true);
         if (outcome.Succeeded && row.State == ClientRowState.Purged)
         {

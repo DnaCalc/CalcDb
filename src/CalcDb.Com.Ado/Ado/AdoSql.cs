@@ -205,9 +205,9 @@ internal static class AdoSqlErrors
 
     private static bool TryGetCrossEngineDaoLocker(ComDatabaseSession? session, out string userName)
     {
-        if (session?.Cache.LastConflictHolder is { } holder
+        if (session?.Cache.LastConflictHolder is { } id
             && session.FileCoordinator is { } coord
-            && coord.TryGetLockerOwner(holder, out LockerOwner owner)
+            && coord.TryGetLockerOwner(id, out LockerOwner owner)
             && owner.Kind == EngineKind.Dao)
         {
             userName = owner.UserName;

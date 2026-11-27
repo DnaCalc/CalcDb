@@ -26,17 +26,16 @@ public readonly record struct LockerOwner(EngineKind Kind, string UserName);
 public sealed class InProcessFileCoordinator
 {
     private readonly record struct PageWriteEntry(long Version, ComDatabaseSession Writer);
+    private readonly record struct SessionRegistration(EngineKind Kind, bool Exclusive, bool ReadOnly);
 
     private readonly Lock _gate = new();
     private readonly Dictionary<ulong, PageWriteEntry> _pageWrites = [];
+    private readonly Dictionary<ComDatabaseSession, SessionRegistration> _sessions = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<ComDatabaseSession, long> _sessionVersions = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<ComDatabaseSession, HashSet<ulong>> _sessionPendingPages = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<LockerId, LockerOwner> _lockers = [];
     private long _diskVersion;
     private ulong _diskExtentPages;
-    private int _activeSessions;
-    private bool _hasExclusive;
-    private EngineKind _exclusiveKind;
     private FileFormat? _format;
 
     internal InProcessFileCoordinator(string fullPath)
@@ -48,6 +47,17 @@ public sealed class InProcessFileCoordinator
 
     /// <summary>The shared page-lock manager for every in-process <see cref="PageCache"/> opened on this file.</summary>
     public LocalLockManager Locks { get; } = new();
+
+    internal bool IsEmpty
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _sessions.Count == 0;
+            }
+        }
+    }
 
     public bool TryGetFormat(out FileFormat format)
     {
@@ -64,34 +74,62 @@ public sealed class InProcessFileCoordinator
     }
 
     /// <summary>
-    /// Check whether a new engine session (<paramref name="kind"/>, <paramref name="exclusive"/>) is blocked by an
-    /// active in-process exclusive holder (or whether requesting exclusive is blocked by any active holder).
+    /// Check whether a new engine session (<paramref name="kind"/>, <paramref name="exclusive"/>, <paramref name="readOnly"/>)
+    /// conflicts with an active in-process exclusive holder (or whether requesting exclusive conflicts with any active holder).
+    /// Respects <c>R-LOCK-2 RO-PAIR</c>: exclusive read-only coexists with read-only.
     /// </summary>
-    public bool HasExclusiveConflict(EngineKind kind, bool exclusive, out EngineKind holderKind, out FileFormat? format)
+    public bool HasExclusiveConflict(
+        EngineKind kind,
+        bool exclusive,
+        bool readOnly,
+        out EngineKind holderKind,
+        out bool holderExclusive,
+        out bool holderReadOnly,
+        out FileFormat? format)
     {
         lock (_gate)
         {
             format = _format;
-            if (_activeSessions > 0 && (_hasExclusive || exclusive))
+            foreach (SessionRegistration existing in _sessions.Values)
             {
-                holderKind = _hasExclusive ? _exclusiveKind : kind;
-                return true;
+                if (existing.Exclusive)
+                {
+                    if (existing.ReadOnly && readOnly)
+                    {
+                        continue; // R-LOCK-2 RO-PAIR: exclusive read-only coexists with read-only
+                    }
+                    holderKind = existing.Kind;
+                    holderExclusive = true;
+                    holderReadOnly = existing.ReadOnly;
+                    return true;
+                }
+            }
+            if (exclusive)
+            {
+                foreach (SessionRegistration existing in _sessions.Values)
+                {
+                    if (readOnly && existing.ReadOnly)
+                    {
+                        continue; // R-LOCK-2 RO-PAIR
+                    }
+                    holderKind = existing.Kind;
+                    holderExclusive = existing.Exclusive;
+                    holderReadOnly = existing.ReadOnly;
+                    return true;
+                }
             }
             holderKind = default;
+            holderExclusive = false;
+            holderReadOnly = false;
             return false;
         }
     }
 
-    public void RegisterSession(ComDatabaseSession session, EngineKind kind, bool exclusive)
+    public void RegisterSession(ComDatabaseSession session, EngineKind kind, bool exclusive, bool readOnly)
     {
         lock (_gate)
         {
-            _activeSessions++;
-            if (exclusive)
-            {
-                _hasExclusive = true;
-                _exclusiveKind = kind;
-            }
+            _sessions[session] = new SessionRegistration(kind, exclusive, readOnly);
             _format ??= session.Profile.Format;
             _sessionVersions[session] = _diskVersion;
             _sessionPendingPages[session] = [];
@@ -102,23 +140,14 @@ public sealed class InProcessFileCoordinator
         }
     }
 
-    public bool UnregisterSession(ComDatabaseSession session, bool exclusive)
+    internal bool UnregisterSession(ComDatabaseSession session)
     {
         lock (_gate)
         {
+            _sessions.Remove(session);
             _sessionVersions.Remove(session);
             _sessionPendingPages.Remove(session);
-            if (exclusive)
-            {
-                _hasExclusive = false;
-            }
-            if (--_activeSessions <= 0)
-            {
-                _activeSessions = 0;
-                _hasExclusive = false;
-                return true;
-            }
-            return false;
+            return _sessions.Count == 0;
         }
     }
 
@@ -207,12 +236,23 @@ public sealed class InProcessFileCoordinator
         }
     }
 
-    /// <summary>Whether any other in-process session has written pages to disk that <paramref name="reader"/> has not refreshed yet.</summary>
-    public bool HasPendingExternalWrites(ComDatabaseSession reader)
+    /// <summary>Whether any other in-process session has written any of <paramref name="pages"/> to disk that <paramref name="reader"/> has not refreshed yet.</summary>
+    public bool HasPendingExternalPages(ComDatabaseSession reader, IReadOnlyCollection<ulong> pages)
     {
         lock (_gate)
         {
-            return _sessionPendingPages.TryGetValue(reader, out HashSet<ulong>? pending) && pending.Count > 0;
+            if (!_sessionPendingPages.TryGetValue(reader, out HashSet<ulong>? pending) || pending.Count == 0)
+            {
+                return false;
+            }
+            foreach (ulong page in pages)
+            {
+                if (pending.Contains(page))
+                {
+                    return true;
+                }
+            }
+            return false;
         }
     }
 }
@@ -369,12 +409,27 @@ public static class FileSessionPool
         }
     }
 
-    /// <summary>Remove <paramref name="coordinator"/> once its last session has closed.</summary>
-    public static void RemoveCoordinatorIfEmpty(InProcessFileCoordinator coordinator)
+    /// <summary>Atomically unregister <paramref name="session"/> from <paramref name="coordinator"/> and remove the coordinator if empty.</summary>
+    public static void UnregisterSession(InProcessFileCoordinator coordinator, ComDatabaseSession session)
     {
         lock (Gate)
         {
-            if (Coordinators.TryGetValue(coordinator.FullPath, out InProcessFileCoordinator? current)
+            if (coordinator.UnregisterSession(session)
+                && Coordinators.TryGetValue(coordinator.FullPath, out InProcessFileCoordinator? current)
+                && ReferenceEquals(current, coordinator))
+            {
+                Coordinators.Remove(coordinator.FullPath);
+            }
+        }
+    }
+
+    /// <summary>Remove <paramref name="coordinator"/> if it has no registered sessions (used on open-failure cleanup).</summary>
+    public static void ReleaseCoordinatorIfEmpty(InProcessFileCoordinator coordinator)
+    {
+        lock (Gate)
+        {
+            if (coordinator.IsEmpty
+                && Coordinators.TryGetValue(coordinator.FullPath, out InProcessFileCoordinator? current)
                 && ReferenceEquals(current, coordinator))
             {
                 Coordinators.Remove(coordinator.FullPath);

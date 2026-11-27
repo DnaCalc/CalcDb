@@ -398,12 +398,18 @@ public sealed partial class PageCache
             foreach (ulong pageNumber in targets)
             {
                 PageEntry entry = GetOrCreateEntry(pageNumber);
-                if (entry.State != PhysicalState.Readable)
+                if (entry.State != PhysicalState.Readable || entry.ActiveLoads > 0)
                 {
                     continue;
                 }
                 ImageId oldCurrent = entry.Current;
-                if (AnyView(entry.CurrentFrom, ulong.MaxValue))
+                _directory.TryGetValue(oldCurrent, out ImageRecord? oldRecord);
+                if (oldRecord?.Loading is not null)
+                {
+                    continue;
+                }
+                bool oldBacked = oldRecord is not null && (oldRecord.Ready is not null || oldRecord.Source == ImageSource.Spill);
+                if (AnyView(entry.CurrentFrom, ulong.MaxValue) && oldBacked)
                 {
                     if (entry.Versions is null)
                     {
@@ -427,7 +433,7 @@ public sealed partial class PageCache
                         _historyPages.Remove(pageNumber);
                     }
                 }
-                if (_directory.TryGetValue(oldCurrent, out ImageRecord? oldRecord))
+                if (oldRecord is not null)
                 {
                     if (oldRecord.Source == ImageSource.Native)
                     {

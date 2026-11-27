@@ -210,7 +210,7 @@ public sealed class ComDatabaseSession : IPublicationTarget
     public void AttachFileCoordinator(InProcessFileCoordinator coordinator, EngineKind kind)
     {
         _fileCoordinator = coordinator;
-        coordinator.RegisterSession(this, kind, Exclusive);
+        coordinator.RegisterSession(this, kind, Exclusive, ReadOnly);
         if (_file is { } file)
         {
             file.OnPagesWritten = (pages, extentPages) => coordinator.RecordDiskWrite(this, pages, extentPages);
@@ -261,6 +261,7 @@ public sealed class ComDatabaseSession : IPublicationTarget
     /// </summary>
     public void RefreshBeforeWrite(bool allPages = false)
     {
+        Cache.LastConflictHolder = null;
         if (_fileCoordinator is null)
         {
             return;
@@ -273,6 +274,113 @@ public sealed class ComDatabaseSession : IPublicationTarget
         {
             RefreshExternallyModifiedPages(filterPages: [0UL, 1UL]);
         }
+    }
+
+    /// <summary>
+    /// Refresh page 0/1 and the pages belonging to <paramref name="targetTableName"/> (its TableDef, usage maps, data
+    /// pages, and physical index pages) before a targeted DML write, leaving unrelated tables' cached pages stale.
+    /// </summary>
+    public void RefreshTableBeforeWrite(string? targetTableName)
+    {
+        Cache.LastConflictHolder = null;
+        if (_fileCoordinator is null)
+        {
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(targetTableName)
+            || Catalog.LocalTables(Format).FirstOrDefault(e => CatalogRelationshipContext.NamesEqual(e.Name, targetTableName)) is not { } entry)
+        {
+            RefreshExternallyModifiedPages(filterPages: [0UL, 1UL]);
+            return;
+        }
+        var headerPages = new HashSet<ulong> { 0UL, 1UL, (ulong)(uint)entry.Id };
+        RefreshExternallyModifiedPages(headerPages);
+        if (Definition(entry, out _) is not { } table)
+        {
+            return;
+        }
+        var tablePages = new HashSet<ulong> { table.FirstPage, table.OwnedMap.Page, table.FreeMap.Page };
+        foreach (PhysicalIndex ix in table.PhysicalIndexes)
+        {
+            if (ix.RootPage != 0)
+            {
+                tablePages.Add(ix.RootPage);
+            }
+            if (ix.OwnedMap.Page != 0)
+            {
+                tablePages.Add(ix.OwnedMap.Page);
+            }
+        }
+        RefreshExternallyModifiedPages(tablePages);
+        var dataPages = new HashSet<ulong>();
+        var source = new PageSource(Cache);
+        if (UsageMaps.Pages(source, Format, table.OwnedMap, PageCount, out _) is { } owned)
+        {
+            foreach (uint p in owned)
+            {
+                dataPages.Add(p);
+            }
+        }
+        foreach (PhysicalIndex ix in table.PhysicalIndexes)
+        {
+            if (ix.OwnedMap.Page != 0 && UsageMaps.Pages(source, Format, ix.OwnedMap, PageCount, out _) is { } ixOwned)
+            {
+                foreach (uint p in ixOwned)
+                {
+                    dataPages.Add(p);
+                }
+            }
+        }
+        if (dataPages.Count > 0)
+        {
+            RefreshExternallyModifiedPages(dataPages);
+        }
+    }
+
+    /// <summary>
+    /// Whether another in-process session has written <c>MSysObjects</c> catalog pages that this session has not
+    /// refreshed yet (used to refuse DDL on a stale catalog rather than clobbering disk catalog pages).
+    /// </summary>
+    public bool HasPendingExternalCatalogWrites()
+    {
+        if (_fileCoordinator is null)
+        {
+            return false;
+        }
+        var catalogPages = new HashSet<ulong> { 2UL };
+        if (Catalog.LocalTables(Format).FirstOrDefault(e => e.Id == 2) is { } sysObjects && Definition(sysObjects, out _) is { } table)
+        {
+            catalogPages.Add(table.FirstPage);
+            catalogPages.Add(table.OwnedMap.Page);
+            catalogPages.Add(table.FreeMap.Page);
+            var source = new PageSource(Cache);
+            if (UsageMaps.Pages(source, Format, table.OwnedMap, PageCount, out _) is { } owned)
+            {
+                foreach (uint p in owned)
+                {
+                    catalogPages.Add(p);
+                }
+            }
+            foreach (PhysicalIndex ix in table.PhysicalIndexes)
+            {
+                if (ix.RootPage != 0)
+                {
+                    catalogPages.Add(ix.RootPage);
+                }
+                if (ix.OwnedMap.Page != 0)
+                {
+                    catalogPages.Add(ix.OwnedMap.Page);
+                    if (UsageMaps.Pages(source, Format, ix.OwnedMap, PageCount, out _) is { } ixOwned)
+                    {
+                        foreach (uint p in ixOwned)
+                        {
+                            catalogPages.Add(p);
+                        }
+                    }
+                }
+            }
+        }
+        return _fileCoordinator.HasPendingExternalPages(this, catalogPages);
     }
 
     /// <summary>
@@ -469,10 +577,7 @@ public sealed class ComDatabaseSession : IPublicationTarget
         if (_fileCoordinator is { } coordinator)
         {
             _fileCoordinator = null;
-            if (coordinator.UnregisterSession(this, Exclusive))
-            {
-                FileSessionPool.RemoveCoordinatorIfEmpty(coordinator);
-            }
+            FileSessionPool.UnregisterSession(coordinator, this);
         }
     }
 

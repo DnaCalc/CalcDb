@@ -323,6 +323,7 @@ public sealed class EditFrame : IDisposable
             LockResource page = TableFootprints.Row(row);
             if (_editLock != page)
             {
+                footprints.File.LastConflictHolder = null;
                 LockAcquisition got = _workspace.Lock(footprints.File, [page], LockLifetime.PendingEdit);
                 if (got.Conflict is { } conflict)
                 {
@@ -1975,11 +1976,12 @@ public sealed class EditFrame : IDisposable
         }
         footprint = [.. pages];
         LockLifetime lifetime = _workspace.ChangeLifetime;
+        fp.File.LastConflictHolder = null;
         LockAcquisition got = _workspace.Lock(fp.File, footprint, lifetime);
         if (got.Conflict is { } conflict)
         {
             footprint = [];
-            return ConflictOutcome(conflict, reportLockedBySession: conflict.HolderLifetime == LockLifetime.Transaction);
+            return ConflictOutcome(conflict);
         }
         fp.File.OnWriteLockAcquired?.Invoke(fp.File, footprint);
         if (!LockEdits && !_conflictReported && !StoredRowUnchanged(out string? unread))

@@ -354,7 +354,9 @@ public sealed unsafe class CrossEngineVisibilityTests
             // DAO CREATE TABLE CrossDao -> open ADO cn still fails 0x80040E37 on SELECT and DROP TABLE.
             Assert.Null(Call(db, "Execute", "CREATE TABLE CrossDao (ID LONG CONSTRAINT PK_CD PRIMARY KEY, Y LONG)", 128).Failure);
             AssertError(Call(cn, "Execute", "SELECT ID, Y FROM CrossDao"), HResultNoTable, AceSource, null, 5003011, IidCommand);
+            AssertAdoFirstError(cn, HResultNoTable, -524420377, "3078");
             AssertError(Call(cn, "Execute", "DROP TABLE CrossDao", Missing, 129), HResultNoTable, AceSource, null, 5003011, IidCommand);
+            AssertAdoFirstError(cn, HResultNoTable, -539034905, "3376");
         }
         finally
         {
@@ -600,6 +602,45 @@ public sealed unsafe class CrossEngineVisibilityTests
         Assert.Null(Put(field, "Value", value).Failure);
         Release(field);
         Release(fields);
+    }
+
+    [Fact]
+    public void PageCache_RefreshFromFile_UnderActiveReadView_PreservesConservationForUnbackedPages()
+    {
+        ArtifactStore store = ArtifactStore.ForRepository(DeclarationGenerationTests.Root());
+        string tempDir = Path.Combine(Path.GetTempPath(), $"calcdb-jk44-cache-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            string path = CopyFixture(store, VisAccdbFixture, tempDir, "cache.accdb");
+            using var file = CalcDb.Com.SessionFile.OpenReader(path, out _)!;
+            CalcDb.Storage.PageCache cache = file.CreateCache(4096, 16);
+            try
+            {
+                // Pin page 0 so it is resident, leave page 1 unbacked (never loaded).
+                using (CalcDb.Storage.PagePin? pin0 = cache.Pin(0).Pin)
+                {
+                    Assert.NotNull(pin0);
+                }
+
+                var reg = cache.RegisterView();
+                Assert.True(reg.Succeeded);
+                using CalcDb.Storage.ReadView view = reg.View!;
+
+                // Refreshing both a resident page (0) and an unbacked page (1) while a ReadView is active must not
+                // create a dangling owned ImageRecord without backing bytes.
+                cache.RefreshFromFile([0UL, 1UL]);
+                Assert.Empty(cache.CheckConservation().Violations);
+            }
+            finally
+            {
+                cache.Close();
+            }
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, recursive: true); } catch { }
+        }
     }
 
     private static byte[] ReadPage0(string path)
