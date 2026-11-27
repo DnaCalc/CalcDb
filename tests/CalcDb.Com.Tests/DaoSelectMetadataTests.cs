@@ -60,7 +60,7 @@ public sealed unsafe class DaoSelectMetadataTests : IDisposable
     [InlineData(DefCursorMain, "SELECT N FROM T", 8, false)]
     // r-q-cursor-dao/prov-heap-second-row-edit (heap table H)
     [InlineData(DefCursorMain, "SELECT A, B FROM H", 2, true)]
-    // r-def-cursor-dao/prov-distinct-distinctrow-plain, prov-aggregate-groupby, prov-union-crosstab, r-q54-excl-ddl-ix-cmd/select-dynaset-edit
+    // r-def-cursor-dao/prov-distinct-distinctrow-plain, prov-aggregate-groupby, prov-union-crosstab, r-q54-excl-ddl-ix-cmd/select-dynaset-edit-accdb
     [InlineData(DefCursorMain, "SELECT DISTINCT N FROM T WHERE ID IN (4, 5)", 2, false)]
     [InlineData(DefCursorMain, "SELECT Count(*) AS Cn FROM T", 2, false)]
     [InlineData(DefCursorMain, "SELECT N, Count(*) AS Cn, Sum(ID) AS Si FROM T GROUP BY N", 2, false)]
