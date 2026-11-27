@@ -37,6 +37,7 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         .Method("MovePrevious", (self, args) => Moving(self, "MovePrevious", r => r.Moved(r.Cursor.MovePrevious())))
         .Method("Move", (self, args) => { nint rows = args[0], start = args.Length > 1 ? args[1] : 0; return Moving(self, "Move", r => r.Move(rows, start)); })
         .Get("AbsolutePosition", (self, args) => Read(self, "AbsolutePosition", r => r.AbsolutePosition()))
+        .Put("AbsolutePosition", (self, args) => { nint value = args[^1]; return Read(self, "AbsolutePosition", r => r.SetAbsolutePosition(value)); })
         .Get("PercentPosition", (self, args) => Read(self, "PercentPosition", r => r.PercentPosition()))
         .Put("PercentPosition", (self, args) => { nint value = args[^1]; return Moving(self, "PercentPosition", r => r.SetPercentPosition(value)); })
         .Get("Bookmark", (self, args) => Read(self, "Bookmark", r => r.GetBookmark()))
@@ -46,6 +47,7 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         .Put("Index", (self, args) => { nint value = args[^1]; return Read(self, "Index", r => r.EditPending("Index") ?? r.SetIndex(value)); })
         .Method("Requery", (self, args) => { nint queryDef = args.Length > 0 ? args[0] : 0; return Live(self, r => r.Requery(queryDef)); })
         .Method("Clone", (self, args) => Live(self, r => r.Clone()))
+        .Method("OpenRecordset", (self, args) => { nint type = args.Length > 0 ? args[0] : 0, options = args.Length > 1 ? args[1] : 0; return Live(self, r => r.OpenDerivedRecordset(type, options)); })
         .Method("Seek", static (self, args) => (RecordsetObject)self is { Closed: true } closed ? closed.Fail(3420, DaoErrors.ObjectInvalid) : ((RecordsetObject)self).GuardedSeek(args))
         .Method("Edit", (self, args) => Live(self, r => r.Edit()))
         .Method("AddNew", (self, args) => Live(self, r => r.AddNew()))
@@ -472,6 +474,8 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
             Failure.NotModelled("NotModelled.MoveArgumentType", $"Recordset.Move with {sourceType} argument (only I4, I2, UI1, Bool, Empty, Null, R8 and BSTR are recorded)"),
         ("PercentPosition", 0) when member.Kind == InvokeKind.PropertyPut && sourceType is not (VarType.I4 or VarType.R4 or VarType.R8 or VarType.Bstr or VarType.Empty or VarType.Null) =>
             Failure.NotModelled("NotModelled.PercentPositionArgumentType", $"Recordset.PercentPosition put with {sourceType} argument (only I4, R4, R8, BSTR, Empty and Null are recorded)"),
+        ("AbsolutePosition", 0) when member.Kind == InvokeKind.PropertyPut && sourceType is not (VarType.I4 or VarType.R8 or VarType.Bstr or VarType.Empty or VarType.Null) =>
+            Failure.NotModelled("NotModelled.AbsolutePositionArgumentType", $"Recordset.AbsolutePosition put with {sourceType} argument (only I4, R8, BSTR, Empty and Null are recorded)"),
         ("Seek", 0) when sourceType is not (VarType.Bstr or VarType.Empty or VarType.Null or VarType.I4 or VarType.Bool) =>
             Failure.NotModelled("NotModelled.SeekComparisonType", $"Recordset.Seek comparison with {sourceType} argument (only BSTR, Empty, Null, I4 and Bool are recorded)"),
         ("FindFirst" or "FindNext", 0) when sourceType is not (VarType.Bstr or VarType.Empty or VarType.Null or VarType.I4 or VarType.R8 or VarType.Bool) =>
@@ -1904,8 +1908,9 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
     }
 
     /// <summary>
-    /// AbsolutePosition: the zero-based ordinal on a dynaset or snapshot, the deleted ordinal while in range after a
-    /// sibling delete (r-def-cursor-dao/delete-by-other-cursor-current-row), or -1 at BOF, EOF, empty, or after own
+    /// AbsolutePosition: the zero-based ordinal on a dynaset or snapshot, the deleted ordinal after a sibling delete
+    /// including the last populated row (r-def-cursor-dao/delete-by-other-cursor-current-row,
+    /// r-q53-conv-abspos-subq-loc/abspos-delete-edit-accdb, abspos-delete-edit-mdb call 112), or -1 at BOF, EOF, empty, or after own
     /// Delete (CUR-POS); forward-only refuses it with 3219 and table-type with 3251 (r-cursor-1/pos-moves-dynaset,
     /// pos-moves-forwardonly, pop-count-table).
     /// </summary>
@@ -1913,14 +1918,70 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
     {
         TableCursor => Fail(3251, DaoErrors.NotSupportedForType),
         PopulationCursor { ForwardOnly: true } => Fail(3219, DaoErrors.InvalidOperation),
-        PopulationCursor { IsDeletedBySiblingOutOfRange: true } =>
-            CallResult.Fail(Failure.NotModelled("NotModelled.AbsolutePositionDeletedLastRow", "AbsolutePosition on a cursor whose current row (the last populated row) was deleted by a sibling (not recorded)")),
         PopulationCursor { IsBookmarkInvalidAnchorDeleted: true } =>
             CallResult.Fail(Failure.NotModelled("NotModelled.AbsolutePositionBookmarkInvalidDeletedRow", "AbsolutePosition after a failed Bookmark assignment when a sibling deleted the remembered anchor row (not recorded)")),
         PopulationCursor { Ordinal: int ordinal } => Int32(ordinal),
         PopulationCursor => Int32(-1),
         _ => CallResult.Fail(Failure.NotImplemented("AbsolutePosition without a current row")),
     };
+
+    /// <summary>
+    /// AbsolutePosition put (r-q53-conv-abspos-subq-loc/abspos-get-put-read-accdb, abspos-get-put-read-mdb,
+    /// abspos-delete-edit-accdb, abspos-delete-edit-mdb):
+    /// table-type fails 3251, forward-only 3219; coerced VT_I4 is checked against the populated RecordCount without
+    /// populating forward (&lt;0 or &gt;RecordCount -> 3001; empty with 0 -> 3021; ==RecordCount clamps to RecordCount-1).
+    /// A valid put cancels any pending Edit/AddNew (EditMode -> 0) and repositions.
+    /// </summary>
+    private CallResult SetAbsolutePosition(nint value)
+    {
+        if (Cursor is TableCursor)
+        {
+            return Fail(3251, DaoErrors.NotSupportedForType);
+        }
+        if (Cursor is PopulationCursor { ForwardOnly: true })
+        {
+            return Fail(3219, DaoErrors.InvalidOperation);
+        }
+        if (Cursor is not PopulationCursor pop)
+        {
+            return CallResult.Fail(Failure.NotImplemented($"AbsolutePosition put on cursor type {Cursor.GetType().Name}"));
+        }
+        if (pop.IsCloneRequeried)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.CloneRequeryMove", "AbsolutePosition put on a clone after the clone called Requery (not recorded)"));
+        }
+        int target = Args.Int32(value, omitted: 0) ?? 0;
+        CursorFailure? failure = pop.SetAbsolutePosition(target);
+        if (failure is null)
+        {
+            _frame?.Discard();
+            _staleEditModeAfterCloneCloseAbort = false;
+            RecordMoveAfterEdit("AbsolutePosition");
+            CaptureSeeChangesRow();
+            return CallResult.Nothing;
+        }
+        return PositionFailure(failure, "AbsolutePosition put");
+    }
+
+    /// <summary>
+    /// OpenRecordset([Type], [Options]) (r-q53-conv-abspos-subq-loc/filter-sort-openrs-read-accdb,
+    /// filter-sort-openrs-read-mdb, filter-sort-edit-errors-accdb, filter-sort-edit-errors-mdb):
+    /// derives a filtered/sorted recordset from this table recordset.
+    /// Forward-only refuses with 3219; table-type derives a dynaset (type 2) by default.
+    /// </summary>
+    private CallResult OpenDerivedRecordset(nint typeArg, nint optionsArg)
+    {
+        if (RecordsetType == 8)
+        {
+            return Fail(3219, DaoErrors.InvalidOperation);
+        }
+        if (EditPending("OpenRecordset") is { } pending)
+        {
+            return pending;
+        }
+        var spec = new DerivedSourceSpec(TableName, "*", BaseWhere: null, BaseOrderBy: null);
+        return SelectRoute.OpenDerived(Database, this, spec, RecordsetType, _filter, _sort, typeArg, optionsArg);
+    }
 
     /// <summary>
     /// PercentPosition (R-CURSOR-1 CUR-POP): forward-only refuses it with 3219 as it does AbsolutePosition
@@ -2146,16 +2207,9 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
             {
                 return Fail(3021, DaoErrors.NoCurrentRecord);
             }
-            if (Cursor is PopulationCursor pop)
+            if (Cursor is PopulationCursor pop && _family.BookmarkBaseRefusal is { } refusal)
             {
-                if (pop.BookmarksInvalidatedByDelete)
-                {
-                    return CallResult.Fail(Failure.NotModelled("NotModelled.BookmarkAfterDelete", "Bookmark on a dynaset after a cursor Delete shifted the keyset (not recorded)"));
-                }
-                if (_family.BookmarkBaseRefusal is { } refusal)
-                {
-                    return CallResult.Fail(Failure.NotModelled(refusal.Name, refusal.Detail));
-                }
+                return CallResult.Fail(Failure.NotModelled(refusal.Name, refusal.Detail));
             }
             return CallResult.Fail(Failure.NotImplemented("Bookmark: " + failure));
         }
@@ -2245,6 +2299,7 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         {
             null => CallResult.Nothing,
             CursorFailure.InvalidBookmark => Fail(3159, "Not a valid bookmark."),
+            CursorFailure.OutOfRange => Fail(3001, DaoErrors.InvalidArgument),
             _ => CallResult.Fail(Failure.NotImplemented("Bookmark put: " + failure)),
         };
     }
