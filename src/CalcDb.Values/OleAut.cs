@@ -123,6 +123,7 @@ internal unsafe struct OleAutTable
     public delegate* unmanaged<uint, uint, char*, int, int> GetLocaleInfoW;
     public delegate* unmanaged<uint, uint, int> IsValidLocale;
     public delegate* unmanaged<uint, uint, byte*, int, byte*, int, int> LCMapStringA;
+    public delegate* unmanaged<uint, uint, char*, int, char*, int, int> LCMapStringW;
     public delegate* unmanaged<uint, uint, char*, int, byte*, int, byte*, int*, int> WideCharToMultiByte;
     public delegate* unmanaged<uint, uint, byte*, int, char*, int, int> MultiByteToWideChar;
 
@@ -192,6 +193,7 @@ internal unsafe struct OleAutTable
         table.GetLocaleInfoW = (delegate* unmanaged<uint, uint, char*, int, int>)K("GetLocaleInfoW");
         table.IsValidLocale = (delegate* unmanaged<uint, uint, int>)K("IsValidLocale");
         table.LCMapStringA = (delegate* unmanaged<uint, uint, byte*, int, byte*, int, int>)K("LCMapStringA");
+        table.LCMapStringW = (delegate* unmanaged<uint, uint, char*, int, char*, int, int>)K("LCMapStringW");
         table.WideCharToMultiByte = (delegate* unmanaged<uint, uint, char*, int, byte*, int, byte*, int*, int>)K("WideCharToMultiByte");
         table.MultiByteToWideChar = (delegate* unmanaged<uint, uint, byte*, int, char*, int, int>)K("MultiByteToWideChar");
         return true;
@@ -476,6 +478,9 @@ internal static unsafe class OleAut
 
     public static int LCMapStringA(uint locale, uint mapFlags, byte* src, int cchSrc, byte* dest, int cchDest) =>
         T.LCMapStringA(locale, mapFlags, src, cchSrc, dest, cchDest);
+
+    public static int LCMapStringW(uint locale, uint mapFlags, char* src, int cchSrc, char* dest, int cchDest) =>
+        T.LCMapStringW(locale, mapFlags, src, cchSrc, dest, cchDest);
 
     public static int WideCharToMultiByte(uint codePage, uint flags, char* wide, int cchWide, byte* multiByte, int cbMultiByte) =>
         T.WideCharToMultiByte(codePage, flags, wide, cchWide, multiByte, cbMultiByte, null, null);

@@ -1167,6 +1167,11 @@ public static class SqlParser
         {
             Skip();
             int offset = _p;
+            if (IsWord("FROM"))
+            {
+                // r-str-ado-act/ado-errors #24: "SELECT FROM WHERE" fails ACE 3141 (SelectSyntaxError).
+                return SqlFailure.Ace(SqlPhase.Parse, 3141, SelectSyntaxError);
+            }
             if (TakeSymbol('*'))
             {
                 statement.Items.Add(new SelectItem(null, true, null, null, offset));

@@ -339,4 +339,104 @@ public static unsafe class ScalarFormat
             }
         }
     }
+
+    // Windows-1252 (ACP 1252) mapping for 0x80..0x9F (0xA0..0xFF is identity U+00A0..U+00FF).
+    // Recorded in r-expr-1b/str-chr-asc-range (acp=1252: Chr(128) = '€', Chr(129) = U+0081, Chr(255) = 'ÿ', Asc('é') = 233).
+    private static readonly char[] Cp1252High =
+    [
+        '\u20AC', '\u0081', '\u201A', '\u0192', '\u201E', '\u2026', '\u2020', '\u2021',
+        '\u02C6', '\u2030', '\u0160', '\u2039', '\u0152', '\u008D', '\u017D', '\u008F',
+        '\u0090', '\u2018', '\u2019', '\u201C', '\u201D', '\u2022', '\u2013', '\u2014',
+        '\u02DC', '\u2122', '\u0161', '\u203A', '\u0153', '\u009D', '\u017E', '\u0178',
+    ];
+
+    /// <summary>
+    /// Maps non-ASCII text for <c>UCase</c>/<c>LCase</c> via Windows <c>LCMapStringW</c> (<c>LCMAP_UPPERCASE</c> /
+    /// <c>LCMAP_LOWERCASE</c>, without <c>LCMAP_LINGUISTIC_CASING</c>), matching <c>r-expr-1b/str-case-folding</c>
+    /// (preserves embedded NULs, lone surrogates, 'ı', 'ς', 'µ', 'ſ', 'ﬁ', 'K', 'ẞ'; folds Deseret surrogates).
+    /// Returns false when the platform library is unavailable so callers refuse as <see cref="NotModelledCase.NonAsciiCase"/>.
+    /// </summary>
+    public static bool TryMapCase(ReadOnlySpan<char> units, bool upper, uint lcid, out nint bstr)
+    {
+        bstr = 0;
+        if (OleAut.Binding != OleAutBinding.Platform)
+        {
+            return false;
+        }
+        if (units.IsEmpty)
+        {
+            bstr = OleAut.SysAllocStringByteLen(null, 0);
+            return true;
+        }
+        uint flags = upper ? LcMapUppercase : LcMapLowercase;
+        fixed (char* src = units)
+        {
+            int outLen = OleAut.LCMapStringW(lcid, flags, src, units.Length, null, 0);
+            if (outLen <= 0)
+            {
+                return false;
+            }
+            nint result = OleAut.SysAllocStringByteLen(null, (uint)(outLen * 2));
+            int written = OleAut.LCMapStringW(lcid, flags, src, units.Length, (char*)result, outLen);
+            if (written <= 0)
+            {
+                OleAut.SysFreeString(result);
+                return false;
+            }
+            bstr = result;
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Maps <paramref name="code"/> (128..255) to its Windows-1252 UTF-16 character when the locale's ANSI code page is 1252
+    /// (<c>r-expr-1b/str-chr-asc-range</c>, acp=1252). Returns false on other code pages so callers refuse as
+    /// <see cref="NotModelledCase.ChrCodePage"/>.
+    /// </summary>
+    public static bool TryChrCp1252(int code, uint lcid, out char ch)
+    {
+        ch = '\0';
+        if (code is < 128 or > 255)
+        {
+            return false;
+        }
+        if (OleAut.Binding == OleAutBinding.Platform && GetAnsiCodePage(lcid) != 1252)
+        {
+            return false;
+        }
+        ch = code < 0xA0 ? Cp1252High[code - 0x80] : (char)code;
+        return true;
+    }
+
+    /// <summary>
+    /// Maps a non-ASCII UTF-16 character to its Windows-1252 byte (128..255) when the locale's ANSI code page is 1252
+    /// (<c>r-expr-1b/str-chr-asc-range</c>, acp=1252: <c>Asc('é') = 233</c>, <c>Asc(Chr(128)) = 128</c>, <c>Asc(Chr(255)) = 255</c>).
+    /// Returns false for unrecorded code pages or characters outside CP1252 so callers refuse as <c>NotModelled.AscCodePage</c>.
+    /// </summary>
+    public static bool TryAscCp1252(char ch, uint lcid, out byte code)
+    {
+        code = 0;
+        if (ch <= 0x7F)
+        {
+            return false;
+        }
+        if (OleAut.Binding == OleAutBinding.Platform && GetAnsiCodePage(lcid) != 1252)
+        {
+            return false;
+        }
+        if (ch is >= '\u00A0' and <= '\u00FF')
+        {
+            code = (byte)ch;
+            return true;
+        }
+        for (int i = 0; i < Cp1252High.Length; i++)
+        {
+            if (Cp1252High[i] == ch)
+            {
+                code = (byte)(0x80 + i);
+                return true;
+            }
+        }
+        return false;
+    }
 }

@@ -1804,9 +1804,16 @@ public static unsafe class ActionExecutor
                 if (!OwnedVariant.TryChangeScalar(&source, VarType.Decimal, context.Lcid, out NativeVariant decVar, out int hr))
                 {
                     const int DispETypeMismatch = unchecked((int)0x80020005);
+                    const int DispEOverflow = unchecked((int)0x8002000A);
                     if (hr == DispETypeMismatch)
                     {
                         failure = SqlFailure.Ace(SqlPhase.Execute, 3464, SqlMessages.DataTypeMismatch);
+                        return false;
+                    }
+                    if (hr == DispEOverflow)
+                    {
+                        // r-q-wire/dec-scale-endpoints call 42: INSERT INTO DE (ID, V) VALUES (4, 99999999999999999999999999999) -> ACE 6 Overflow.
+                        failure = SqlFailure.Ace(SqlPhase.Execute, AceError.Overflow, SqlMessages.Overflow);
                         return false;
                     }
                     failure = SqlFailure.Open(SqlPhase.Execute, "NotModelled.ActionConversion", $"converting {vt} into DECIMAL column '{column.Name}' (hr 0x{hr:X8})");

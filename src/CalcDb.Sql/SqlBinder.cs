@@ -592,6 +592,14 @@ public sealed class BoundSelect : IDisposable
     /// <summary>Embedded subqueries (<c>(SELECT …)</c>, <c>EXISTS</c>, <c>IN (SELECT …)</c>, <c>ANY</c>/<c>ALL</c>) owned by this SELECT.</summary>
     internal List<BoundSubquery> Subqueries { get; } = [];
 
+    /// <summary>
+    /// First SELECT alias that shadows a source column referenced elsewhere in the statement: deferred past expression
+    /// binding and open-time constant folding so bind errors (e.g. 3085 <c>Nz</c> in <c>r-expr-1b/info-stored-null-handling</c> #11)
+    /// and open-time constant errors (e.g. 5 <c>Sqr(-1)</c> in <c>r-q-wire/obs-engine-versus-expression-errors</c> #24)
+    /// report first before refusing <c>NotModelled.AliasShadowsColumn</c>.
+    /// </summary>
+    internal string? ShadowedAlias { get; private set; }
+
     public SelectPredicate Predicate => _syntax.Predicate;
 
     public TopClause? Top => _syntax.Top;
@@ -1817,6 +1825,10 @@ public sealed class BoundSelect : IDisposable
                 // qualified.md R-SQL-1 SQL-B: 255 output columns open, 256 fail 3190.
                 return SqlFailure.Ace(SqlPhase.Bind, 3190, "Too many fields defined.");
             }
+            if (bound.ShadowedAlias is { } shadowed && !bound.ColumnList.Any(static c => c.FoldsAtOpen))
+            {
+                return Open("NotModelled.AliasShadowsColumn", $"alias '{shadowed}' is also a field name and is referenced in the statement");
+            }
             if (Collisions() is { } collision)
             {
                 return collision;
@@ -1859,7 +1871,9 @@ public sealed class BoundSelect : IDisposable
                 {
                     // r-sql-1/order-nulls-text: in SELECT id AS t, t AS x FROM S the second t is the alias (x is id), where
                     // a field t exists; which clauses take the alias over the field is not recorded.
-                    return Open("NotModelled.AliasShadowsColumn", $"alias '{alias}' is also a field name and is referenced in the statement");
+                    // Defer the NotModelled.AliasShadowsColumn refusal until after expression binding and open-time constant
+                    // folding (r-expr-1b/info-stored-null-handling #11, r-q-wire/obs-engine-versus-expression-errors #24).
+                    bound.ShadowedAlias ??= alias;
                 }
                 if (item.Expression is { } e && Walk(e.Syntax.Root!).Any(n => n.Kind == SyntaxKind.Name && string.Equals(n.Text, alias, StringComparison.OrdinalIgnoreCase)))
                 {

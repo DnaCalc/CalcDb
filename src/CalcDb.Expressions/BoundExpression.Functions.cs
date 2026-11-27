@@ -186,7 +186,10 @@ public sealed unsafe partial class BoundExpression
                 result = EvalAscB(ref sp, ins);
                 return true;
             case ExprFunction.Str:
-                result = EvalStr(ref sp, ins);
+                result = EvalStr(ref sp, ins, dollar: false);
+                return true;
+            case ExprFunction.StrDollar:
+                result = EvalStr(ref sp, ins, dollar: true);
                 return true;
             case ExprFunction.PPmt:
             case ExprFunction.IPmt:
@@ -797,7 +800,15 @@ public sealed unsafe partial class BoundExpression
             }
             if (code > 127)
             {
-                return ScalarOutcome.Fail(ScalarFailure.Open(NotModelledCase.ChrCodePage, site, ScalarOperation.Chr));
+                if (!ScalarFormat.TryChrCp1252(code, _active.Lcid, out char mapped))
+                {
+                    return ScalarOutcome.Fail(ScalarFailure.Open(NotModelledCase.ChrCodePage, site, ScalarOperation.Chr));
+                }
+                return ScalarOutcome.Of(new NativeVariant
+                {
+                    Vt = (ushort)VarType.Bstr,
+                    Pointer = Bstrs.FromUnits(1, mapped, static (dst, ch) => dst[0] = ch),
+                });
             }
             return ScalarOutcome.Of(new NativeVariant
             {
@@ -850,6 +861,11 @@ public sealed unsafe partial class BoundExpression
             char c = s[0];
             if (!wide && c > 0x7F)
             {
+                if (ScalarFormat.TryAscCp1252(c, _active.Lcid, out byte cpCode))
+                {
+                    result = ScalarOutcome.Of(new NativeVariant { Vt = (ushort)VarType.I2, Int64 = cpCode });
+                    return true;
+                }
                 LastFailure = ExpressionFailure.Open(ExpressionPhase.Evaluate, "NotModelled.AscCodePage", $"Asc of non-ASCII U+{(int)c:X4} depends on code page");
                 return false;
             }
@@ -1025,7 +1041,9 @@ public sealed unsafe partial class BoundExpression
             ReadOnlySpan<char> units = Bstrs.Chars(v.Pointer);
             if (!System.Text.Ascii.IsValid(units))
             {
-                return ScalarOutcome.Fail(ScalarFailure.Open(NotModelledCase.NonAsciiCase, site, ScalarOperation.UCase));
+                return ScalarFormat.TryMapCase(units, upper: false, _active.Lcid, out nint mapped)
+                    ? ScalarOutcome.Of(new NativeVariant { Vt = (ushort)VarType.Bstr, Pointer = mapped })
+                    : ScalarOutcome.Fail(ScalarFailure.Open(NotModelledCase.NonAsciiCase, site, ScalarOperation.UCase));
             }
             return ScalarOutcome.Of(new NativeVariant
             {

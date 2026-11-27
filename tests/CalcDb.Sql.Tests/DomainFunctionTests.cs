@@ -172,7 +172,7 @@ public sealed class DomainFunctionTests
             Assert.Null(innerCur);
             Assert.NotNull(innerFail);
             Assert.Equal(3075, innerFail!.Number);
-            Assert.Contains("'IIf(1)", innerFail.Message, StringComparison.Ordinal);
+            Assert.Contains("'IIf(1'", innerFail.Message, StringComparison.Ordinal);
         }
 
         // Per-row domain expression does not claim unrecorded base-column SourceTable/SourceField.

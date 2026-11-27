@@ -538,10 +538,15 @@ public static class DdlBinder
                         precision = col.DataType.Precision.Value;
                         scale = s;
                     }
-                    if (precision is < 1 or > 28 || scale < 0 || scale > precision)
+                    if (precision is < 1 or > 28)
                     {
-                        // evidence/r-q-wire/dec-ddl-precision-limits records ACE 3700/3701 on ACCDB ADO; refusal kept until lowered.
-                        return Fail(BindOpen("NotModelled.DdlDecimalPrecision", $"DECIMAL({precision}, {scale}) on column '{col.Name}' is outside 1..28 / 0..precision"), out failure);
+                        // evidence/r-q-wire/dec-ddl-precision-limits calls 23, 28, 48: DECIMAL(29,0), DECIMAL(38,0), DECIMAL(0,0) -> ACE 3700.
+                        return Fail(BindAce(3700, SqlMessages.InvalidDecimalPrecision), out failure);
+                    }
+                    if (scale < 0 || scale > precision)
+                    {
+                        // evidence/r-q-wire/dec-ddl-precision-limits call 33: DECIMAL(28,29) -> ACE 3701.
+                        return Fail(BindAce(3701, SqlMessages.InvalidDecimalScale), out failure);
                     }
                     boundField = new NewField(col.Name, NewFieldType.Decimal, Precision: (byte)precision, Scale: (byte)scale, ImplicitDecimalPrecision: implicitPrecision);
                     break;

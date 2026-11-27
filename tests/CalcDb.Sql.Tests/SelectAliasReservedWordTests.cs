@@ -335,11 +335,11 @@ public sealed class SelectAliasReservedWordTests
     [Fact]
     public void Info_stored_null_handling_replay_has_zero_mismatches()
     {
-        // r-expr-1b/info-stored-null-handling call 8 now matches ACE 3141 (previously the sole mismatch in SelectReplayTests).
+        // r-expr-1b/info-stored-null-handling: all 6 calls now match ACE (calls 11 and 15 now report 3085 Nz before AliasShadowsColumn).
         var replay = new SelectReplayTests.Replay("r-expr-1b/info-stored-null-handling/r-expr-1b.info-stored-null-handling.4941095eb0.a1.json");
         replay.Run();
         Assert.Empty(replay.Mismatches);
-        Assert.Equal(4, replay.Matched);
+        Assert.Equal(6, replay.Matched);
     }
 
     private static void AssertRefusedInSelectAndFrom(string word, bool expectFromUnion3450)

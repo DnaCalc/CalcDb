@@ -70,6 +70,19 @@ public sealed record SqlFailure(SqlPhase Phase, int Number, string Message, stri
         const string InExpression = " in expression.";
         if (failure.Number is 3077 or 3075 && failure.Message.EndsWith(InExpression, StringComparison.Ordinal))
         {
+            if (failure.Message is ExpressionMessages.WrongArgumentCount or ExpressionMessages.InvalidQualifier)
+            {
+                // r-expr-1b (fmt-numeric-patterns #187, info-isnumeric-isdate-forms #99, info-result-vartype-numeric #55,
+                // meta-conversion-field-types #43, num-abs-sgn-int-fix #43, num-power-operator #119, num-sqr-exp-log-trig #71,
+                // op-concat-number-forms #63, rnd-seeded-sequences #55/#59, route-ado-and-dao-battery #129/#273,
+                // route-mdb-battery #131/#223/#253, arith-intdiv-mod-types #75/#79, cmp-cross-types #51/#63/#67,
+                // cond-iif-forms #39/#43/#47, cond-switch-choose-forms #47/#51/#63, date-weekday-forms #103/#107, ...):
+                // ACE quotes the full trimmed expression span with its final character omitted (e.g. 'CDec(1', 'CDec(2) ^ ',
+                // 'CDec(1.50) & '', 'Split('a b', ' ')(1').
+                string expr = source[start..Math.Max(start, Math.Min(end, source.Length))].TrimEnd();
+                string trimmedQuote = expr.Length > 1 ? expr[..^1] : expr;
+                return new SqlFailure(phase, 3075, $"{failure.Message[..^InExpression.Length]}{QueryExpression}{trimmedQuote}'.") { ExcerptExact = true, FromDomainFunction = failure.FromDomainFunction };
+            }
             int stop = failure.Site > start && failure.Site <= source.Length ? failure.Site : end;
             string quote = source[start..Math.Max(start, stop)].TrimEnd();
             return new SqlFailure(phase, 3075, $"{failure.Message[..^InExpression.Length]}{QueryExpression}{quote}'.") { ExcerptExact = false, FromDomainFunction = failure.FromDomainFunction };
@@ -268,6 +281,12 @@ public static class SqlMessages
 
     /// <summary>3354 when a scalar subquery returns more than one row (r-sql-1/sub-scalar, r-q53-conv-abspos-subq-loc/subq-scalar-corr-dao-*, subq-grp-decagg-ado-*).</summary>
     public const string SubqueryMultipleRows = "At most one record can be returned by this subquery.";
+
+    /// <summary>3700 when CREATE TABLE DECIMAL(p, s) has precision outside 1..28 (r-q-wire/dec-ddl-precision-limits calls 23, 28, 48).</summary>
+    public const string InvalidDecimalPrecision = "Invalid precision for decimal data type.";
+
+    /// <summary>3701 when CREATE TABLE DECIMAL(p, s) has scale outside 0..p (r-q-wire/dec-ddl-precision-limits call 33).</summary>
+    public const string InvalidDecimalScale = "Invalid scale for decimal data type.";
 
     /// <summary>3761 when a DECIMAL aggregate exceeds 28 decimal digits within 96 bits (r-fix-expr-sql/fold-decimal-28-digits, fold-decimal-avg-var-forms).</summary>
     public const string DecimalPrecisionTooSmall = "The decimal field's precision is too small to accept the numeric you attempted to add.";

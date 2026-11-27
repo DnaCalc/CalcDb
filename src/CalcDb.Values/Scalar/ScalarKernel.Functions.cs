@@ -79,8 +79,10 @@ public static unsafe partial class ScalarKernel
     }
 
     /// <summary>
-    /// UCase (Find <c>UCase(S) = 'ALPHA'</c>): Null gives Null; text, or a number's or date's text form, in upper case.
-    /// Only ASCII casing is recorded: text with a unit above U+007F is <see cref="NotModelledCase.NonAsciiCase"/>.
+    /// UCase (Find <c>UCase(S) = 'ALPHA'</c>; <c>r-expr-1b/str-case-folding</c>): Null gives Null; text, or a number's or
+    /// date's text form, in upper case. ASCII uses fast invariant folding; non-ASCII uses Windows <c>LCMapStringW</c>
+    /// (LCMAP_UPPERCASE) matching <c>r-expr-1b/str-case-folding</c> (refusing as <see cref="NotModelledCase.NonAsciiCase"/>
+    /// when the platform library is absent).
     /// </summary>
     private static ScalarOutcome UpperCase(in ScalarDescriptor d, NativeVariant* a, ExpressionContext c)
     {
@@ -98,7 +100,9 @@ public static unsafe partial class ScalarKernel
             ReadOnlySpan<char> units = Tag(a) == VarType.Bstr ? Bstrs.Chars(a->Pointer) : Bstrs.Chars(text.Pointer);
             if (!System.Text.Ascii.IsValid(units))
             {
-                return Open(d, NotModelledCase.NonAsciiCase);
+                return ScalarFormat.TryMapCase(units, upper: true, c.Lcid, out nint mapped)
+                    ? Bstr(mapped)
+                    : Open(d, NotModelledCase.NonAsciiCase);
             }
             return Bstr(Bstrs.FromUnits(units.Length, units, static (span, source) =>
             {
@@ -115,38 +119,48 @@ public static unsafe partial class ScalarKernel
     }
 
     /// <summary>
-    /// Chr (Find <c>Chr(97) &amp; 'lpha'</c>): the code converts as a Long (halves to even) and gives one unit for 0–127;
-    /// codes outside that range go through a code page that is not recorded (<see cref="NotModelledCase.ChrCodePage"/>).
+    /// Chr (Find <c>Chr(97) &amp; 'lpha'</c>; <c>r-expr-1b/str-chr-asc-range</c>, <c>r-expr-1b/null-propagation-functions</c>):
+    /// Null fails 3464; the code converts as a Long (halves to even); &lt; 0 or &gt; 255 fails 5; 0–127 gives one ASCII unit;
+    /// 128–255 maps through Windows-1252 when the locale's ANSI code page is 1252 (other code pages name
+    /// <see cref="NotModelledCase.ChrCodePage"/>).
     /// </summary>
     private static ScalarOutcome Character(in ScalarDescriptor d, NativeVariant* a, ExpressionContext c)
     {
         if (Tag(a) == VarType.Null)
         {
-            return Open(d, NotModelledCase.NullArgument);
+            return Fail(d, AceError.TypeMismatch);
         }
         if (IntegerOf(d, a, c, VarType.I4, out int code) is { } refused)
         {
             return refused;
         }
-        if (code is < 0 or > 127)
+        if (code is < 0 or > 255)
         {
-            return Open(d, NotModelledCase.ChrCodePage);
+            return Fail(d, AceError.InvalidProcedureCall);
+        }
+        if (code > 127)
+        {
+            if (!ScalarFormat.TryChrCp1252(code, c.Lcid, out char mapped))
+            {
+                return Open(d, NotModelledCase.ChrCodePage);
+            }
+            return Bstr(Bstrs.FromUnits(1, mapped, static (span, unit) => span[0] = unit));
         }
         return Bstr(Bstrs.FromUnits(1, (char)code, static (span, unit) => span[0] = unit));
     }
 
     /// <summary>
-    /// Val (Find <c>N = Val('20')</c>; the VBA reference): blanks, tabs and line feeds are removed, then the longest
-    /// prefix that reads as a decimal number (an optional minus, digits, a point, an E or D exponent) gives a Double; no
-    /// such prefix gives 0. A value that is not text, a radix form (&amp;H, &amp;O), a plus sign and an overflowing number
-    /// are <see cref="NotModelledCase.ValForm"/>; Null is <see cref="NotModelledCase.NullArgument"/>.
+    /// Val (Find <c>N = Val('20')</c>; <c>r-expr-1b/null-propagation-functions</c> call 195): Null fails 3464; blanks, tabs
+    /// and line feeds are removed, then the longest prefix that reads as a decimal number (an optional minus, digits, a point,
+    /// an E or D exponent) gives a Double; no such prefix gives 0. A value that is not text, a radix form (&amp;H, &amp;O), a
+    /// plus sign and an overflowing number are <see cref="NotModelledCase.ValForm"/>.
     /// </summary>
     private static ScalarOutcome Value(in ScalarDescriptor d, NativeVariant* a)
     {
         VarType t = Tag(a);
         if (t == VarType.Null)
         {
-            return Open(d, NotModelledCase.NullArgument);
+            return Fail(d, AceError.TypeMismatch);
         }
         if (t != VarType.Bstr)
         {
@@ -232,15 +246,16 @@ public static unsafe partial class ScalarKernel
     private const int MaxTextLength = 1073741823;
 
     /// <summary>
-    /// Left and Right (Find <c>S = Left('alphabet', 5)</c>): Null text gives Null; the count converts as a Long (beyond
-    /// Long fails 6), a count below 0 or above <see cref="MaxTextLength"/> fails 5 for any text, and the first (last) units
-    /// of the text, or of a number's or date's text form, are taken. A Null count is <see cref="NotModelledCase.NullArgument"/>.
+    /// Left and Right (Find <c>S = Left('alphabet', 5)</c>; <c>r-expr-1b/null-propagation-functions</c> call 43;
+    /// <c>qualified.md</c> optional arguments): Null count fails 3464; Null text gives Null; the count converts as a Long
+    /// (beyond Long fails 6), a count below 0 or above <see cref="MaxTextLength"/> fails 5 for any text, and the first
+    /// (last) units of the text, or of a number's or date's text form, are taken.
     /// </summary>
     private static ScalarOutcome EdgePart(in ScalarDescriptor d, NativeVariant* a, NativeVariant* b, ExpressionContext c)
     {
         if (Tag(b) == VarType.Null)
         {
-            return Open(d, NotModelledCase.NullArgument);
+            return Fail(d, AceError.TypeMismatch);
         }
         if (Tag(a) == VarType.Null)
         {
@@ -258,15 +273,20 @@ public static unsafe partial class ScalarKernel
     }
 
     /// <summary>
-    /// Mid (qualified.md EXPR-INVENTORY, same note): the start converts as a Long and must be 1 to 2^30 (0 and 1073741825
-    /// fail 5; a start past the text gives ""); the optional length is bounded as in <see cref="EdgePart"/>. Null text
-    /// gives Null; a Null start or length is <see cref="NotModelledCase.NullArgument"/>.
+    /// Mid (qualified.md EXPR-INVENTORY; <c>r-expr-1b/null-propagation-functions</c> call 51): the start converts as a Long
+    /// and must be 1 to 2^30 (0 and 1073741825 fail 5; a start past the text gives ""); the optional length is bounded as in
+    /// <see cref="EdgePart"/>. Null text gives Null; a Null length fails 94 (Invalid use of Null); a Null start stays
+    /// <see cref="NotModelledCase.NullArgument"/>.
     /// </summary>
     private static ScalarOutcome MidPart(in ScalarDescriptor d, NativeVariant* a, NativeVariant* start, NativeVariant* length, ExpressionContext c)
     {
-        if (Tag(start) == VarType.Null || (length is not null && Tag(length) == VarType.Null))
+        if (Tag(start) == VarType.Null)
         {
             return Open(d, NotModelledCase.NullArgument);
+        }
+        if (length is not null && Tag(length) == VarType.Null)
+        {
+            return Fail(d, AceError.InvalidUseOfNull);
         }
         if (Tag(a) == VarType.Null)
         {
@@ -320,7 +340,12 @@ public static unsafe partial class ScalarKernel
     /// </summary>
     private static ScalarOutcome DateSerial(in ScalarDescriptor d, NativeVariant* y, NativeVariant* m, NativeVariant* day, ExpressionContext c)
     {
-        if (Tag(y) == VarType.Null || Tag(m) == VarType.Null || Tag(day) == VarType.Null)
+        if (Tag(y) == VarType.Null || Tag(m) == VarType.Null)
+        {
+            // r-expr-1b/null-propagation-functions calls 231, 235: DateSerial(Null, 1, 1) and DateSerial(2024, Null, 1) fail 3464.
+            return Fail(d, AceError.TypeMismatch);
+        }
+        if (Tag(day) == VarType.Null)
         {
             return Open(d, NotModelledCase.NullArgument);
         }

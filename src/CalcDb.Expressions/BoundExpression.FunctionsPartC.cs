@@ -1150,8 +1150,8 @@ public sealed unsafe partial class BoundExpression
         }
     }
 
-    /// <summary><c>Str(number)</c> (r-expr-1b/meta-text-function-field-types, r-expr-1b/info-result-vartype-text-date).</summary>
-    private ScalarOutcome EvalStr(ref int sp, Instruction ins)
+    /// <summary><c>Str(number)</c> and <c>Str$(number)</c> (r-expr-1b/meta-text-function-field-types, r-expr-1b/info-result-vartype-text-date #131).</summary>
+    private ScalarOutcome EvalStr(ref int sp, Instruction ins, bool dollar = false)
     {
         int first = sp - 1;
         int d = ins.Descriptor;
@@ -1160,7 +1160,9 @@ public sealed unsafe partial class BoundExpression
             NativeVariant arg = _stack[first].Value;
             if (arg.Vt == (ushort)VarType.Null)
             {
-                return ScalarOutcome.Of(new NativeVariant { Vt = (ushort)VarType.Null });
+                return dollar
+                    ? ScalarOutcome.Fail(ScalarFailure.Open(NotModelledCase.NullArgument, _descriptors[d].Site, ScalarOperation.CStr))
+                    : ScalarOutcome.Of(new NativeVariant { Vt = (ushort)VarType.Null });
             }
             if (arg.Vt == (ushort)VarType.I8)
             {
