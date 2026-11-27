@@ -213,13 +213,16 @@ internal sealed record PropertyMutationHost(
 /// as DAO-COLL qualified), Append, Delete, Refresh. A Property wrapper is shared while a client holds it (DAO-ID) and
 /// made anew after its last release; deleting a user property invalidates any held wrapper for it (3420).
 /// </summary>
-internal sealed unsafe class PropertiesObject : DaoObject
+internal sealed unsafe class PropertiesObject : DaoObject, IDaoEnumerableCollection
 {
     private static readonly InterfaceDecl Decl = DaoTypes.Properties;
     private static readonly nint Vtable = DualEntries.Build(Decl);
     private static readonly OperationTable Operations = new OperationTable(Decl)
         .Get("Count", (self, args) => Live(self, p => Int16(p._specs.Count)))
         .Get("Item", (self, args) => { nint index = args[0]; return Live(self, p => p.Item(index)); })
+        .Method("_NewEnum", (self, args) => Live(self, p => p._entriesNotRecorded is { } why
+            ? CallResult.Fail(Failure.NotModelled("NotModelled.PropertyEntries", why))
+            : NewEnumResult(p)))
         .Method("Append", (self, args) => { nint obj = args[0]; return Live(self, p => p.Append(obj)); })
         .Method("Delete", (self, args) => { nint name = args[0]; return Live(self, p => p.Delete(name)); })
         .Method("Refresh", (self, args) => Live(self, p => CallResult.Nothing));
@@ -252,6 +255,27 @@ internal sealed unsafe class PropertiesObject : DaoObject
     public DaoObject Owner => _owner;
 
     protected override OperationTable Table => Operations;
+
+    bool IDaoEnumerableCollection.IsEnumInvalid => _owner.Invalid;
+    string IDaoEnumerableCollection.EnumClosedSource => Source;
+    int IDaoEnumerableCollection.EnumCount => _specs.Count;
+    void IDaoEnumerableCollection.AddRefCollection() => AddRef();
+    void IDaoEnumerableCollection.ReleaseCollection() => Release();
+
+    nint IDaoEnumerableCollection.EnumDispatchAt(int index)
+    {
+        nint dispatch;
+        if (_held.TryGetValue(index, out PropertyObject? held))
+        {
+            held.QueryInterface(ComIids.IDispatch, &dispatch);
+            return dispatch;
+        }
+        var made = new PropertyObject(this, index, _specs[index]);
+        _held[index] = made;
+        made.QueryInterface(ComIids.IDispatch, &dispatch);
+        made.Release();
+        return dispatch;
+    }
 
     private static CallResult Live(ComObject self, Func<PropertiesObject, CallResult> op)
     {

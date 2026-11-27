@@ -165,13 +165,16 @@ public sealed unsafe class DaoExecuteTests : IDisposable
         Assert.StartsWith("NotModelled.DdlBesideTableSnapshot", besideTable.Failure!.Description, StringComparison.Ordinal);
         Ok(Method(tableSnapshot, "Close"));
 
-        // With nothing open the DROP reaches SchemaWriter. It writes an empty one-column table's drop (r-q11-ddl-closure),
-        // and the one TableDefs collection no longer lists the table afterwards.
+        // With nothing open the DROP reaches SchemaWriter. It writes an empty one-column table's drop (r-q11-ddl-closure);
+        // the held TableDefs collection stays stale across SQL DDL until Refresh() (r-q2-cursor-dao/enum-mutation-remove-during-walk,
+        // r-dao-1-err-1/coll-mutation-refresh), after which Item("E") fails 3265.
         Ok(Method(db, "Execute", "CREATE TABLE E (ID LONG)"));
         DispatchObject tableDefs = Recover<DispatchObject>(Ok(Get(db, "TableDefs")));
         Ok(Get(tableDefs, "Item", "E"));
         Ok(Method(db, "Execute", "DROP TABLE E"));
-        Assert.NotNull(Get(tableDefs, "Item", "E").Failure);
+        Ok(Get(tableDefs, "Item", "E"));
+        Ok(Method(tableDefs, "Refresh"));
+        Fails(Get(tableDefs, "Item", "E"), 3265, "DAO.TableDefs");
         Ok(Method(db, "Close"));
     }
 

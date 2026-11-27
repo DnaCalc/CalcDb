@@ -285,7 +285,10 @@ public sealed unsafe class DaoTableDefOpenAndReadOnlyActionTests : IDisposable
         FailsNotModelled(Method(t1, "OpenRecordset", 4, "bad"), "NotModelled.TableDefOpenRecordsetOptions");
 
         // Deleted/stale TableDef held across DROP TABLE refuses by name, even if a later CREATE TABLE reuses its page ID.
+        // SQL CREATE TABLE leaves held TableDefs stale until Refresh() (r-q2-cursor-dao/enum-mutation-add-during-walk,
+        // r-dao-1-err-1/coll-mutation-refresh), so refresh before fetching StaleT.
         Ok(Method(db, "Execute", "CREATE TABLE StaleT (ID LONG)", 128));
+        Ok(Method(tdfs, "Refresh"));
         TableDefObject stale = Recover<TableDefObject>(Ok(Get(tdfs, "Item", "StaleT")));
         Ok(Method(db, "Execute", "DROP TABLE StaleT", 128));
         FailsNotModelled(Method(stale, "OpenRecordset", 4), "NotModelled.TableDefOpenRecordsetStale");

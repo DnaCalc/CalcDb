@@ -41,8 +41,18 @@ internal sealed unsafe class DefinitionCollection : DaoObject, IDaoEnumerableCol
     /// </summary>
     public bool PreserveHeldByName { get; init; }
 
+    /// <summary>
+    /// When true, <see cref="Relist"/> keeps surviving members in their prior collection order and appends newly
+    /// discovered members at the end (r-q2-cursor-dao/enum-refresh-during-walk: TableDefs.Refresh appends new table
+    /// <c>Rf1</c> after <c>T</c> instead of re-sorting it before <c>Sm</c>).
+    /// </summary>
+    public bool AppendNewOnRelist { get; init; }
+
+    /// <summary>True when <paramref name="name"/> is present in this collection's current membership.</summary>
+    public bool ContainsName(string name) => _lookup.Find(name) is not null;
+
     /// <summary>List the members again from <see cref="Membership"/>; held member wrappers stay valid for their clients.</summary>
-    public string? Relist()
+    public string? Relist(bool appendNew = false)
     {
         if (Membership is { } membership)
         {
@@ -50,6 +60,38 @@ internal sealed unsafe class DefinitionCollection : DaoObject, IDaoEnumerableCol
             if (failure is not null)
             {
                 return failure;
+            }
+            if (appendNew && _names.Count > 0)
+            {
+                var newIndexByName = new Dictionary<string, int>(names.Count, StringComparer.OrdinalIgnoreCase);
+                for (int i = 0; i < names.Count; i++)
+                {
+                    newIndexByName.TryAdd(names[i], i);
+                }
+                var orderedNames = new List<string>(names.Count);
+                var indexMap = new List<int>(names.Count);
+                var seen = new bool[names.Count];
+                for (int i = 0; i < _names.Count; i++)
+                {
+                    if (newIndexByName.TryGetValue(_names[i], out int newIdx) && !seen[newIdx])
+                    {
+                        seen[newIdx] = true;
+                        orderedNames.Add(names[newIdx]);
+                        indexMap.Add(newIdx);
+                    }
+                }
+                for (int i = 0; i < names.Count; i++)
+                {
+                    if (!seen[i])
+                    {
+                        orderedNames.Add(names[i]);
+                        indexMap.Add(i);
+                    }
+                }
+                Func<DefinitionCollection, int, DaoObject> innerMake = make;
+                int[] map = [.. indexMap];
+                names = orderedNames;
+                make = (c, i) => innerMake(c, map[i]);
             }
             Dictionary<string, DaoObject>? preserved = null;
             if (PreserveHeldByName && _held.Count > 0)
@@ -264,7 +306,7 @@ internal sealed unsafe class DefinitionCollection : DaoObject, IDaoEnumerableCol
     private CallResult Refresh()
     {
         IReadOnlyList<(string Name, DaoObject Wrapper)> held = Refreshed is null ? [] : SnapshotHeld();
-        if (Relist() is { } fail)
+        if (Relist(appendNew: AppendNewOnRelist) is { } fail)
         {
             return CallResult.Fail(Failure.NotImplemented(fail));
         }
