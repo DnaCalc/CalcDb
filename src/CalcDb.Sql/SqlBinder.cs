@@ -440,8 +440,8 @@ internal enum AggregateKind : byte
 internal sealed class AggregateSpec(AggregateKind kind, SyntaxNode node, BoundExpression? argument, VarType result, int fieldType, ColumnDescriptor? sourceColumn = null, bool floatingInput = false)
 {
     /// <summary>
-    /// Whether a Sum or Avg adds floating values (a Double or Single field, a Double expression or derived column), so its
-    /// result depends on the feed order (PAR-FOLD).
+    /// Whether a Sum, Avg, Var, VarP, StDev or StDevP adds floating values (a Double or Single field, a Double expression
+    /// or derived column), so its result depends on the feed order (PAR-FOLD).
     /// </summary>
     public bool FloatingInput { get; } = floatingInput;
 
@@ -4602,12 +4602,21 @@ public sealed class BoundSelect : IDisposable
                 // evidence/r-q49-dt2-draftprops/dt2-select-aggregates-dao-ado-accdb: SUM(D) and AVG(D) fail 3464.
                 return SqlFailure.Ace(SqlPhase.Bind, 3464, SqlMessages.DataTypeMismatch);
             }
+            if (t == NativeTypes.Numeric && field.Column.CalculatedResultType is null && field.Column.NumericPrecision <= 28
+                && kind is AggregateKind.Var or AggregateKind.VarP or AggregateKind.StDev or AggregateKind.StDevP
+                && field.Column.NumericScale is not (<= 4 or 20))
+            {
+                argument.Dispose();
+                // r-par-1/fold-decimal-avg-var-forms (FD scale 4), r-fix-expr-sql/fold-decimal-avg-var-forms (FD0 scale 0, FD20 scale 20):
+                // Decimal variance sum-rounding threshold between scale 4 and scale 20 is unrecorded.
+                return Open("NotModelled.DecimalVarianceScale", $"{node.Text} over DECIMAL({field.Column.NumericPrecision},{field.Column.NumericScale}): only scales 0..4 and 20 are recorded");
+            }
             (VarType result, int type)? rule = kind switch
             {
                 AggregateKind.Sum or AggregateKind.Avg when t is NativeTypes.Boolean or NativeTypes.Byte or NativeTypes.Integer or NativeTypes.Long or NativeTypes.BigInt or NativeTypes.Single or NativeTypes.DateTime or NativeTypes.Double => (VarType.R8, 7),
                 // qualified.md R-SQL-1 SQL-AGG, SQL-AGG-NUMERIC, R-PAR-1 PAR-FOLD:
                 // Var, VarP, StDev and StDevP return Double (Field.Type 7, Size 8) across Byte, Integer, Long, Single,
-                // Currency, Double, DateTime, Yes/No, Text (parsed as Double, 3464 on non-numeric), and Decimal (p <= 28)
+                // Currency, Double, DateTime, Yes/No, Text (parsed as Double, 3464 on non-numeric), and Decimal (p <= 28, scale <= 4 or 20)
                 // (r-sql-13b/agg-stat-argument-types, r-fix-expr-sql/agg-stat-argument-types-renamed,
                 // r-par-1/fold-currency-var-stdev, r-par-1/fold-single-groups, r-par-1/fold-decimal-avg-var-forms,
                 // r-fix-expr-sql/fold-decimal-avg-var-forms, r-q-expr-sql/agg-var-recurrence, r-sql-1/agg-single).
@@ -4648,49 +4657,11 @@ public sealed class BoundSelect : IDisposable
 
         private string CallText(SyntaxNode node, Fragment fragment)
         {
-            string text = fragment.Text(syntax.Source);
-            if (ReferenceEquals(node, fragment.Syntax.Root))
+            if (node.Offset >= 0 && node.CloseOffset >= node.Offset && node.CloseOffset < syntax.Source.Length)
             {
-                return text.Trim();
+                return syntax.Source[node.Offset..(node.CloseOffset + 1)].Trim();
             }
-            int start = node.Offset;
-            if (start < 0 || start >= text.Length)
-            {
-                return node.Text ?? text.Trim();
-            }
-            int depth = 0;
-            bool inQuote = false;
-            char quoteChar = '\0';
-            for (int i = start; i < text.Length; i++)
-            {
-                char ch = text[i];
-                if (inQuote)
-                {
-                    if (ch == quoteChar)
-                    {
-                        inQuote = false;
-                    }
-                    continue;
-                }
-                if (ch is '\'' or '"')
-                {
-                    inQuote = true;
-                    quoteChar = ch;
-                }
-                else if (ch == '(')
-                {
-                    depth++;
-                }
-                else if (ch == ')')
-                {
-                    depth--;
-                    if (depth == 0)
-                    {
-                        return text[start..(i + 1)].Trim();
-                    }
-                }
-            }
-            return text[start..].Trim();
+            return fragment.Text(syntax.Source).Trim();
         }
 
         private (SubqueryBinding? Binding, ExpressionFailure? Failure) BindEmbeddedSubquery(SyntaxNode node, ExpressionSchema enclosingScope, OperandContract leftContract) =>
@@ -4762,7 +4733,7 @@ public sealed class BoundSelect : IDisposable
                     _ => null,
                 };
             }
-            if (argument.UsesSlots)
+            if (argument.UsesSlots || argument.UsesSubqueries)
             {
                 return null;
             }
@@ -4770,7 +4741,7 @@ public sealed class BoundSelect : IDisposable
             return (kind, s.FieldType) switch
             {
                 // r-sql-1/agg-arg-kinds call 6: Sum(True) -> Double (7), Sum(2.5) -> Decimal (20), Sum('3') -> Double (7).
-                (AggregateKind.Sum, 3) when s.InnerMatchesDao => (VarType.R8, 7, false),
+                (AggregateKind.Sum, 3) when s.InnerMatchesDao && s.Kind == OperandKind.BooleanLiteral => (VarType.R8, 7, false),
                 (AggregateKind.Sum, 20) when s.InnerMatchesDao && s.Kind == OperandKind.DecimalLiteral => (VarType.Decimal, 20, false),
                 (AggregateKind.Sum, 10) when root is { Kind: SyntaxKind.Literal, Literal: LiteralKind.Text } => (VarType.R8, 7, false),
                 (AggregateKind.Sum or AggregateKind.Avg, 4) when s.InnerMatchesDao => (VarType.R8, 7, false),

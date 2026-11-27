@@ -222,6 +222,13 @@ public sealed class StatisticalAggregateTests
             AssertDoubleExact(cur, 0, 2.0);
             AssertDoubleExact(cur, 1, 1.4142135623730951);
         }
+        foreach (int g in new[] { 7, 8 })
+        {
+            using BoundSelect plan = Prepare(dbFold, $"SELECT Var(x) AS v, StDev(x) AS sd FROM FD WHERE g = {g}");
+            using SelectCursor cur = OpenSnapshot(dbFold, plan);
+            AssertDoubleExact(cur, 0, 0.0);
+            AssertDoubleExact(cur, 1, 0.0);
+        }
 
         var dbPar = new SqlFixture(RFixParSha);
         AssertOpenAce(dbPar, "SELECT Var(x) AS v, StDev(x) AS sd FROM FD0 WHERE g = 1", 6);
@@ -375,6 +382,7 @@ public sealed class StatisticalAggregateTests
 
         AssertBindAce(db13b, "SELECT Count(*) AS n, Count(*) AS n FROM GA", 3062, "Duplicate output alias 'n'.");
         AssertBindAce(db13b, "SELECT Sum(Sum(v)) AS r FROM GA", 3095, "Cannot have aggregate function in expression (Sum(Sum(v))).");
+        AssertBindAce(db13b, "SELECT 1 + Sum(Sum(v)) AS r FROM GA", 3095, "Cannot have aggregate function in expression (Sum(Sum(v))).");
         AssertBindAce(db13b, "SELECT Max(Count(*)) AS r FROM GA GROUP BY g", 3095, "Cannot have aggregate function in expression (Max(Count(*))).");
         AssertOpenAce(db13b, "SELECT Sum(CDbl(v)) AS s FROM GA", 94);
         AssertBindAce(db13b, "SELECT Sum(Nz(v, 0)) AS s FROM GA", 3085);

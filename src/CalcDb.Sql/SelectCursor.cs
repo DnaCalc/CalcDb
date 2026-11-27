@@ -3599,7 +3599,7 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
 
         /// <summary>
         /// PAR-FOLD: with an index on a GROUP BY key maintained during insert, ACE feeds an equal-key run in a rotated order,
-        /// not identified; order-sensitive aggregates (First, Last, a floating Sum or Avg) over such a key are named.
+        /// not identified; order-sensitive aggregates (First, Last, or a floating Sum, Avg, Var, VarP, StDev, StDevP) over such a key are named.
         /// </summary>
         private SqlFailure? FeedOrderOpen()
         {
@@ -3777,10 +3777,15 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                 case AggregateKind.Var or AggregateKind.VarP or AggregateKind.StDev or AggregateKind.StDevP when !isNull:
                     s.Seen = true;
                     s.Count++;
-                    if (v.Vt == (ushort)VarType.Currency)
+                    if (a.SourceColumn?.TypeCode == NativeTypes.Currency)
                     {
+                        if (v.Vt != (ushort)VarType.Currency)
+                        {
+                            failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.AggregateArgumentType", "a Currency statistical aggregate over a value that is not VT_CY");
+                            return false;
+                        }
                         // r-par-1/fold-currency-var-stdev, r-fix-expr-sql/agg-stat-argument-types-renamed:
-                        // Currency variance squares and sums in VT_CY (underflowing 0.0001^2 to 0, overflowing |x| >= 10^8 with error 6).
+                        // Currency variance squares and sums in VT_CY (underflowing 0.0001^2 to 0, overflowing |x| > ~3.037e7 with error 6).
                         ScalarOutcome mul = ScalarKernel.Apply(
                             ScalarDescriptor.Binary(ScalarOperation.Multiply, 0, OperandContract.Expression, OperandContract.Expression),
                             v,
@@ -3802,8 +3807,13 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                             return false;
                         }
                     }
-                    else if (v.Vt == (ushort)VarType.Decimal)
+                    else if (a.SourceColumn?.TypeCode == NativeTypes.Numeric)
                     {
+                        if (v.Vt != (ushort)VarType.Decimal)
+                        {
+                            failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.AggregateArgumentType", "a Decimal statistical aggregate over a value that is not VT_DECIMAL");
+                            return false;
+                        }
                         // r-par-1/fold-decimal-avg-var-forms, r-fix-expr-sql/fold-decimal-avg-var-forms:
                         // Decimal variance squares and sums in 96-bit Decimal (overflowing error 6 when x^2 or running sum leaves range).
                         decimal d = OwnedVariant.ReadDecimal(v).ToDecimal();
@@ -3922,7 +3932,7 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
             {
                 return 0m;
             }
-            return value / 1.000000000000000000000000000000000m;
+            return value / 1.0000000000000000000000000000m;
         }
 
         private NativeVariant Finish(AggregateSpec a, ref AggregateState s, out SqlFailure? failure)
@@ -4035,7 +4045,7 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                         {
                             decimal n = s.Count;
                             decimal sumForSquare = s.DecimalSum;
-                            if (a.SourceColumn.NumericScale > 14)
+                            if (a.SourceColumn.NumericScale == 20)
                             {
                                 NativeVariant r8 = new() { Vt = (ushort)VarType.R8, Double = (double)s.DecimalSum };
                                 if (!OwnedVariant.TryChangeScalar(&r8, VarType.Decimal, plan.Context.Lcid, out NativeVariant decFromR8, out _))
