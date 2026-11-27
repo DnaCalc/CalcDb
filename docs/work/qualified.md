@@ -2140,6 +2140,7 @@ is summarised in [qualification-report.md](qualification-report.md).
 - **Conditions.** ACCDB; default Workspace; items read through each enumerator's `Name` (Number for Errors).
 - **Records.** q2/enum-dao-top-level-collections, enum-dao-child-collections (discriminating: single-member against multi-member collections for `Skip`), enum-mutation-add-during-walk, enum-mutation-remove-during-walk, enum-refresh-during-walk, enum-close-during-walk; ops/enum-dao-collections.
 - **Open.** Refresh that REMOVES a member while an enumerator is live; enumeration across a second Workspace. Probe defect: the add/remove probes call a failing statement in every later `Next` body (3010, 3376), which is harmless noise.
+- **Built (`w15-com-dao-dispatch-ret`, `ce6b6ec8`, 2026-11-27).** `DaoEnumVariant` (`ErrorsObject`, `DefinitionCollection` honoring `Gap`/`ItemGap`/`CountDenied`, `FieldsObject`) returns `0x800A0D5C` recording DAO `3420` after close and `E_FAIL` on `Skip` (`r-q2-wire/obs-errors-foreach-enumeration`, `retain-enum-dao-after-close`).
 
 ### R-DAO-1 DAO-DRAFT: drafts name the failing call, leave counts unchanged and can be corrected; attached setters; transactional appends
 
@@ -2175,6 +2176,7 @@ is summarised in [qualification-report.md](qualification-report.md).
 - **Conditions**: ACCDB; each bit alone plus 3, 12, 48 and 260, on all four types, read-only and read-write (one element varied at a time).
 - **Records**: evidence/r-cursor-1b/option-flags-by-type (read-only), r-fix-cursor-dao/option-flags-rw (read-write), updatable-members-rw (Database, TableDefs, QueryDefs, LockEdits), r-dao-1b/db-properties-enumerated-accdb and tabledef-properties-enumerated (False read-only).
 - **Open**: 64 on a writable table-type open (asked read-only only); the cursor behaviour behind bit 256 on a dynaset or snapshot; the omitted-Type cell with options (CUR-PROV).
+- **Built (`w15-com-dao-dispatch-ret`, `ce6b6ec8`, 2026-11-27).** `Database.Updatable` returns `-1` (`True`) on a ReadOnly handle opened beside an exclusive read/write binding (`r-q-wire/opt-opendatabase-options-null-alone` call `38`).
 
 ### R-DAO-1 DAO-META: Containers and Documents are the three native containers; Permissions refuse until a put is attempted; held Document across drop and recreate
 
