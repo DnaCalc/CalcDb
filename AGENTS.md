@@ -26,12 +26,13 @@ scope or design, the book wins.
 - The integration checkout stays on master: `git pull --no-rebase`, commit, push. No rebase, force push or
   `reset --hard` there.
 - Four persistent worktrees sit beside the integration checkout (owner, 2026-11-24; adapted 2026-11-26 for Antigravity
-  swarm). The check worktree (`CalcDb-check`, detached) is used only by [tools/landing-check.ps1](tools/landing-check.ps1).
+  workers). The check worktree (`CalcDb-check`, detached) is used only by [tools/landing-check.ps1](tools/landing-check.ps1).
   Two writer slots, `CalcDb-w1` and `CalcDb-w2`, are persistent worktrees that keep their `bin`, `obj` and `artifacts`
   between tasks, so a code writer starts warm instead of with a cold build and NativeAOT publish: the organizer
   switches a free, clean slot to a new branch (`git -C <slot> switch -c alta/<topic> master`, keeping the `alta/`
-  prefix expected by `landing-check.ps1`) and adds the worker with `swarm add`; after `-Finish` (or manual cleanup),
-  the slot returns to `git -C <slot> switch --detach master` and `git branch -d alta/<topic>`. A prober uses the
+  prefix expected by `landing-check.ps1`) and launches a worker (`invoke_subagent` with `calcdb-writer`,
+  `EnableMCPTools: true`, so it has `roslynskills` MCP; use `swarm add` only when explicitly coordinating via `/swarm`);
+  after `-Finish` (or manual cleanup), the slot returns to `git -C <slot> switch --detach master` and `git branch -d alta/<topic>`. A prober uses the
   persistent `CalcDb-probe` worktree (`git -C CalcDb-probe switch -c alta/<name> master`), switched back to detached
   `master` after its landing. Each child commits on its branch; the organizer lands it by a merge, never a rebase.
   Branches are not pushed.
@@ -55,12 +56,13 @@ scope or design, the book wins.
   most two that build at once; a prober, a read-only reviewer or a compare does not count (2026-11-24: three writers,
   a landing check and a compare ran 13 or more builds and swapped on 31 GB). The third place goes to a probe round or
   a review. A brief gives only what is the task's own (the deliverable, its records, the files the child owns, the
-  solution filter, the `-Questions` folders, roscli or not); the fixed parts are landing-check.md's standard brief,
-  which the brief names.
-- When the owner asks to pause: post `@all` on the swarm board asking active children to let running checks finish, start
-  nothing new, commit on their branch, stop any `roscli` daemon, and post a structured status (commits, done and
-  checked, left in order, next step, undecided bytes). Record each status in its register row, let a running compare
-  finish (it only reads), and update `plan.json`. On resume, each child continues from its status.
+  solution filter, the `-Questions` folders, roslynskills/roscli guidance); the fixed parts are landing-check.md's
+  standard brief, which the brief names.
+- When the owner asks to pause: instruct active children (`send_message` to running subagents, or `@all` on the swarm
+  board if in `/swarm`) to let running checks finish, start nothing new, commit on their branch, stop any Roslyn daemon,
+  and return/post a structured status (commits, done and checked, left in order, next step, undecided bytes). Record each
+  status in its register row, let a running compare finish (it only reads), and update `plan.json` if in `/swarm`. On
+  resume, message each existing subagent via `send_message` (or wake on the board) to continue from its status.
 - A slice is ready when no new byte decision lacks a record: a prober closes its open questions one slice ahead of the
   writers. A child that still meets a byte no record decides, or a record that contradicts a note, stops and reports.
   The organizer then probes: a single discriminator itself, a larger round through a prober child that writes only
@@ -70,31 +72,31 @@ scope or design, the book wins.
   r-q29 to r-q31 setups kept no catalog pages, so their DDL had to be probed again, r-q34); a fixture a round creates is registered with
   `calcdb-oracle freeze --name` into `evidence/artifacts` and `probes/fixtures.json`, so its questions run again from
   the repository (63z8).
-- Set the model of every child via `swarm add` and balance quota across available Gemini and Claude models
-  (`swarm models`): trial one notch lower thinking where appropriate — `gemini-4-neon-medium` for well-probed focused
-  writer slices and probe rounds, `gemini-4-neon-high` for standard writer stretches, Gate 4 reviews, and tooling,
-  `gemini-4-neon-xhigh` for complex multi-layer slices; balance `claude-opus-5-5-high` and `claude-sonnet-5-5-high` onto
-  high-leverage implementation slices, second reviews, concurrency/locking/crash probe design, and RoslynSkills
-  improvements whenever Claude quota is available (prefer `gemini-4-neon-high`/`xhigh` over `hydrogen-xhigh` for
-  workers when Claude hits 429). If a worker or coordinator hits quota/capacity (429), switch models in place with
-  `swarm model` rather than killing and re-spawning. Keep stretches to one deliverable each.
-- Workers coordinate on the swarm message board (`post_message` / `read_board` / `swarm_wait`) and the organizer keeps
-  the Swarm UI `plan.json` updated (per `swarm_pane`) when adding workers, moving work, or changing goals. A child ends
-  with the fixed report of landing-check.md posted to `@coordinator`: change, rules as a domain table (rule, the record
-  that shows its case, the tuple it admits, the neighbours it refuses by name), tests, review, bookkeeping lines, open
-  branches.
+- Launch writers and Gate 4 reviewers via `define_subagent(EnableMCPTools: true)` + `invoke_subagent` (`calcdb-writer`
+  and `calcdb-reviewer`) by default so workers receive `call_mcp_tool` / `roslynskills` MCP (`mcp-p7`); empirically
+  (2026-11-27 `@mcp-probe`), `swarm add` workers do not receive `<mcp_servers>` or `call_mcp_tool` and therefore fall back
+  to `roscli` via `run_command` or `rg`. Under `invoke_subagent`, pick `Model` (`inherit`, `flash`, `pro`) appropriately
+  and keep stretches to one deliverable each. When running under `/swarm` explicitly (`swarm add`), use `swarm models`
+  (`gemini-4-neon-medium` for focused slices/probes, `gemini-4-neon-high` for standard writers/reviews/tooling,
+  `gemini-4-neon-xhigh` for complex multi-layer slices; balance Claude when available and switch with `swarm model` on
+  429 rather than killing/re-spawning).
+- A child ends with the fixed report of landing-check.md returned directly to the parent (or posted to `@coordinator`
+  if in `/swarm`): change, rules as a domain table (rule, the record that shows its case, the tuple it admits, the
+  neighbours it refuses by name), tests, review, bookkeeping lines, open branches. Because MCP-enabled subagents receive
+  lazy tool names without server `instructions`, `AGENTS.md` and `landing-check.md` keep the zero-schema-read
+  `roslynskills` MCP parameter shapes inline.
 - One review layer per landing: check every rule the child wrote against a record that shows the very case the rule
   names, not a neighbouring one, and every test assertion a child changed against its record. Expect one
   generalization beyond the records in a larger task; a Neon stretch of about 3,400 lines had eleven. A code writer
-  starts this reviewer itself, as a read-only swarm worker (`swarm add` with `workspace: inherit` pointed strictly
-  read-only at the writer's worktree) once its self-check passes; it applies the findings it agrees with, declines the
-  others with a reason, and reports each with its disposition (killing the reviewer once the review completes). A fix
-  commit of more than about 1,000 lines gets a second pass. The organizer checks the dispositions, the scope, the landing
-  check and the compare (vpfd trial, 2026-11-23: about 6 organizer calls for the landing against about 25 when the
-  organizer ran the review round; process log). A stretch under about 300 lines, a probe round or a bookkeeping change
-  has the organizer's review only.
-- To steer a running worker or wake an idle one, use `post_message` mentioning it by `@name`. While workers or landing
-  jobs run and the organizer has no other work, sleep with `swarm_wait` (zero token cost) rather than polling the board.
+  starts this reviewer itself via `invoke_subagent` (`calcdb-reviewer`, `EnableMCPTools: true`, `Workspace: "inherit"`,
+  strictly read-only on the writer's worktree — or `swarm add` when in `/swarm`) once its self-check passes; it applies
+  the findings it agrees with, declines the others with a reason, and reports each with its disposition. A fix commit
+  of more than about 1,000 lines gets a second pass. The organizer checks the dispositions, the scope, the landing check
+  and the compare (vpfd trial, 2026-11-23: about 6 organizer calls for the landing against about 25 when the organizer
+  ran the review round; process log). A stretch under about 300 lines, a probe round or a bookkeeping change has the
+  organizer's review only.
+- When coordinating subagents or landing jobs asynchronously, let reactive notifications wake you (no polling); if in
+  `/swarm`, steer idle workers with `post_message` `@name` and sleep on `swarm_wait`.
 
 ## Tool practice
 

@@ -22,17 +22,18 @@ persistent check worktree and gave code writers worktrees of their own.
 3. **Write.** A code writer in a writer slot (`CalcDb-w1`, `CalcDb-w2`; AGENTS.md, Repository), a prober in the persistent
    prober worktree (`CalcDb-probe`), each on a branch `alta/<name>`. The child checks itself with
    `pwsh tools/landing-check.ps1 -Name <topic>-self -InPlace -Solution CalcDb.<Area>.slnf` (with `-Filter` while it
-   fixes its own new tests) until it passes, commits on its branch, and posts the report below to `@coordinator` on the
-   swarm board.
+   fixes its own new tests) until it passes, commits on its branch, and returns the report below to its parent (or
+   posts `@coordinator` on the swarm board when in `/swarm`).
 4. **Review.** Every rule against a record that shows the very case it names, every new refusal against the records of
    the case it refuses (a refused recorded case is a regression), and every changed test assertion against its record,
-   in a session other than the writer's (`gemini-4-neon-high` by default; AGENTS.md, Sub-sessions). The writer spawns
-   the reviewer itself via `swarm add` (`workspace: inherit`, strictly read-only on the writer's worktree) once its
-   self-check passes, applies or declines each finding, and reports the dispositions; the organizer checks them. The
-   reviewer traces the callers of every changed member with `roslynskills` MCP (`roslyn_context`, `roslyn_nav_invocations`,
-   `roslyn_nav_implementations`, `roslyn_nav_call_hierarchy` with `workspace_path`) or `roscli` (`nav.find_invocations --symbol Type.Member` or at the
+   in a session other than the writer's. The writer spawns the reviewer itself via `invoke_subagent`
+   (`calcdb-reviewer` with `EnableMCPTools: true`, `Workspace: "inherit"`, strictly read-only on the writer's worktree —
+   or `swarm add` `gemini-4-neon-high` when in `/swarm`) once its self-check passes, applies or declines each finding,
+   and reports the dispositions; the organizer checks them. The reviewer traces the callers of every changed member with
+   `roslynskills` MCP (`roslyn_context`, `roslyn_nav_invocations`, `roslyn_nav_implementations`,
+   `roslyn_nav_call_hierarchy` with `workspace_path`) or `roscli` (`nav.find_invocations --symbol Type.Member` or at the
    member's position, `nav.find_implementations` for an interface, `nav.call_hierarchy` kept shallow), so a rule that
-   reaches further than the brief shows, and lists each roscli/MCP call with what it decided. A stretch under about 300
+   reaches further than the brief shows, and lists each MCP/`roscli` call with what it decided. A stretch under about 300
    lines has the organizer's review only.
 5. **Land.** The landing check below, then the merge, the push, and the organizer's bookkeeping.
 6. **Compare.** The core compare set in the background after the landing; the wide set once a day. A probe round that
@@ -97,11 +98,11 @@ Every brief says "follow the standard brief of docs/work/landing-check.md" and a
 - Commit on your branch with `git commit -F <unique message file in $TEMP>`, the message starting with the book ID and
   the task id and ending with your model's Co-Authored-By line. No shell heredocs (`$TEMP\msg-*.txt` via file tools).
   Do not push, merge or land.
-- Review as gate 4 says: over about 300 lines, spawn your own read-only reviewer (`swarm add`, `workspace: inherit` pointed
-  strictly read-only at your worktree, `gemini-4-neon-high` by default unless another model is assigned); under it, the
-  organizer's review only.
-- Stop your `roscli` daemon and let background tasks finish before posting your final report on the swarm board (wait on
-  `swarm_wait` or return to wait cleanly after posting `@coordinator [done] ...`).
+- Review as gate 4 says: over about 300 lines, spawn your own read-only reviewer (`calcdb-reviewer` via
+  `invoke_subagent` with `EnableMCPTools: true`, `Workspace: "inherit"` strictly read-only at your worktree — or
+  `swarm add` `gemini-4-neon-high` when coordinating in `/swarm`); under it, the organizer's review only.
+- Stop your Roslyn daemon (`roslyn_run` `daemon.stop` with `workspace_path`, or `roscli daemon.stop`) and let background
+  tasks finish before returning your final report (or posting `@coordinator [done] ...` on the swarm board).
 
 The solution filters `CalcDb.Isam.slnf`, `CalcDb.Sql.slnf`, `CalcDb.Com.slnf` and `CalcDb.Oracle.slnf` each hold an
 area's projects, everything they reference and the area's tests: a child builds, and loads into an editor or a Roslyn
