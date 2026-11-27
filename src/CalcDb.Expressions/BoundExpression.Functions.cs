@@ -186,7 +186,10 @@ public sealed unsafe partial class BoundExpression
                 result = EvalAscB(ref sp, ins);
                 return true;
             case ExprFunction.Str:
-                result = EvalStr(ref sp, ins);
+                result = EvalStr(ref sp, ins, dollar: false);
+                return true;
+            case ExprFunction.StrDollar:
+                result = EvalStr(ref sp, ins, dollar: true);
                 return true;
             case ExprFunction.PPmt:
             case ExprFunction.IPmt:
@@ -768,9 +771,9 @@ public sealed unsafe partial class BoundExpression
     }
 
     /// <summary>
-    /// Chr$(n) (r-expr-1b/str-chr-asc-range, r-expr-1b/null-propagation-functions): Null is unrecorded (named
-    /// NotModelledCase.NullArgument); converts via CLng; &lt; 0 or &gt; 255 fails 5; 0..127 emits one ASCII unit;
-    /// 128..255 names NotModelledCase.ChrCodePage.
+    /// Chr$(n) (r-expr-1b/str-chr-asc-range, r-expr-1b/null-propagation-functions, r-q47-bigint-expr-edges/meta-dollar-str-dao-ado-accdb):
+    /// Null fails 3464; converts via CLng; &lt; 0 or &gt; 255 fails 5; 0..127 emits one ASCII unit;
+    /// 128..255 maps via Windows-1252 when ACP is 1252 (other code pages name NotModelledCase.ChrCodePage).
     /// </summary>
     private ScalarOutcome ChrDollar(ref int sp, Instruction ins)
     {
@@ -797,7 +800,15 @@ public sealed unsafe partial class BoundExpression
             }
             if (code > 127)
             {
-                return ScalarOutcome.Fail(ScalarFailure.Open(NotModelledCase.ChrCodePage, site, ScalarOperation.Chr));
+                if (!ScalarFormat.TryChrCp1252(code, _active.Lcid, out char mapped))
+                {
+                    return ScalarOutcome.Fail(ScalarFailure.Open(NotModelledCase.ChrCodePage, site, ScalarOperation.Chr));
+                }
+                return ScalarOutcome.Of(new NativeVariant
+                {
+                    Vt = (ushort)VarType.Bstr,
+                    Pointer = Bstrs.FromUnits(1, mapped, static (dst, ch) => dst[0] = ch),
+                });
             }
             return ScalarOutcome.Of(new NativeVariant
             {
@@ -814,7 +825,8 @@ public sealed unsafe partial class BoundExpression
     /// <summary>
     /// Asc(s) and AscW(s) (r-expr-1b/str-chr-asc-range, r-expr-1b/null-propagation-functions, r-expr-1/inv-string-functions,
     /// r-def-expr-sql/str-stored-length-and-codes): Null fails 3464; non-text converts via CStr; empty string fails 5;
-    /// AscW returns signed VT_I2 (short)s[0]; Asc returns VT_I2 for ASCII (0..127) and names NotModelled.AscCodePage above 127.
+    /// AscW returns signed VT_I2 (short)s[0]; Asc returns VT_I2 for ASCII (0..127) and CP-1252 characters when ACP is 1252,
+    /// and names NotModelled.AscCodePage otherwise.
     /// </summary>
     private bool Asc(ref int sp, Instruction ins, bool wide, out ScalarOutcome result)
     {
@@ -850,6 +862,11 @@ public sealed unsafe partial class BoundExpression
             char c = s[0];
             if (!wide && c > 0x7F)
             {
+                if (ScalarFormat.TryAscCp1252(c, _active.Lcid, out byte cpCode))
+                {
+                    result = ScalarOutcome.Of(new NativeVariant { Vt = (ushort)VarType.I2, Int64 = cpCode });
+                    return true;
+                }
                 LastFailure = ExpressionFailure.Open(ExpressionPhase.Evaluate, "NotModelled.AscCodePage", $"Asc of non-ASCII U+{(int)c:X4} depends on code page");
                 return false;
             }
@@ -995,8 +1012,9 @@ public sealed unsafe partial class BoundExpression
 
     /// <summary>
     /// LCase(s) and LCase$(s) (r-expr-1b/null-propagation-functions, r-expr-1b/str-case-folding):
-    /// ASCII lowers A..Z; non-ASCII names NotModelledCase.NonAsciiCase (matching ScalarKernel.UpperCase);
-    /// Null yields Null for LCase and NotModelledCase.NullArgument for LCase$.
+    /// ASCII lowers A..Z; non-ASCII uses Windows LCMapStringW (matching ScalarKernel.UpperCase, refusing as
+    /// NotModelledCase.NonAsciiCase when the platform library is absent); Null yields Null for LCase and
+    /// NotModelledCase.NullArgument for LCase$.
     /// </summary>
     private ScalarOutcome LowerCase(ref int sp, Instruction ins, bool dollar)
     {
@@ -1025,7 +1043,9 @@ public sealed unsafe partial class BoundExpression
             ReadOnlySpan<char> units = Bstrs.Chars(v.Pointer);
             if (!System.Text.Ascii.IsValid(units))
             {
-                return ScalarOutcome.Fail(ScalarFailure.Open(NotModelledCase.NonAsciiCase, site, ScalarOperation.UCase));
+                return ScalarFormat.TryMapCase(units, upper: false, _active.Lcid, out nint mapped)
+                    ? ScalarOutcome.Of(new NativeVariant { Vt = (ushort)VarType.Bstr, Pointer = mapped })
+                    : ScalarOutcome.Fail(ScalarFailure.Open(NotModelledCase.NonAsciiCase, site, ScalarOperation.UCase));
             }
             return ScalarOutcome.Of(new NativeVariant
             {

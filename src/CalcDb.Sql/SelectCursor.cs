@@ -1450,6 +1450,11 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                     open[i] = null;
                 }
             }
+            if (plan.ShadowedAlias is { } shadowedAlias)
+            {
+                failure = SqlFailure.Open(SqlPhase.Bind, "NotModelled.AliasShadowsColumn", $"alias '{shadowedAlias}' is also a field name and is referenced in the statement");
+                return null;
+            }
             failure = null;
             bool hasSelectSubquery = false;
             for (int i = 0; i < n; i++)

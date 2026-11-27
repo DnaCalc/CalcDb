@@ -2138,7 +2138,7 @@ public sealed unsafe partial class BoundExpression : IDisposable
                     Descriptor(ScalarOperation.CLng, node.Offset, 1, contracts[1], default);
                     Descriptor(ScalarOperation.CLng, node.Offset, 1, n == 3 ? contracts[2] : default, default);
                     break;
-                case ExprFunction.Str:
+                case ExprFunction.Str or ExprFunction.StrDollar:
                     Descriptor(ScalarOperation.CDbl, node.Offset, 1, contracts[0], default);
                     break;
                 case ExprFunction.PPmt or ExprFunction.IPmt or ExprFunction.Pmt:

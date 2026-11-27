@@ -93,6 +93,7 @@ internal enum ExprFunction : byte
     StrConv,
     AscB,
     Str,
+    StrDollar,
     PPmt,
     IPmt,
     Pmt,
@@ -233,6 +234,7 @@ public static class FunctionInventory
         Expr("StrConv", ExprFunction.StrConv);
         Expr("AscB", ExprFunction.AscB);
         Expr("Str", ExprFunction.Str);
+        Expr("Str$", ExprFunction.StrDollar);
         Expr("PPmt", ExprFunction.PPmt);
         Expr("IPmt", ExprFunction.IPmt);
         Expr("Pmt", ExprFunction.Pmt);

@@ -1028,7 +1028,9 @@ public sealed unsafe class ExpressionSyntax : IDisposable
                         var call = new SyntaxNode { Kind = SyntaxKind.Call, Text = t.Text, Items = Arguments(out int closeOffset), Offset = t.Start, CloseOffset = closeOffset };
                         if (IsSymbol("("))
                         {
-                            // r-expr-1b/route-mdb-battery: Split('a b', ' ')(1).
+                            // r-expr-1b/route-mdb-battery #131, route-ado-and-dao-battery #129/#273: Split('a b', ' ')(1).
+                            // Consume the second argument list so ParseFragment's end spans the full expression.
+                            _ = Arguments(out _);
                             throw new SyntaxError(ExpressionMessages.InvalidQualifier);
                         }
                         return call;

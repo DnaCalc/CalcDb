@@ -269,10 +269,11 @@ public sealed class ExpressionFunctionsTests
         AssertEvalAce("Chr$(256)", 5);
         // r-q47-bigint-expr-edges/meta-dollar-str-dao-ado-accdb: Chr$(Null) fails 3464.
         AssertEvalAce("Chr$(Null)", 3464);
-        AssertEvalOpen("Chr$(128)", "NotModelled.Scalar.ChrCodePage");
+        // r-expr-1b/str-chr-asc-range (acp=1252, calls 20[0].1[0].2 & 124[0].1[0].2): Chr$(128) = "€", Asc('é') = 233.
+        AssertText("Chr$(128)", "€");
         AssertEvalAce("Asc('')", 5);
         AssertEvalAce("Asc(Null)", 3464);
-        AssertEvalOpen("Asc('é')", "NotModelled.AscCodePage");
+        AssertInt16("Asc('é')", 233);
         AssertEvalAce("AscW('')", 5);
         AssertEvalAce("AscW(Null)", 3464);
     }
@@ -402,7 +403,8 @@ public sealed class ExpressionFunctionsTests
         AssertNull("LCase(Null)");
         AssertText("LCase$('AB')", "ab");
         AssertEvalOpen("LCase$(Null)", "NotModelled.Scalar.NullArgument");
-        AssertEvalOpen("LCase('É')", "NotModelled.Scalar.NonAsciiCase");
+        // r-expr-1b/str-case-folding (call 16[0].1[0].2): LCase('É') = "é".
+        AssertText("LCase('É')", "é");
     }
 
     [Fact]

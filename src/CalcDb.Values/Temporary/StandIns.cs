@@ -83,6 +83,7 @@ internal static unsafe class StandIns
         GetLocaleInfoW = &GetLocaleInfoW,
         IsValidLocale = &IsValidLocale,
         LCMapStringA = &LCMapStringA,
+        LCMapStringW = &LCMapStringW,
         WideCharToMultiByte = &WideCharToMultiByte,
         MultiByteToWideChar = &MultiByteToWideChar,
     };
@@ -959,6 +960,9 @@ internal static unsafe class StandIns
 
     [UnmanagedCallersOnly]
     private static int LCMapStringA(uint locale, uint mapFlags, byte* src, int cchSrc, byte* dest, int cchDest) => 0;
+
+    [UnmanagedCallersOnly]
+    private static int LCMapStringW(uint locale, uint mapFlags, char* src, int cchSrc, char* dest, int cchDest) => 0;
 
     [UnmanagedCallersOnly]
     private static int WideCharToMultiByte(uint codePage, uint flags, char* wide, int cchWide, byte* multiByte, int cbMultiByte, byte* defaultChar, int* usedDefaultChar) => 0;
