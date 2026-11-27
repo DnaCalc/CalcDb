@@ -813,6 +813,16 @@ public static unsafe class ActionExecutor
             // Multi-row INSERT ... SELECT with dbFailOnError rolls back all rows on failure (RecordsAffected 0).
             bool externalDepthZero = database.Workspace.Depth == 0;
             bool explicitAutoNumber = plan.InsertColumns.Any(c => c.IsAutoNumber);
+            if (lateReadFailure is not null
+                && !(failOnError
+                    && lateReadFailure.Number == 11
+                    && externalDepthZero
+                    && !explicitAutoNumber
+                    && editContext!.Semantics.AutoNumber is not null))
+            {
+                cursor!.Dispose();
+                return ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.InsertSelectLateExpressionFailure", $"INSERT SELECT expression error after earlier source rows: {lateReadFailure}"));
+            }
             bool wrapStmtTxn = failOnError && (sourceRows.Count > 1 || lateReadFailure is not null);
             if (wrapStmtTxn && database.Workspace.Depth >= TransactionCoordinator.MaxWriteDepth)
             {
@@ -1498,7 +1508,7 @@ public static unsafe class ActionExecutor
     /// <list type="bullet">
     /// <item><b>Byte</b> (<c>r-fix-cursor-dao/ovf-insert-byte-failonerror</c>, <c>r-q-wire/int-sql-literal-byte</c>):
     /// banker's-rounded via <c>CLng</c>, then wrapped mod 256 (<c>300 → 44</c>, <c>256 → 0</c>, <c>-1 → 255</c>, <c>255.5 → 0</c>).</item>
-    /// <item><b>Integer</b> (<c>r-q-wire/int-sql-literal-integer</c>): banker's-rounded via <c>CInt</c>; overflow fails <b>6</b> (<c>Overflow</c>).</item>
+    /// <item><b>Integer</b> (<c>r-q-wire/int-sql-literal-integer</c>, <c>r-q53-conv-abspos-subq-loc/conv-sql-ins-upd-accdb</c>): banker's-rounded via <c>CInt</c>; <c>VT_I4</c> overflow fails <b>6</b> (<c>Overflow</c>), <c>VT_DECIMAL</c> overflow (<c>32767.5</c>) fails <b>3464</b>.</item>
     /// <item><b>Long</b> (<c>r-q-wire/int-sql-literal-long</c>, <c>r-def-expr-sql/sql-insert-values-forms</c>, <c>r-sql-2-3/act-fail-conversion</c>):
     /// banker's-rounded via <c>CLng</c>; overflow or non-numeric text fails <b>3464</b> (<c>Data type mismatch in criteria expression.</c>).</item>
     /// <item><b>Text</b> (<c>r-def-expr-sql/sql-insert-values-forms</c>, <c>r-oledb-odbc/error-record-channels</c>):
@@ -1530,26 +1540,6 @@ public static unsafe class ActionExecutor
                 : new NativeVariant { Vt = (ushort)VarType.Null };
             return true;
         }
-        if (vt == VarType.Empty)
-        {
-            // evidence/r-q53-conv-abspos-subq-loc/conv-sql-ins-upd-accdb, conv-sql-ins-upd-mdb, conv-dao-scalars-accdb, conv-dao-scalars-mdb:
-            // VT_EMPTY maps to False (0) on Yes/No and Null on other scalar columns.
-            if (column.TypeCode == NativeTypes.Boolean)
-            {
-                converted = new NativeVariant { Vt = (ushort)VarType.Bool, Int64 = 0 };
-                return true;
-            }
-            if (column.TypeCode is NativeTypes.Byte or NativeTypes.Integer or NativeTypes.Long
-                or NativeTypes.BigInt or NativeTypes.Single or NativeTypes.Double or NativeTypes.Currency
-                or NativeTypes.DateTime or NativeTypes.Numeric or NativeTypes.Text
-                or NativeTypes.Memo or NativeTypes.Guid)
-            {
-                converted = new NativeVariant { Vt = (ushort)VarType.Null };
-                return true;
-            }
-            failure = SqlFailure.Open(SqlPhase.Execute, "NotModelled.ActionConversion", $"value of VarType {vt} into column '{column.Name}'");
-            return false;
-        }
         if (allowExtendedDateTimeBytes && column.TypeCode == NativeTypes.ExtendedDateTime && vt == (VarType.Array | VarType.UI1) && incoming.Pointer != 0)
         {
             // r-q49-dt2-draftprops/dt2-select-into-accdb: SelectCursor.Read projects a stored DATETIME2 column
@@ -1572,14 +1562,7 @@ public static unsafe class ActionExecutor
             failure = SqlFailure.Ace(SqlPhase.Execute, 3464, SqlMessages.DataTypeMismatch);
             return false;
         }
-        if (column.TypeCode == NativeTypes.Guid && vt == (VarType.Array | VarType.UI1))
-        {
-            // evidence/r-q53-conv-abspos-subq-loc/conv-sql-ins-upd-accdb, conv-sql-ins-upd-mdb, conv-dao-scalars-accdb, conv-dao-scalars-mdb:
-            // non-BSTR (including 16-byte array) into GUID fails 3464.
-            failure = SqlFailure.Ace(SqlPhase.Execute, 3464, SqlMessages.DataTypeMismatch);
-            return false;
-        }
-        if (vt == VarType.Error || ((ushort)vt & 0xF000) != 0)
+        if (vt is VarType.Empty or VarType.Error || ((ushort)vt & 0xF000) != 0)
         {
             failure = SqlFailure.Open(SqlPhase.Execute, "NotModelled.ActionConversion", $"value of VarType {vt} into column '{column.Name}'");
             return false;
@@ -1597,20 +1580,21 @@ public static unsafe class ActionExecutor
                     converted = new NativeVariant { Vt = (ushort)VarType.UI1, Int64 = wrapped };
                     return true;
                 }
-                failure = MapConversionKernelFailure(whole, column, overflowIs3464: true, overflowIs6: false);
+                failure = MapConversionKernelFailure(whole, column, overflowIs3464: false, overflowIs6: false);
                 return false;
             }
             case NativeTypes.Integer:
             {
+                // evidence/r-q-wire/int-sql-literal-integer: out-of-range VT_I4 literals (32768, -32769) fail 6 (Overflow);
                 // evidence/r-q53-conv-abspos-subq-loc/conv-sql-ins-upd-accdb, conv-sql-ins-upd-mdb (calls 34, 79, 84):
-                // half-to-even rounding ('0.5' -> 0), bad text ('abc') and overflow (32767.5) fail 3464.
+                // half-to-even rounding ('0.5' -> 0), bad text ('abc') and VT_DECIMAL overflow (32767.5) fail 3464.
                 ScalarOutcome r = ScalarKernel.Apply(ScalarDescriptor.Unary(ScalarOperation.CInt, 0, OperandContract.Expression), incoming, context);
                 if (r.Succeeded)
                 {
                     converted = r.Value;
                     return true;
                 }
-                failure = MapConversionKernelFailure(r, column, overflowIs3464: true, overflowIs6: false);
+                failure = MapConversionKernelFailure(r, column, overflowIs3464: vt == VarType.Decimal, overflowIs6: vt == VarType.I4);
                 return false;
             }
             case NativeTypes.Long:
@@ -1671,7 +1655,7 @@ public static unsafe class ActionExecutor
                     converted = r.Value;
                     return true;
                 }
-                failure = MapConversionKernelFailure(r, column, overflowIs3464: true, overflowIs6: false);
+                failure = MapConversionKernelFailure(r, column, overflowIs3464: false, overflowIs6: false);
                 return false;
             }
             case NativeTypes.Currency:
@@ -1682,7 +1666,7 @@ public static unsafe class ActionExecutor
                     converted = r.Value;
                     return true;
                 }
-                failure = MapConversionKernelFailure(r, column, overflowIs3464: true, overflowIs6: false);
+                failure = MapConversionKernelFailure(r, column, overflowIs3464: false, overflowIs6: false);
                 return false;
             }
             case NativeTypes.DateTime:
@@ -1693,17 +1677,21 @@ public static unsafe class ActionExecutor
                     converted = r.Value;
                     return true;
                 }
-                failure = MapConversionKernelFailure(r, column, overflowIs3464: true, overflowIs6: false);
+                failure = MapConversionKernelFailure(r, column, overflowIs3464: false, overflowIs6: false);
                 return false;
             }
             case NativeTypes.Boolean:
             {
                 if (vt == VarType.Bstr)
                 {
-                    // evidence/r-q53-conv-abspos-subq-loc/conv-sql-ins-upd-accdb, conv-sql-ins-upd-mdb (calls 29, 124):
-                    // SQL INSERT/UPDATE rejects text ('False', 'abc') into Yes/No (BIT) with 3464.
-                    failure = SqlFailure.Ace(SqlPhase.Execute, 3464, SqlMessages.DataTypeMismatch);
-                    return false;
+                    ReadOnlySpan<char> bstr = Bstrs.Chars(incoming.Pointer);
+                    if (bstr.Equals("True", StringComparison.OrdinalIgnoreCase) || bstr.Equals("False", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // evidence/r-q53-conv-abspos-subq-loc/conv-sql-ins-upd-accdb, conv-sql-ins-upd-mdb (calls 24, 29):
+                        // SQL INSERT/UPDATE rejects boolean-word text ('True', 'False') into Yes/No (BIT) with 3464.
+                        failure = SqlFailure.Ace(SqlPhase.Execute, 3464, SqlMessages.DataTypeMismatch);
+                        return false;
+                    }
                 }
                 ScalarOutcome r = ScalarKernel.Apply(ScalarDescriptor.Unary(ScalarOperation.CBool, 0, OperandContract.Expression), incoming, context);
                 if (r.Succeeded)
@@ -1713,7 +1701,7 @@ public static unsafe class ActionExecutor
                     converted = new NativeVariant { Vt = (ushort)VarType.Bool, Int64 = b ? -1L : 0L };
                     return true;
                 }
-                failure = MapConversionKernelFailure(r, column, overflowIs3464: true, overflowIs6: false);
+                failure = MapConversionKernelFailure(r, column, overflowIs3464: false, overflowIs6: false);
                 return false;
             }
             case NativeTypes.Text or NativeTypes.Memo:
@@ -1724,18 +1712,6 @@ public static unsafe class ActionExecutor
                 {
                     textVar = incoming;
                     ownsTextVar = false;
-                }
-                else if (vt == VarType.Bool)
-                {
-                    // evidence/r-q53-conv-abspos-subq-loc/conv-dao-scalars-accdb, conv-dao-scalars-mdb, conv-sql-ins-upd-accdb, conv-sql-ins-upd-mdb:
-                    // Boolean -> Text/Memo formats True as "-1" and False as "0".
-                    string boolText = (short)incoming.Int64 != 0 ? "-1" : "0";
-                    textVar = new NativeVariant
-                    {
-                        Vt = (ushort)VarType.Bstr,
-                        Pointer = Bstrs.FromUnits(boolText.Length, boolText, static (dest, src) => src.AsSpan().CopyTo(dest)),
-                    };
-                    ownsTextVar = true;
                 }
                 else
                 {
@@ -1799,29 +1775,36 @@ public static unsafe class ActionExecutor
                     converted = SelectValues.Copy(incoming);
                     return true;
                 }
-                // evidence/r-q53-conv-abspos-subq-loc/conv-sql-ins-upd-accdb, conv-sql-ins-upd-mdb, conv-dao-scalars-accdb, conv-dao-scalars-mdb:
-                // non-BSTR into GUID fails 3464.
-                failure = SqlFailure.Ace(SqlPhase.Execute, 3464, SqlMessages.DataTypeMismatch);
+                failure = SqlFailure.Open(SqlPhase.Execute, "NotModelled.ActionConversion", $"non-text {vt} into GUID column '{column.Name}'");
                 return false;
             }
             case NativeTypes.Numeric:
             {
                 // evidence/r-q51-codecs-props-compact/dec-desc-keys-accdb, dec-desc-keys-mdb, seek-args-decimal-accdb, seek-args-decimal-mdb;
-                // evidence/r-q53-conv-abspos-subq-loc/conv-sql-ins-upd-accdb, conv-sql-ins-upd-mdb (calls 34, 129, 134):
+                // evidence/r-q53-conv-abspos-subq-loc/conv-sql-ins-upd-accdb, conv-sql-ins-upd-mdb (calls 34, 129, 134),
+                // dao-draft-decimal-accdb, dao-draft-decimal-mdb (call 146: Decimal(38, 0) passthrough):
                 // SQL INSERT/UPDATE converts numeric/text values via VariantChangeTypeEx(VT_DECIMAL), truncates excess
                 // fractional digits to column.NumericScale ('12.34575' -> 12.3457), fails 3464 on bad text ('abc'),
                 // and fails 3761 when integer magnitude exceeds column.NumericPrecision ('999999999999999.0').
+                NativeVariant source = incoming;
+                if (column.NumericPrecision == 38 && column.NumericScale == 0)
+                {
+                    if (OwnedVariant.TryChangeScalar(&source, VarType.Decimal, context.Lcid, out converted, out _))
+                    {
+                        return true;
+                    }
+                    failure = SqlFailure.Open(SqlPhase.Execute, "NotModelled.ActionConversion", $"converting {vt} into DECIMAL(38,0) column '{column.Name}'");
+                    return false;
+                }
                 if (column.NumericPrecision is 0 or > 28 || column.NumericScale > column.NumericPrecision)
                 {
                     failure = SqlFailure.Open(SqlPhase.Execute, "NotModelled.ActionConversion", $"DECIMAL({column.NumericPrecision},{column.NumericScale}) column '{column.Name}'");
                     return false;
                 }
-                NativeVariant source = incoming;
                 if (!OwnedVariant.TryChangeScalar(&source, VarType.Decimal, context.Lcid, out NativeVariant decVar, out int hr))
                 {
                     const int DispETypeMismatch = unchecked((int)0x80020005);
-                    const int DispEOverflow = unchecked((int)0x8002000A);
-                    if (hr is DispETypeMismatch or DispEOverflow)
+                    if (hr == DispETypeMismatch)
                     {
                         failure = SqlFailure.Ace(SqlPhase.Execute, 3464, SqlMessages.DataTypeMismatch);
                         return false;

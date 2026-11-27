@@ -129,9 +129,11 @@ public sealed unsafe class SqlConvGuidTests
         Assert.True(ActionExecutor.Execute("INSERT INTO TS (ID, B) VALUES (12, 255.5)", db, options: 128).Succeeded);
         Assert.True(ActionExecutor.Execute("INSERT INTO TS (ID, B) VALUES (13, 256)", db, options: 128).Succeeded);
 
-        // Calls 79, 84: bad text & overflow into Integer -> 3464.
+        // Calls 79, 84: bad text & VT_DECIMAL overflow (32767.5) into Integer -> 3464;
+        // evidence/r-q-wire/int-sql-literal-integer: VT_I4 overflow (32768) into Integer -> 6 (Overflow).
         Assert.Equal(3464, ActionExecutor.Execute("INSERT INTO TS (ID, I) VALUES (14, 'abc')", db, options: 128).Failure!.Number);
         Assert.Equal(3464, ActionExecutor.Execute("INSERT INTO TS (ID, I) VALUES (15, 32767.5)", db, options: 128).Failure!.Number);
+        Assert.Equal(6, ActionExecutor.Execute("INSERT INTO TS (ID, I) VALUES (150, 32768)", db, options: 128).Failure!.Number);
 
         // Calls 89, 94: bad text & overflow into Long -> 3464.
         Assert.Equal(3464, ActionExecutor.Execute("INSERT INTO TS (ID, L) VALUES (16, 'abc')", db, options: 128).Failure!.Number);
@@ -206,11 +208,11 @@ public sealed unsafe class SqlConvGuidTests
 
         Assert.NotEqual(MoveOutcome.Moved, cur.MoveNext());
 
-        // Non-BSTR into GUID fails 3464.
+        // Non-BSTR into GUID in SQL DML is unprobed and stays refused as NotModelled.ActionConversion.
         Assert.True(ActionExecutor.Execute("CREATE TABLE TG (ID LONG CONSTRAINT PK_TG PRIMARY KEY, G GUID)", db, options: 128).Succeeded);
         ActionOutcome badGuid = ActionExecutor.Execute("INSERT INTO TG (ID, G) VALUES (1, 12345)", db, options: 128);
         Assert.False(badGuid.Succeeded);
-        Assert.Equal(3464, badGuid.Failure!.Number);
+        Assert.Equal("NotModelled.ActionConversion", badGuid.Failure!.NotModelled);
     }
 
     [Fact]

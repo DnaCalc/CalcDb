@@ -265,7 +265,6 @@ public sealed class BoundAction : IDisposable
                 NativeTypes.Binary => src.IsFixed
                     ? new NewField(col.Name, NewFieldType.Binary, Size: src.Length)
                     : new NewField(col.Name, NewFieldType.VarBinary, Size: src.Length),
-                NativeTypes.Guid => new NewField(col.Name, NewFieldType.Guid),
                 NativeTypes.Numeric => new NewField(col.Name, NewFieldType.Decimal, Precision: src.NumericPrecision, Scale: src.NumericScale),
                 NativeTypes.BigInt => new NewField(col.Name, NewFieldType.BigInt),
                 NativeTypes.ExtendedDateTime => new NewField(col.Name, NewFieldType.DateTime2),

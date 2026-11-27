@@ -204,6 +204,7 @@ public sealed class AutonumberTxnReplayTests
             Assert.False(inTxnDivZero.Succeeded);
             Assert.True(inTxnDivZero.Failure!.IsNotModelled, inTxnDivZero.Failure.ToString());
             Assert.Equal("NotModelled.InsertSelectLateExpressionFailure", inTxnDivZero.Failure.NotModelled);
+            Assert.True(db.Workspace.Rollback().Succeeded);
         }
 
         // 5. Jet 4 MDB existing-page Rollback (no new page taken) and Jet 4 MDB INSERT VALUES new-page Rollback:
