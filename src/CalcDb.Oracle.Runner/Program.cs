@@ -351,9 +351,11 @@ internal static partial class Program
         }
         // A candidate attempt answers for the module it ran: a different deployed build is a new attempt, and
         // --rerun asks for a new one anyway (after a worker change, which the module hash does not name).
+        // If an earlier candidate run already pruned its working files (w-store-prune), re-run when --compare needs them.
         if (setup.Implementation is { } implementation && existing is not null && (options.Has("rerun")
             || EvidenceJson.Read<AttemptRecord>(Path.Combine(store.AttemptDirectory(existing.AttemptId), "attempt.json")).Implementation?.ModuleSha256
-                != implementation.ModuleSha256))
+                != implementation.ModuleSha256
+            || (compare && NeedsRerunBecausePruned(store, new ArtifactStore(Path.Combine(evidenceDir, "artifacts"), Path.Combine(store.Root, "cas")), existing))))
         {
             existing = null;
         }
@@ -446,11 +448,42 @@ internal static partial class Program
         return PruneAttemptWorkingDirectories(dir, logFailure: null);
     }
 
+    /// <summary>
+    /// Returns true when <paramref name="existing"/> has any artifact whose bytes are absent from both
+    /// <paramref name="retained"/> and the attempt directory (e.g. pruned by <see cref="PruneCandidateWorkingFiles"/>),
+    /// so a subsequent <c>batch --compare</c> without <c>--rerun</c> re-runs instead of comparing missing files by SHA-256.
+    /// </summary>
+    internal static bool NeedsRerunBecausePruned(JobStore store, ArtifactStore retained, CaptureManifest existing)
+    {
+        if (existing.Artifacts.Count == 0)
+        {
+            return false;
+        }
+        string dir = store.AttemptDirectory(existing.AttemptId);
+        foreach (ArtifactRef a in existing.Artifacts)
+        {
+            if (retained.Locate(a.Sha256) is not null)
+            {
+                continue;
+            }
+            if (!File.Exists(Path.Combine(dir, a.RelativePath)))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private static PruneAttemptResult PruneAttemptWorkingDirectories(string attemptDir, Action<string, Exception>? logFailure)
     {
+        if (!Directory.Exists(attemptDir) || (new DirectoryInfo(attemptDir).Attributes & FileAttributes.ReparsePoint) != 0)
+        {
+            return new PruneAttemptResult(false, 0, 0);
+        }
         bool any = false;
         long bytes = 0;
         int failed = 0;
+        var enumOptions = new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = FileAttributes.ReparsePoint };
         foreach (string sub in (string[])["inputs", "work", "artifacts"])
         {
             string path = Path.Combine(attemptDir, sub);
@@ -465,7 +498,7 @@ internal static partial class Program
             try
             {
                 // Input copies are read-only while an attempt runs; clear the attribute before deleting.
-                foreach (string file in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
+                foreach (string file in Directory.EnumerateFiles(path, "*", enumOptions))
                 {
                     bytes += new FileInfo(file).Length;
                     File.SetAttributes(file, FileAttributes.Normal);

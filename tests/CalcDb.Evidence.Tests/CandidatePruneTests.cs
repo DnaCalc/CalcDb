@@ -148,6 +148,79 @@ public sealed class CandidatePruneTests : IDisposable
         Assert.True(File.Exists(Path.Combine(unsealedDir, "artifacts", "out.accdb")));
     }
 
+    [Fact]
+    public void NeedsRerunBecausePruned_detects_missing_candidate_artifact_after_pruning()
+    {
+        string storeRoot = Path.Combine(_root, "store-rerun");
+        string artifactsDir = Path.Combine(_root, "evidence-artifacts");
+        Directory.CreateDirectory(artifactsDir);
+        var store = new JobStore(storeRoot);
+        var retained = new ArtifactStore(artifactsDir, Path.Combine(storeRoot, "cas"));
+
+        var impl = new ImplementationSelection("calcdb", @"C:\deploy", new string('c', 64));
+        AttemptRecord attempt = PrepareAndSeal(store, "card/cand-rerun", ImplementationSelection.CalcDbEnvironment, impl, seal: true);
+        string attemptDir = store.AttemptDirectory(attempt.AttemptId);
+        PopulateWorkingFiles(attemptDir, out _);
+
+        string outPath = Path.Combine(attemptDir, "artifacts", "out.accdb");
+        CaptureManifest manifest = store.GetManifest(attempt.AttemptId)! with
+        {
+            Artifacts = [new ArtifactRef("output-file", "output:out.accdb", "artifacts/out.accdb", 8192, Hashing.Sha256File(outPath))],
+        };
+
+        Assert.False(Program.NeedsRerunBecausePruned(store, retained, manifest));
+
+        Program.PruneAttemptResult pruned = Program.PruneCandidateWorkingFiles(store, attempt.AttemptId);
+        Assert.True(pruned.Pruned);
+        Assert.True(Program.NeedsRerunBecausePruned(store, retained, manifest));
+    }
+
+    [Fact]
+    public void PruneCandidateWorkingFiles_skips_junction_reparse_points_without_touching_target()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+        string storeRoot = Path.Combine(_root, "store-junction");
+        string targetDir = Path.Combine(_root, "protected-target");
+        Directory.CreateDirectory(targetDir);
+        string sentinelFile = Path.Combine(targetDir, "keep.txt");
+        File.WriteAllText(sentinelFile, "do-not-delete");
+
+        var store = new JobStore(storeRoot);
+        var impl = new ImplementationSelection("calcdb", @"C:\deploy", new string('d', 64));
+        AttemptRecord attempt = PrepareAndSeal(store, "card/cand-junction", ImplementationSelection.CalcDbEnvironment, impl, seal: true);
+        string attemptDir = store.AttemptDirectory(attempt.AttemptId);
+        string workLink = Path.Combine(attemptDir, "work");
+
+        // Create a directory junction (no elevation required on Windows) pointing at protected-target.
+        using var proc = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("cmd.exe", $"/c mklink /J \"{workLink}\" \"{targetDir}\"")
+        {
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        })!;
+        proc.WaitForExit();
+        Assert.Equal(0, proc.ExitCode);
+
+        try
+        {
+            Program.PruneAttemptResult res = Program.PruneCandidateWorkingFiles(store, attempt.AttemptId);
+            Assert.False(res.Pruned);
+            Assert.True(Directory.Exists(workLink));
+            Assert.Equal("do-not-delete", File.ReadAllText(sentinelFile));
+        }
+        finally
+        {
+            // Remove only the junction entry itself (never recursively) so Dispose cleans up safely.
+            if (Directory.Exists(workLink))
+            {
+                Directory.Delete(workLink, recursive: false);
+            }
+        }
+    }
+
     public void Dispose()
     {
         if (!Directory.Exists(_root))

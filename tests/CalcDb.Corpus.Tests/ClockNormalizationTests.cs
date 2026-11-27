@@ -695,7 +695,18 @@ public sealed class ClockNormalizationTests
         Assert.True(start9Val >= fixedEnd + 4);
         BinaryPrimitives.WriteUInt16LittleEndian(badNullNonEmpty.AsSpan(start9Pos), (ushort)(start9Val - 2));
         ClockFieldMap mapC = AceClockFields.FindInSlice(17 * 4096, badNullNonEmpty, ctx, out _) ?? throw new InvalidOperationException();
-        Assert.DoesNotContain(mapC.Fields, f => f.Where.Contains("deleted row", StringComparison.Ordinal));
+        // (d) Corrupted vWord (maskStart - 2) or corrupted eod (trailerStart) must still be rejected (not reclassified as truncated).
+        byte[] badVWord = (byte[])page17.Clone();
+        BinaryPrimitives.WriteUInt16LittleEndian(badVWord.AsSpan(maskStart - 2), (ushort)(v + 1));
+        ClockFieldMap mapD = AceClockFields.FindInSlice(17 * 4096, badVWord, ctx, out _) ?? throw new InvalidOperationException();
+        Assert.DoesNotContain(mapD.Fields, f => f.Where.Contains("deleted row", StringComparison.Ordinal));
+
+        byte[] badEod = (byte[])page17.Clone();
+        int trailerStart = maskStart - (4 + (2 * v));
+        ushort eodVal = BinaryPrimitives.ReadUInt16LittleEndian(badEod.AsSpan(trailerStart));
+        BinaryPrimitives.WriteUInt16LittleEndian(badEod.AsSpan(trailerStart), (ushort)(eodVal + 2));
+        ClockFieldMap mapE = AceClockFields.FindInSlice(17 * 4096, badEod, ctx, out _) ?? throw new InvalidOperationException();
+        Assert.DoesNotContain(mapE.Fields, f => f.Where.Contains("deleted row", StringComparison.Ordinal));
         Assert.True(v > 9);
     }
 
@@ -1179,7 +1190,7 @@ public sealed class ClockNormalizationTests
     }
 
     [Fact]
-    public void Ace2010_normalizes_vacated_MSysObjects_copy_while_Ace2016_and_Ace2019_keep_vacated_copies_strict()
+    public void Ace2010_Ace2016_and_Ace2019_normalize_vacated_MSysObjects_copies()
     {
         // evidence/r-fmt-1/create-accdb-calculated (ACE 2010, a1/a2): live slot 18 at [0x8EF, 0x93C) (DateCreate 0x8FB,
         // DateUpdate 0x903) and vacated prefix copy at [0x8BA, 0x8EF) (DateCreate 0x8C6, DateUpdate 0x8CE, Owner 0x8DC).
@@ -1881,14 +1892,25 @@ public sealed class ClockNormalizationTests
         Assert.False(FileImageComparison.Compare(dropMdbFull, nonStampLval).EqualOutsideClock);
 
         // (d) Compiled-plan Lv/LVAL (ado-cmd-exec-noparam-mdb): Lv descriptor flags (+3) and page pointer (+4..+7) on p17,
-        // and LVAL page kind/marker/rowCount on p25, remain strict.
+        // and LVAL page kind/marker/rowCount/slot-flags/free-gap on p25, remain strict.
         EvidenceRecord adoMdbRec = LoadRecord(@"evidence\r-q54-excl-ddl-ix-cmd\ado-cmd-exec-noparam-mdb\r-q54-excl-ddl-ix-cmd.ado-cmd-exec-noparam-mdb.5cdfb4ca1a.a1.json");
         byte[] adoMdbFull = Convert.FromHexString(adoMdbRec.Capture!.Events.OfType<HandleEvent>().Last(h => h.Op == "read" && h.Success && h.Offset == 0 && h.Bytes is not null).Bytes!);
-        foreach (int absOff in (int[])[(17 * 4096) + 0xCEB, (17 * 4096) + 0xCED, (25 * 4096) + 0, (25 * 4096) + 4, (25 * 4096) + 12])
+        foreach (int absOff in (int[])[(17 * 4096) + 0xCEB, (17 * 4096) + 0xCED, (25 * 4096) + 0, (25 * 4096) + 4, (25 * 4096) + 12, (25 * 4096) + 15, (25 * 4096) + 20])
         {
             byte[] bad = (byte[])adoMdbFull.Clone();
-            bad[absOff] ^= 0x01;
+            bad[absOff] ^= (absOff == (25 * 4096) + 15) ? (byte)0x40 : (byte)0x01;
             Assert.False(FileImageComparison.Compare(adoMdbFull, bad).EqualOutsideClock, $"compiled-plan strict byte at page {absOff / 4096} offset 0x{absOff % 4096:X} was unexpectedly masked");
         }
+
+        // (e) ACE 2010 has no recorded compiled-plan repeat and leaves CompiledPlanLval strict.
+        EvidenceRecord adoAccdbRec = LoadRecord(@"evidence\r-q54-excl-ddl-ix-cmd\ado-cmd-exec-noparam-accdb\r-q54-excl-ddl-ix-cmd.ado-cmd-exec-noparam-accdb.e0519fa077.a1.json");
+        byte[] adoAccdbFull = Convert.FromHexString(adoAccdbRec.Capture!.Events.OfType<HandleEvent>().Last(h => h.Op == "read" && h.Success && h.Offset == 0 && h.Bytes is not null).Bytes!);
+        byte[] ace2010Retagged = WithHeaderProfile(adoAccdbFull, jetSignature: false, versionCode: 3);
+        ClockFieldMap ace2010Map = AceClockFields.Find(ace2010Retagged, out string? ace2010Refusal) ?? throw new InvalidOperationException(ace2010Refusal);
+        Assert.Equal(FileFormat.Ace2010, ace2010Map.Format);
+        Assert.DoesNotContain(ace2010Map.Fields, f => f.Kind == ClockFieldKind.CompiledPlanLval);
+        byte[] ace2010PlanMutated = (byte[])ace2010Retagged.Clone();
+        ace2010PlanMutated[(48 * 4096) + 0x56F] ^= 0x01;
+        Assert.False(FileImageComparison.Compare(ace2010Retagged, ace2010PlanMutated).EqualOutsideClock);
     }
 }
