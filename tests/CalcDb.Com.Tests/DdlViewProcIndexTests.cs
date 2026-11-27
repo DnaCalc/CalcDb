@@ -43,9 +43,7 @@ public sealed unsafe class DdlViewProcIndexTests
                 Release(db);
 
                 // ADO Connection: VIEW, PROCEDURE, EXEC, DROP, and r-q49 3290/3000/3355 error mappings
-                nint cn = New(OwnAdoConnection);
-                Assert.Null(Put(cn, "Provider", "Microsoft.ACE.OLEDB.12.0").Failure);
-                Assert.Null(Call(cn, "Open", $"Data Source={dbPath}").Failure);
+                nint cn = OpenAceConnection(dbPath);
 
                 // 1. CREATE VIEW + SELECT FROM V1 + CREATE VIEW WITH OWNERACCESS OPTION + DROP VIEW
                 Assert.Null(Call(cn, "Execute", "CREATE VIEW V1 AS SELECT ID, A FROM T", Missing, 129).Failure);
@@ -89,19 +87,16 @@ public sealed unsafe class DdlViewProcIndexTests
 
                 // 3. ADO r-q49/ddl-default-eval-edge-ado-* error mappings: 3290, 3000, 3355
                 Outcome e3290 = Call(cn, "Execute", "CREATE TABLE TE_BadMiss (ID LONG, A LONG DEFAULT)", Missing, 129);
-                Assert.NotNull(e3290.Failure);
-                Assert.Equal(unchecked((int)0x80040E14), e3290.Failure!.Scode);
-                Assert.Equal(5003290, e3290.Failure.HelpContext);
+                AssertError(e3290, unchecked((int)0x80040E14), expectedHelpContext: 5003290u, expectedInfoGuid: IidCommandText);
+                AssertConnectionError0(cn, unchecked((int)0x80040E14), expectedSqlState: "3000", expectedNativeError: -537529823);
 
                 Outcome e3000 = Call(cn, "Execute", "CREATE TABLE TE_BadType (ID LONG, A LONG DEFAULT 'abc')", Missing, 129);
-                Assert.NotNull(e3000.Failure);
-                Assert.Equal(unchecked((int)0x80004005), e3000.Failure!.Scode);
-                Assert.Equal(5003000, e3000.Failure.HelpContext);
+                AssertError(e3000, unchecked((int)0x80004005), expectedHelpContext: 5003000u, expectedInfoGuid: IidCommand);
+                AssertConnectionError0(cn, unchecked((int)0x80004005), expectedSqlState: "3072", expectedNativeError: -529731193);
 
                 Outcome e3355 = Call(cn, "Execute", "CREATE TABLE TE_BadCol (ID LONG, A LONG DEFAULT [ID])", Missing, 129);
-                Assert.NotNull(e3355.Failure);
-                Assert.Equal(unchecked((int)0x80004005), e3355.Failure!.Scode);
-                Assert.Equal(5003355, e3355.Failure.HelpContext);
+                AssertError(e3355, unchecked((int)0x80004005), expectedHelpContext: 5003355u, expectedInfoGuid: IidCommand);
+                AssertConnectionError0(cn, unchecked((int)0x80004005), expectedSqlState: "3344", expectedNativeError: -536678012);
 
                 // Drop views and procedures
                 Assert.Null(Call(cn, "Execute", "DROP VIEW V1", Missing, 129).Failure);
@@ -139,9 +134,9 @@ public sealed unsafe class DdlViewProcIndexTests
 
     private static object? ReadFieldValue(nint rs, string name)
     {
-        nint fields = (nint)Get(rs, "Fields").Value!;
-        nint field = (nint)Call(fields, "Item", name).Value!;
-        object? val = Get(field, "Value").Value;
+        nint fields = (nint)Get(rs, "Fields")!;
+        nint field = (nint)Get(fields, "Item", name)!;
+        object? val = Get(field, "Value");
         Release(field);
         Release(fields);
         return val;
