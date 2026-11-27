@@ -4028,16 +4028,26 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                     }
                     else if (a.SourceColumn?.TypeCode == NativeTypes.Numeric)
                     {
-                        // r-par-1/fold-decimal-avg-var-forms, r-fix-expr-sql/fold-decimal-avg-var-forms:
-                        // Decimal variance uses Decimal sum-of-squares with Double-rounded sum squared, matching FD and FD20.
+                        // r-par-1/fold-decimal-avg-var-forms (FD scale 4), r-fix-expr-sql/fold-decimal-avg-var-forms (FD0 scale 0, FD20 scale 20):
+                        // Decimal variance squares and sums in 96-bit Decimal. For FD/FD0 (scale <= 14), sum stays exact Decimal;
+                        // for FD20 (scale 20, where Avg also drops to VT_R8), sum rounds through Double/VarDecFromR8 (FD20 g1 -> 2E-20, g2 -> 0.01).
                         try
                         {
                             decimal n = s.Count;
-                            decimal sDblDec = (decimal)(double)s.DecimalSum;
-                            decimal num = Math.Abs(checked(checked(n * s.DecimalSumSquares) - checked(sDblDec * sDblDec)));
-                            decimal denom = sample ? checked(n * (n - 1m)) : checked(n * n);
-                            decimal q = StripTrailingZeros(num / denom);
-                            variance = (double)q;
+                            decimal sumForSquare = s.DecimalSum;
+                            if (a.SourceColumn.NumericScale > 14)
+                            {
+                                NativeVariant r8 = new() { Vt = (ushort)VarType.R8, Double = (double)s.DecimalSum };
+                                if (!OwnedVariant.TryChangeScalar(&r8, VarType.Decimal, plan.Context.Lcid, out NativeVariant decFromR8, out _))
+                                {
+                                    failure = SqlFailure.Ace(SqlPhase.Open, AceError.Overflow, AceError.Describe(AceError.Overflow));
+                                    return ScalarLiterals.Null;
+                                }
+                                sumForSquare = OwnedVariant.ReadDecimal(decFromR8).ToDecimal();
+                            }
+                            decimal num = Math.Abs(checked(checked(n * s.DecimalSumSquares) - checked(sumForSquare * sumForSquare)));
+                            double nd = s.Count;
+                            variance = (double)StripTrailingZeros(num) / (sample ? nd * (nd - 1.0) : nd * nd);
                         }
                         catch (OverflowException)
                         {
