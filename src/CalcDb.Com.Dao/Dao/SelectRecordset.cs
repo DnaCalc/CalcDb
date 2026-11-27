@@ -605,9 +605,20 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
                 "NotModelled.QueryRecordCount.Mdb",
                 "RecordCount: RecordCount on an MDB DAO SELECT recordset is not recorded (CUR-POP)"));
         }
-        if (!Cursor.TryRecordCount(out long count, out string? openName, out string? openDetail))
+        long count;
+        if (!Cursor.TryRecordCount(out count, out string? openName, out string? openDetail))
         {
-            return CallResult.Fail(Failure.NotModelled(openName!, "RecordCount: " + openDetail));
+            // Derived Filter/Sort OpenRecordset walked to EOF: RecordCount is the full populated count
+            // (evidence/r-q53-conv-abspos-subq-loc/filter-sort-openrs-read-accdb,
+            // evidence/r-q53-conv-abspos-subq-loc/filter-sort-openrs-read-mdb call 23).
+            if (_isDerived && _isSingleTableRowSelect && RecordsetType is 2 or 4 && Cursor.Eof)
+            {
+                count = Cursor.RecordCount;
+            }
+            else
+            {
+                return CallResult.Fail(Failure.NotModelled(openName!, "RecordCount: " + openDetail));
+            }
         }
         long adjusted = count + (_addedRows?.Count ?? 0) - (_deletedRows?.Count ?? 0);
         return Int32((int)Math.Max(0, adjusted));
