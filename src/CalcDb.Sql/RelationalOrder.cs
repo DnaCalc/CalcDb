@@ -1,3 +1,4 @@
+using CalcDb.Format;
 using CalcDb.Foundation;
 using CalcDb.Values;
 using CalcDb.Values.Scalar;
@@ -14,6 +15,52 @@ namespace CalcDb.Sql;
 /// </summary>
 public static unsafe class RelationalOrder
 {
+    /// <summary>
+    /// Compare two bare GUID column values (<c>"{guid {...}}"</c> BSTR or Null) using ACE's byte-swapped
+    /// <see cref="ScalarCodecs.GuidTextOrder"/> (<c>evidence/r-q-fmt-sort/guid-order-accdb</c> call 128,
+    /// <c>evidence/r-sort-3/keys-order-sql-accdb</c> call 43). Used when a composite sort falls back to
+    /// per-key comparison (for instance alongside a mixed-type or Decimal key).
+    /// </summary>
+    public static bool TryCompareGuid(in NativeVariant a, in NativeVariant b, out int order)
+    {
+        order = 0;
+        bool aNull = a.Vt == (ushort)VarType.Null, bNull = b.Vt == (ushort)VarType.Null;
+        if (aNull || bNull)
+        {
+            order = aNull == bNull ? 0 : aNull ? -1 : 1;
+            return true;
+        }
+        if (a.Vt != (ushort)VarType.Bstr || b.Vt != (ushort)VarType.Bstr
+            || !TryWriteGuidOrderBytes(Bstrs.Chars(a.Pointer), out GuidBytes ga)
+            || !TryWriteGuidOrderBytes(Bstrs.Chars(b.Pointer), out GuidBytes gb))
+        {
+            return false;
+        }
+        order = ga.AsSpan().SequenceCompareTo(gb.AsSpan());
+        return true;
+
+        static bool TryWriteGuidOrderBytes(ReadOnlySpan<char> chars, out GuidBytes ordered)
+        {
+            ordered = default;
+            if (chars.Length < 8 || !chars.StartsWith("{guid ", StringComparison.OrdinalIgnoreCase) || !chars.EndsWith("}")
+                || !Guid.TryParse(chars[6..^1], out Guid g))
+            {
+                return false;
+            }
+            Span<byte> raw = stackalloc byte[16];
+            _ = g.TryWriteBytes(raw);
+            ScalarCodecs.GuidTextOrder(raw, ordered.AsSpan());
+            return true;
+        }
+    }
+
+    [System.Runtime.CompilerServices.InlineArray(16)]
+    private struct GuidBytes
+    {
+        private byte _e0;
+        public Span<byte> AsSpan() => System.Runtime.InteropServices.MemoryMarshal.CreateSpan(ref _e0, 16);
+    }
+
     public static bool TryCompare(in NativeVariant a, in NativeVariant b, TextCollation? collation, out int order)
     {
         order = 0;
@@ -74,6 +121,15 @@ public static unsafe class RelationalOrder
         if (!Number(a, out double p) || !Number(b, out double q))
         {
             return false;
+        }
+        if (double.IsNaN(p) || double.IsNaN(q))
+        {
+            ulong bp = BitConverter.DoubleToUInt64Bits(p);
+            ulong bq = BitConverter.DoubleToUInt64Bits(q);
+            ulong kp = (bp & 0x8000_0000_0000_0000ul) != 0 ? ~bp : bp ^ 0x8000_0000_0000_0000ul;
+            ulong kq = (bq & 0x8000_0000_0000_0000ul) != 0 ? ~bq : bq ^ 0x8000_0000_0000_0000ul;
+            order = kp.CompareTo(kq);
+            return true;
         }
         order = p < q ? -1 : p > q ? 1 : p == 0 ? (double.IsNegative(q) ? 1 : 0) - (double.IsNegative(p) ? 1 : 0) : 0;
         return true;

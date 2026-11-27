@@ -622,7 +622,7 @@ public static class SqlParser
             return Complexity(fragment);
         }
 
-        private int ScanClauseExpressionEnd(int start)
+        private int ScanClauseExpressionEnd(int start, bool skipFirstKeyword = false)
         {
             int p = start;
             int depth = 0;
@@ -639,7 +639,7 @@ public static class SqlParser
                     p++;
                     continue;
                 }
-                if (c is '\'' or '"' or '[' or '`')
+                if (c is '\'' or '"' or '[' or '`' or '#')
                 {
                     quote = c;
                     p++;
@@ -667,7 +667,7 @@ public static class SqlParser
                     {
                         break;
                     }
-                    if (char.IsLetter(c) && (p == start || (!char.IsLetterOrDigit(s[p - 1]) && s[p - 1] != '_')))
+                    if (char.IsLetter(c) && (p == start || (!char.IsLetterOrDigit(s[p - 1]) && s[p - 1] is not ('_' or '.' or '!'))))
                     {
                         int wEnd = p;
                         while (wEnd < s.Length && (char.IsLetterOrDigit(s[wEnd]) || s[wEnd] == '_'))
@@ -675,18 +675,19 @@ public static class SqlParser
                             wEnd++;
                         }
                         ReadOnlySpan<char> word = s.AsSpan(p, wEnd - p);
-                        if (word.Equals("FROM", StringComparison.OrdinalIgnoreCase)
-                            || word.Equals("WHERE", StringComparison.OrdinalIgnoreCase)
-                            || word.Equals("GROUP", StringComparison.OrdinalIgnoreCase)
-                            || word.Equals("HAVING", StringComparison.OrdinalIgnoreCase)
-                            || word.Equals("ORDER", StringComparison.OrdinalIgnoreCase)
-                            || word.Equals("UNION", StringComparison.OrdinalIgnoreCase)
-                            || word.Equals("INTO", StringComparison.OrdinalIgnoreCase)
-                            || word.Equals("WITH", StringComparison.OrdinalIgnoreCase)
-                            || word.Equals("AS", StringComparison.OrdinalIgnoreCase)
-                            || word.Equals("ASC", StringComparison.OrdinalIgnoreCase)
-                            || word.Equals("DESC", StringComparison.OrdinalIgnoreCase)
-                            || word.Equals("PIVOT", StringComparison.OrdinalIgnoreCase))
+                        if ((!skipFirstKeyword || p > start)
+                            && (word.Equals("FROM", StringComparison.OrdinalIgnoreCase)
+                                || word.Equals("WHERE", StringComparison.OrdinalIgnoreCase)
+                                || word.Equals("GROUP", StringComparison.OrdinalIgnoreCase)
+                                || word.Equals("HAVING", StringComparison.OrdinalIgnoreCase)
+                                || word.Equals("ORDER", StringComparison.OrdinalIgnoreCase)
+                                || word.Equals("UNION", StringComparison.OrdinalIgnoreCase)
+                                || word.Equals("INTO", StringComparison.OrdinalIgnoreCase)
+                                || word.Equals("WITH", StringComparison.OrdinalIgnoreCase)
+                                || word.Equals("AS", StringComparison.OrdinalIgnoreCase)
+                                || word.Equals("ASC", StringComparison.OrdinalIgnoreCase)
+                                || word.Equals("DESC", StringComparison.OrdinalIgnoreCase)
+                                || word.Equals("PIVOT", StringComparison.OrdinalIgnoreCase)))
                         {
                             break;
                         }
@@ -754,14 +755,22 @@ public static class SqlParser
             return ands > 97 ? Open("NotModelled.AndChain", $"{ands} ANDs: 97 open, 98 failed 3072 and 100 3360") : null;
         }
 
-        /// <summary>An expression followed by something its clause cannot continue with: ACE reads on and reports it.</summary>
+        /// <summary>An expression followed by something its clause cannot continue with: ACE reads to the clause end and reports it.</summary>
         private SqlFailure MissingOperator(int start)
         {
             Skip();
-            int stop = _p;
-            while (stop < s.Length && !char.IsWhiteSpace(s[stop]))
+            int stop = _p < s.Length ? ScanClauseExpressionEnd(_p, skipFirstKeyword: true) : _p;
+            while (stop > start && char.IsWhiteSpace(s[stop - 1]))
             {
-                stop++;
+                stop--;
+            }
+            if (stop <= _p && _p < s.Length)
+            {
+                stop = _p;
+                while (stop < s.Length && !char.IsWhiteSpace(s[stop]))
+                {
+                    stop++;
+                }
             }
             return new SqlFailure(SqlPhase.Parse, 3075, $"Syntax error (missing operator){SqlFailure.QueryExpression}{s[start..stop]}'.") { ExcerptExact = false };
         }
