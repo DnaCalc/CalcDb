@@ -197,6 +197,17 @@ internal sealed unsafe class SelectRowSource : IAdoRowSource
             providerError = AdoSqlErrors.TryMap(failure!, isSavedQuery, out refusal, isSelect: true);
             return null;
         }
+        // evidence/r-q50-jk44-ddl-vis/vis-cross-ddl-accdb, vis-cross-ddl-mdb calls 124-147:
+        // direct single-table SELECT on a table dropped by another in-process session while this Connection's catalog
+        // is stale fails 0x80040E37 / 3011 / -543884569 without refreshing Connection.Catalog (OpenSchema(20) still lists it).
+        if (!isSavedQuery && plan.Sources.Count == 1
+            && plan.Sources[0].TableName is { Length: > 0 } droppedTable
+            && session.Core.IsTableExternallyDropped(droppedTable))
+        {
+            plan.Dispose();
+            providerError = AdoSqlErrors.ObjectNotFound(droppedTable);
+            return null;
+        }
         NativeVariant?[]? boundParams = null;
         if (plan.Parameters.Count > 0 && commandParameters is not null)
         {

@@ -822,16 +822,15 @@ public sealed unsafe class DaoSelectDynamicOverlayTests : IDisposable
     }
 
     [Fact]
-    public void Select_snapshot_preserves_orderby_after_publish_while_unordered_and_mutated_overlay_refuse()
+    public void Select_snapshot_preserves_orderby_and_unordered_row0_after_publish_while_mutated_overlay_refuses()
     {
-        // Task zdh5: single-table ACCDB ORDER BY SELECT snapshots opened at depth 0 with no Memo/OLE projections
-        // register a PageCache ReadView at open and keep open-time row values across later publishes
-        // (docs/work/qualified.md R-CURSOR-1 CUR-POP: "a snapshot over SELECT ... ORDER BY reports the full count at
-        // open and its values are fixed at open", which supplies the expected value across CommitTrans publish here;
-        // r-q-cursor-dao/pop-snapshot-change-after-open, -after-movelast, -after-first-move,
-        // r-q2-cursor-dao/pop-snapshot-orderby-small). Unordered SELECT snapshots still refuse
-        // NotModelled.Edit.SnapshotAfterPublish (r-q2-cursor-dao/pop-snapshot-select-noorder-big), and snapshots over
-        // an active overlay still refuse NotModelled.Edit.SnapshotOverlayMutated when the overlay is mutated.
+        // Task zdh5 + Wave 19 snap-noorder-chunk: single-table ACCDB ORDER BY SELECT snapshots opened at depth 0 with
+        // no Memo/OLE projections register a PageCache ReadView at open and keep open-time row values across later
+        // publishes (docs/work/qualified.md R-CURSOR-1 CUR-POP; r-q-cursor-dao/pop-snapshot-change-after-open,
+        // -after-movelast, -after-first-move, r-q2-cursor-dao/pop-snapshot-orderby-small). Unordered ACCDB SELECT
+        // snapshots lazily materialize 500-row chunks (r-q2-cursor-dao/pop-snapshot-select-noorder-big), keeping
+        // already-materialized row 0 fixed at 10 across CommitTrans, while snapshots over an active overlay still
+        // refuse NotModelled.Edit.SnapshotOverlayMutated when the overlay is mutated.
         DatabaseObject db = Open(Txn1bAccdb);
         WorkspaceObject ws = _engine.DefaultWorkspace;
 
@@ -843,7 +842,7 @@ public sealed unsafe class DaoSelectDynamicOverlayTests : IDisposable
         Ok(Method(ws, "CommitTrans"));
         // Expected value (10) per docs/work/qualified.md R-CURSOR-1 CUR-POP ("its values are fixed at open").
         Assert.Equal(10, IntValue(Ok(FieldValue(orderByBeforeCommit, "V"))));
-        AssertNotModelled(FieldValue(unorderedBeforeCommit, "V"), "NotModelled.Edit.SnapshotAfterPublish");
+        Assert.Equal(10, IntValue(Ok(FieldValue(unorderedBeforeCommit, "V"))));
         Ok(Method(orderByBeforeCommit, "Close"));
         Ok(Method(unorderedBeforeCommit, "Close"));
 
@@ -923,7 +922,7 @@ public sealed unsafe class DaoSelectDynamicOverlayTests : IDisposable
     public void OrderBy_select_snapshot_on_Big_keeps_open_time_values_after_open_movelast_and_first_move()
     {
         // r-q-cursor-dao/pop-snapshot-change-after-open, -after-movelast, -after-first-move;
-        // unordered SELECT stays refused per r-q2-cursor-dao/pop-snapshot-select-noorder-big.
+        // unordered SELECT lazily materializes 500-row chunks per r-q2-cursor-dao/pop-snapshot-select-noorder-big.
         const string QMain = "37cb1596da09f7b6ba43f90571a8d381a057852eb7d762c73044c0a839134012"; // r-q-cursor-dao-main.accdb
         foreach (string variant in new[] { "after-open", "after-movelast", "after-first-move" })
         {
@@ -964,7 +963,14 @@ public sealed unsafe class DaoSelectDynamicOverlayTests : IDisposable
             Assert.Equal(2000, IntValue(Ok(FieldValue(rs, "ID"))));
             Assert.Equal(originalV, TextValue(Ok(FieldValue(rs, "V"))));
 
-            AssertNotModelled(Method(unordered, "MoveFirst"), "NotModelled.Edit.SnapshotAfterPublish");
+            // Wave 19 snap-noorder-chunk (r-q2-cursor-dao/pop-snapshot-select-noorder-big #47-#66):
+            // unordered ACCDB SELECT snapshot keeps open-time row 0 and lazily fetches chunk 1..500 after UPDATE.
+            Ok(Method(unordered, "MoveFirst"));
+            Assert.Equal(1, IntValue(Ok(FieldValue(unordered, "ID"))));
+            Assert.Equal(originalV, TextValue(Ok(FieldValue(unordered, "V"))));
+            Ok(Method(unordered, "Move", 1));
+            Assert.Equal(2, IntValue(Ok(FieldValue(unordered, "ID"))));
+            Assert.Equal("chg", TextValue(Ok(FieldValue(unordered, "V"))));
             Ok(Method(unordered, "Close"));
             Ok(Method(rs, "Close"));
         }

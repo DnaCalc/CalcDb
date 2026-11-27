@@ -455,6 +455,18 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
 
     protected override Failure? ArgumentCountFailure(MemberDecl member) => InvalidArgumentCount();
 
+    /// <summary>
+    /// Unknown named parameter on an open Recordset member records DAO 3265 from DAO.Fields in DBEngine.Errors
+    /// (r-q2-cursor-dao/named-dao-refusals #50/#52: <c>rs.MoveNext(Rows:=1)</c>).
+    /// </summary>
+    protected override void OnUnknownParameterName(MemberDecl member, ReadOnlySpan<char> parameterName)
+    {
+        if (!Closed)
+        {
+            Engine.Record(Failure.Dao(3265, "DAO.Fields", DaoErrors.ItemNotFound));
+        }
+    }
+
     private bool IsMdb => Database.Profile.Format == FileFormat.Jet4;
 
     /// <summary>

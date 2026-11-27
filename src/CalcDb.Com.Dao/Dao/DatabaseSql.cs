@@ -351,7 +351,7 @@ internal static unsafe class SelectRoute
         {
             database.EnsureReadOnlyFirstView();
             bool singleTableRowSelect = IsSingleTableRowSelect(plan);
-            cursor = OpenCursor(database, plan, recordsetType, singleTableRowSelect, hasOrderBy, values: null, out snapshotView, out snapshotOverlay, out failure, out CallResult? viewRefusal);
+            cursor = OpenCursor(database, plan, recordsetType, singleTableRowSelect, hasOrderBy, values: null, out snapshotView, out snapshotOverlay, out failure, out CallResult? viewRefusal, derived: true);
             if (cursor is null)
             {
                 return viewRefusal ?? PublishedDerived(caller, failure!, trimmedFilter, trimmedSort);
@@ -436,7 +436,8 @@ internal static unsafe class SelectRoute
         out SqlFailure? failure,
         out CallResult? viewRefusal,
         bool useReadOnlyFirstView = true,
-        bool dynamicJoinOverlay = false)
+        bool dynamicJoinOverlay = false,
+        bool derived = false)
     {
         snapshotView = null;
         snapshotOverlay = null;
@@ -494,7 +495,7 @@ internal static unsafe class SelectRoute
         {
             scanDatabase = database.Sql;
         }
-        SelectCursor? cursor = SelectCursor.Open(plan, scanDatabase, kind, values, out failure);
+        SelectCursor? cursor = SelectCursor.Open(plan, scanDatabase, kind, values, out failure, derived: derived);
         if (cursor is null)
         {
             snapshotOverlay?.Dispose();
@@ -510,7 +511,7 @@ internal static unsafe class SelectRoute
     /// a table containing Memo or OLE columns): long values may be fetched later and no retained record shows them in a
     /// post-publish SELECT snapshot (task zdh5).
     /// </summary>
-    private static bool ProjectsMemoOrOle(BoundSelect plan)
+    internal static bool ProjectsMemoOrOle(BoundSelect plan)
     {
         bool tableHasLong = false;
         if (plan.Sources.Count == 1 && plan.Sources[0].Table is { } table)

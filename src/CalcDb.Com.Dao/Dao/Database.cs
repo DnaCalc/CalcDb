@@ -391,6 +391,13 @@ internal sealed unsafe class DatabaseObject : DaoObject
     protected override Failure? ArgumentCountFailure(MemberDecl member) => InvalidArgumentCount();
 
     /// <summary>
+    /// Repeated named argument or positional+named collision on Database.OpenRecordset fails DAO 3001 with IErrorInfo
+    /// and records in DBEngine.Errors (r-q2-cursor-dao/named-dao-refusals #37, named-dao-order-variants #45).
+    /// </summary>
+    protected override Failure? RepeatedNamedArgumentFailure(MemberDecl member) =>
+        member.Name == "OpenRecordset" ? InvalidArgumentCount() : null;
+
+    /// <summary>
     /// OpenRecordset Name (p0, declared BSTR): Missing fails 3001 with IErrorInfo (r-wire/opt-openrecordset call 124);
     /// DISP_E_TYPEMISMATCH (Null, object) fails 3421 with IErrorInfo (r-dao-1-err-1/err-bind-types calls 29, 41;
     /// r-wire/opt-openrecordset call 118).

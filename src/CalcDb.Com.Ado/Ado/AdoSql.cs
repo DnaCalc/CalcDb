@@ -112,6 +112,18 @@ internal static class AdoSqlErrors
         AdoObject.IidCommand);
 
     /// <summary>
+    /// Could not find object (3011; evidence/r-q50-jk44-ddl-vis/vis-cross-ddl-accdb, vis-cross-ddl-mdb calls 132-135):
+    /// ADO SELECT on a table dropped by another in-process session while this Connection's catalog is stale.
+    /// </summary>
+    public static MappedProviderError ObjectNotFound(string name) => Make(
+        AdoObject.HResultNoTable,
+        $"The Microsoft Access database engine could not find the object '{name}'. Make sure the object exists and that you spell its name and the path name correctly. If '{name}' is not a local object, check your network connection or contact the server administrator.",
+        5003011,
+        "3011",
+        -543884569,
+        AdoObject.IidCommand);
+
+    /// <summary>
     /// Reading <c>Fields.Count</c> or <c>Fields.Item</c> on a Recordset whose <c>Open</c> failed with 3078
     /// (r-str-ado-act/ado-rs-read-close #16, #18): fails 0x80004005 (E_FAIL), helpContext 5003011, IID_IColumnsInfo.
     /// </summary>
