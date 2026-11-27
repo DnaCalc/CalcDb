@@ -158,14 +158,11 @@ public sealed class DynasetOrderTests(ITestOutputHelper output)
             ReadIds(par, "SELECT id FROM OGI WHERE t <> 'zzz'", ResultKind.Snapshot),
             ReadIds(par, "SELECT id FROM OGI WHERE t <> 'zzz'", ResultKind.Dynaset));
 
-        // Leading-wildcard LIKE on an indexed Text column refuses at bind time (NotModelled.IndexedLike) and is also guarded at open time (B2);
+        // Leading-wildcard LIKE on a single-column non-unique ascending Text index binds (unit-by-unit match on Snapshot,
+        // per r-q-fmt-sort/like-index-accdb and r-sort-3b/lg-like-vs-range) and is guarded at open time on unordered Dynaset (B2);
         // LIKE on an indexed non-Text column refuses by name at open time (B3).
-        using (BoundSelect? _ = BoundSelect.Prepare("SELECT id FROM OGI WHERE t LIKE '*a*'", par, out SqlFailure? likeBindFail))
-        {
-            Assert.NotNull(likeBindFail);
-            Assert.True(likeBindFail!.IsNotModelled, likeBindFail.ToString());
-            Assert.Equal("NotModelled.IndexedLike", likeBindFail.NotModelled);
-        }
+        AssertSingleOpenGuard(par, "SELECT id FROM OGI WHERE t LIKE '*a*'", "NotModelled.DynasetOrder.LeadingWildcardLike");
+        Assert.NotEmpty(ReadIds(par, "SELECT id FROM OGI WHERE t LIKE '*a*'", ResultKind.Snapshot));
         AssertSingleOpenGuard(par, "SELECT pk FROM OT3 WHERE k LIKE '*'", "NotModelled.DynasetOrder.NonTextLike");
         AssertSingleOpenGuard(par, "SELECT pk FROM OT3 WHERE k LIKE '1*'", "NotModelled.DynasetOrder.NonTextLike");
 

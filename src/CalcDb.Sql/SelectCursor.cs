@@ -262,10 +262,10 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
     /// does not reach it (qualified.md R-EXPR-1 EXPR-BIND: a recordset opened earlier keeps its own values). A parameter
     /// without a value fails 3061 (qualified.md R-SQL-1 SQL-B).
     /// </summary>
-    public static SelectCursor? Open(BoundSelect plan, ISqlDatabase database, ResultKind kind, IReadOnlyList<NativeVariant?>? parameters, out SqlFailure? failure) =>
-        Open(plan, database, kind, parameters, observableColumns: null, out failure);
+    public static SelectCursor? Open(BoundSelect plan, ISqlDatabase database, ResultKind kind, IReadOnlyList<NativeVariant?>? parameters, out SqlFailure? failure, bool derived = false) =>
+        Open(plan, database, kind, parameters, observableColumns: null, out failure, derived);
 
-    internal static SelectCursor? Open(BoundSelect plan, ISqlDatabase database, ResultKind kind, IReadOnlyList<NativeVariant?>? parameters, bool[]? observableColumns, out SqlFailure? failure)
+    internal static SelectCursor? Open(BoundSelect plan, ISqlDatabase database, ResultKind kind, IReadOnlyList<NativeVariant?>? parameters, bool[]? observableColumns, out SqlFailure? failure, bool derived = false)
     {
         if (plan.WithOwnerAccess)
         {
@@ -327,7 +327,7 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
             reader.QueryTextRoundTrip = true;
             readers[s] = reader;
         }
-        var preparing = new Preparer(plan, readers, kind, values, database, observableColumns, outerValues: [], isSubquery: false);
+        var preparing = new Preparer(plan, readers, kind, values, database, observableColumns, outerValues: [], isSubquery: false, derived);
         Prepared? prepared = preparing.Run(out failure);
         if (prepared is null)
         {
@@ -381,7 +381,7 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
             reader.QueryTextRoundTrip = true;
             readers[s] = reader;
         }
-        var preparing = new Preparer(plan, readers, ResultKind.Snapshot, values, database, observableColumns: null, outerCopy, isSubquery: true);
+        var preparing = new Preparer(plan, readers, ResultKind.Snapshot, values, database, observableColumns: null, outerCopy, isSubquery: true, derived: false);
         Prepared? prepared = preparing.Run(out failure);
         if (prepared is null)
         {
@@ -1283,7 +1283,8 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
         ISqlDatabase database,
         bool[]? observableColumns,
         NativeVariant[] outerValues,
-        bool isSubquery) : IExpressionRow
+        bool isSubquery,
+        bool derived) : IExpressionRow
     {
         private readonly List<NativeVariant> _slots = [];
         private readonly List<NativeVariant> _derivedSlots = [];
@@ -3187,10 +3188,17 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
             bool mixed = plan.Order.Any(o => o.Descending != descending);
             return kind switch
             {
+                // evidence/r-cursor-1b/sort-expression-forms calls 24, 50, 180 and filter-expression-forms call 219:
+                // a derived Filter/Sort dynaset of <= 9 rows lists ORDER BY ties in reverse storage order (-1) for ASC, DESC, and mixed directions.
+                ResultKind.Dynaset when derived && count <= 9 => (-1, null),
+                ResultKind.Dynaset when derived => (1, "a derived dynaset of more than 9 rows' tie order is not recorded"),
                 ResultKind.Dynaset when mixed => (1, "a dynaset's tie order under keys of mixed directions is not recorded"),
                 ResultKind.Dynaset => (descending ? -1 : 1, null),
                 ResultKind.Snapshot when count <= 9 => (-1, null),
                 ResultKind.Snapshot => (1, "a snapshot of more than 9 rows lists ties in a permutation not identified"),
+                // evidence/r-cursor-1b/filter-derived-types calls 76[3..4].0, 176[3..4].0: forward-only ORDER BY DESC
+                // on <= 9 rows lists ties in reverse storage order (-1).
+                ResultKind.ForwardOnly when !mixed && descending && count <= 9 => (-1, null),
                 _ => (1, "a forward-only result's tie order is not recorded"),
             };
         }
