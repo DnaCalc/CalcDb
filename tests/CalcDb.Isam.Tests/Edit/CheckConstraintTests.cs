@@ -1523,7 +1523,9 @@ public sealed class CheckConstraintTests
     [InlineData("CK_OtherTbl", "Other.V >= 0")]
     [InlineData("CK_OtherBracket", "[Other].[V] >= 0")]
     [InlineData("CK_TwoCol", "V >= ID")]
-    [InlineData("CK_Compound", "V >= 0 AND V < 20")]
+    [InlineData("CK_CompoundCrossCol", "V >= 0 AND ID < 20")]
+    [InlineData("CK_CompoundThreeWay", "V >= 0 AND V < 20 AND V <> 5")]
+    [InlineData("CK_CompoundOr", "V >= 0 OR V < 20")]
     [InlineData("CK_Func", "Len(R) > 0")]
     [InlineData("CK_Unknown", "Missing >= 0")]
     public void UnadmittedCheckExpressions_RefuseWritesByConstraintName_AndCheckOrderWithRequired(string constraintName, string expression)

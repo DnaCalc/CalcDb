@@ -141,7 +141,8 @@ public sealed class PageAllocator
     /// <summary>
     /// Allocate the next contiguous page on page 1 and clear the remaining pages of its 4-byte (32-page) global-map
     /// extent block when a session's prior 32-page extent has been exhausted
-    /// (<c>evidence/r-q54-excl-ddl-ix-cmd/second-32page-extent-{accdb,mdb}</c>: crossing page 32 clears a 2nd 32-page
+    /// (<c>evidence/r-q54-excl-ddl-ix-cmd/second-32page-extent-accdb</c>,
+    /// <c>evidence/r-q54-excl-ddl-ix-cmd/second-32page-extent-mdb</c>: crossing page 32 clears a 2nd 32-page
     /// block on page 1 and queues its unused tail for reuse in the session and release at Close).
     /// </summary>
     public bool TryAllocateNextExtent(PrivateOverlay? seen, List<PageEdit> edits, out uint page, out string? failure)
@@ -234,9 +235,11 @@ public sealed class PageAllocator
             failure = PendingRollbackExtentFailure;
             return null;
         }
-        if (_hadSessionReservedPages && _sessionReservedPages.Count > 0)
+        if (_hadSessionReservedPages)
         {
-            failure = "direct page-1 allocation while a session page-1 extent reservation is active is not recorded (r-q42-field-rule-and)";
+            failure = _sessionReservedPages.Count == 0
+                ? "the session's reserved page-1 extent has no pages left (use TryAllocateNextExtent to reserve a second 32-page extent: r-q37-valrule-put)"
+                : "direct page-1 allocation while a session page-1 extent reservation is active is not recorded (r-q42-field-rule-and)";
             return null;
         }
         ExtentPages = Math.Max(ExtentPages, ExtentOf(_cache, ExtentPages, seen));

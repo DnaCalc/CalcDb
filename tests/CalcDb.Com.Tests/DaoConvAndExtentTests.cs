@@ -288,6 +288,9 @@ public sealed unsafe class DaoConvAndExtentTests : IDisposable
         CallResult missingPut = Put(F("T"), "Value", new MissingArg());
         Assert.Equal(unchecked((int)0x80020004), missingPut.Failure?.Scode);
         Assert.True(missingPut.Failure?.NullExcepStrings);
+        CallResult omittedPut = Put(F("T"), "Value", (object?)null);
+        Assert.Equal(unchecked((int)0x80020004), omittedPut.Failure?.Scode);
+        Assert.True(omittedPut.Failure?.NullExcepStrings);
         Assert.Equal(3421, Put(F("G"), "Value", 1).Failure?.Number);
         Assert.Equal(3421, Put(F("G"), "Value", new byte[16]).Failure?.Number);
         Assert.Null(Method(rs, "CancelUpdate").Failure);

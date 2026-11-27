@@ -39,7 +39,7 @@ public static unsafe class AssignmentConversion
         VarType vt = incoming.Type;
         if (vt == VarType.Null)
         {
-            // evidence/r-q53-conv-abspos-subq-loc/conv-dao-scalars-{accdb,mdb} (call 378): DAO Field.Value = Null on a
+            // evidence/r-q53-conv-abspos-subq-loc/conv-dao-scalars-accdb, conv-dao-scalars-mdb (call 378): DAO Field.Value = Null on a
             // Yes/No column stores False (0) and reads back VT_BOOL 0.
             if (column.TypeCode == NativeTypes.Boolean)
             {
@@ -51,7 +51,7 @@ public static unsafe class AssignmentConversion
         }
         if (allowDaoConversions && vt == VarType.Empty)
         {
-            // evidence/r-q53-conv-abspos-subq-loc/conv-dao-scalars-{accdb,mdb} (calls 247..361): DAO Field.Value = VT_EMPTY
+            // evidence/r-q53-conv-abspos-subq-loc/conv-dao-scalars-accdb, conv-dao-scalars-mdb (calls 247..361): DAO Field.Value = VT_EMPTY
             // maps to False (0) on Yes/No and Null on Byte, Integer, Long, Single, Double, Currency, DateTime, Decimal,
             // Text, Memo, and GUID.
             if (column.TypeCode == NativeTypes.Boolean)
@@ -69,7 +69,7 @@ public static unsafe class AssignmentConversion
         }
         if (allowDaoConversions && vt == VarType.Error && (int)incoming.Int64 == DispParamNotFound)
         {
-            // evidence/r-q53-conv-abspos-subq-loc/conv-dao-scalars-{accdb,mdb} (calls 471, 567): Missing (VT_ERROR
+            // evidence/r-q53-conv-abspos-subq-loc/conv-dao-scalars-accdb, conv-dao-scalars-mdb (calls 471, 567): Missing (VT_ERROR
             // DISP_E_PARAMNOTFOUND) fails 0x80020004 without overwriting DBEngine.Errors.
             return new ConversionResult(default, new MutationError(MutationError.MissingArgument, MutationErrorSource.Field));
         }
@@ -83,7 +83,7 @@ public static unsafe class AssignmentConversion
         }
         if (allowDaoConversions && column.TypeCode == NativeTypes.Guid && vt == (VarType.Array | VarType.UI1))
         {
-            // evidence/r-q53-conv-abspos-subq-loc/conv-dao-scalars-{accdb,mdb} (call 585): 16-byte SAFEARRAY into GUID fails 3421.
+            // evidence/r-q53-conv-abspos-subq-loc/conv-dao-scalars-accdb, conv-dao-scalars-mdb (call 585): 16-byte SAFEARRAY into GUID fails 3421.
             return new ConversionResult(default, new MutationError(MutationError.Conversion, MutationErrorSource.Field));
         }
         if (vt is VarType.Empty or VarType.Error || ((ushort)vt & 0xF000) != 0)
@@ -200,7 +200,7 @@ public static unsafe class AssignmentConversion
 
     /// <summary>
     /// Assignment into fixed <c>DECIMAL(p, s)</c> (native type <c>0x10</c>; evidence/r-q51-codecs-props-compact/dec-desc-keys-*,
-    /// seek-args-decimal-*, evidence/r-q53-conv-abspos-subq-loc/conv-dao-scalars-{accdb,mdb}): converts through
+    /// seek-args-decimal-*, evidence/r-q53-conv-abspos-subq-loc/conv-dao-scalars-accdb, conv-dao-scalars-mdb): converts through
     /// <c>VariantChangeTypeEx(..., VT_DECIMAL)</c>, rescales exact decimal values to <c>column.NumericScale</c>, and
     /// verifies the magnitude fits <c>column.NumericPrecision</c>. On DAO puts (<paramref name="allowDaoConversions"/>),
     /// bad text fails 3421, over-scale fails 3759, and over-precision fails 3761.
@@ -291,7 +291,7 @@ public static unsafe class AssignmentConversion
         NativeVariant source = incoming;
         OwnedVariant.TryChangeScalar(&source, target, lcid, out NativeVariant result, out int hr);
         // A text that does not convert is 3421 from DAO.Field for Double, Currency, Bit, Date/Time (r-expr-locale)
-        // and on DAO puts for Byte, Integer, Long and Single (evidence/r-q53-conv-abspos-subq-loc/conv-dao-scalars-{accdb,mdb}).
+        // and on DAO puts for Byte, Integer, Long and Single (evidence/r-q53-conv-abspos-subq-loc/conv-dao-scalars-accdb, conv-dao-scalars-mdb).
         if (hr == DispOverflow || (hr == DispTypeMismatch && incoming.Type == VarType.Bstr
             && (allowDaoConversions || target is VarType.R8 or VarType.Currency or VarType.Bool or VarType.Date)))
         {
@@ -330,7 +330,7 @@ public static unsafe class AssignmentConversion
         }
         else if (allowDaoConversions && incoming.Type == VarType.Bool)
         {
-            // evidence/r-q53-conv-abspos-subq-loc/conv-dao-scalars-{accdb,mdb} (calls 171, 230): VT_BOOL -> Text/Memo
+            // evidence/r-q53-conv-abspos-subq-loc/conv-dao-scalars-accdb, conv-dao-scalars-mdb (calls 171, 230): VT_BOOL -> Text/Memo
             // formats True as "-1" and False as "0".
             text = (short)incoming.Int64 != 0 ? "-1" : "0";
             if (column.TypeCode == NativeTypes.Text && text.Length > column.Length / 2)
@@ -341,7 +341,7 @@ public static unsafe class AssignmentConversion
         else if (allowDaoConversions && incoming.Type is VarType.UI1 or VarType.I2 or VarType.I4 or VarType.I8
             or VarType.R4 or VarType.R8 or VarType.Currency or VarType.Date or VarType.Decimal)
         {
-            // evidence/r-q53-conv-abspos-subq-loc/conv-dao-scalars-{accdb,mdb} (calls 88, 94, 177, 224): numeric,
+            // evidence/r-q53-conv-abspos-subq-loc/conv-dao-scalars-accdb, conv-dao-scalars-mdb (calls 88, 94, 177, 224): numeric,
             // Currency, and Date values format via VariantChangeTypeEx under the session LCID (Date -> "2026/03/15"
             // under en-ZA 7177).
             NativeVariant source = incoming;
@@ -369,7 +369,7 @@ public static unsafe class AssignmentConversion
     {
         // A GUID accepts only the braced text form; unbraced text, I4, and a 16-byte array are refused 3421
         // (qualified.md R-FMT-2 Dates / GUID, r-q-fmt-sort/scalar-bounds-accdb,
-        // evidence/r-q53-conv-abspos-subq-loc/conv-dao-scalars-{accdb,mdb} calls 573, 579, 585).
+        // evidence/r-q53-conv-abspos-subq-loc/conv-dao-scalars-accdb, conv-dao-scalars-mdb calls 573, 579, 585).
         if (incoming.Type != VarType.Bstr)
         {
             if (allowDaoConversions && incoming.Type == VarType.I4)

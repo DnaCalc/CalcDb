@@ -56,7 +56,8 @@ public sealed record CheckConstraintExpression(
     /// Parse a recorded single-column CHECK expression, or return false with a named refusal reason.
     /// When <paramref name="allowCompoundAnd"/> is true, also admits a same-column <c>Long</c> compound <c>AND</c>
     /// of two single-column comparisons (<c>Score &gt;= 0 AND Score &lt;= 100</c>;
-    /// <c>evidence/r-q50-jk44-ddl-vis/ddl-multi-constraint-table-{accdb,mdb}</c>).
+    /// <c>evidence/r-q50-jk44-ddl-vis/ddl-multi-constraint-table-accdb</c>,
+    /// <c>evidence/r-q50-jk44-ddl-vis/ddl-multi-constraint-table-mdb</c>).
     /// </summary>
     public static bool TryParse(string expression, out CheckConstraintExpression? parsed, out string? reason, bool allowCompoundAnd = false)
     {
