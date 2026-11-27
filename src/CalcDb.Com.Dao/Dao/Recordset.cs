@@ -2548,9 +2548,11 @@ internal sealed unsafe class FieldObject : DaoObject
         .Get("Attributes", (self, args) => Live(self, f => f.Recordset.Database.InheritedWritable ? DatabaseObject.InheritedWriteRefusal("Field.Attributes") : f.DataUpdatable() is bool u && ColumnFacts.Attributes(f.Column, u) is int a ? Int32(a) : f.CalculatedNamed("Attributes")))
         .Get("AllowZeroLength", (self, args) => Live(self, f => f.Stored("AllowZeroLength", Bool(false))))
         .Get("Required", (self, args) => Live(self, f => f.Stored("Required", Bool(false))))
-        .Get("AppendOnly", (self, args) => Live(self, f => f.Column.TypeCode == NativeTypes.Memo
-            ? CallResult.Fail(Failure.NotModelled("NotModelled.FieldProperties.AppendOnly", $"Field.AppendOnly of Memo column {f.Column.Name} (not recorded)"))
-            : Bool(false)))
+        .Get("AppendOnly", (self, args) => Live(self, f => f.Column.CalculatedResultType is not null
+            ? f.CalculatedNamed("AppendOnly")
+            : f.Column.TypeCode == NativeTypes.Memo
+                ? CallResult.Fail(Failure.NotModelled("NotModelled.FieldProperties.AppendOnly", $"Field.AppendOnly of Memo column {f.Column.Name} (not recorded)"))
+                : Bool(false)))
         .Get("DefaultValue", (self, args) => Live(self, f => f.Stored("DefaultValue", Text(""))))
         .Get("ValidationRule", (self, args) => Live(self, f => f.Stored("ValidationRule", Text(""))))
         .Get("ValidationText", (self, args) => Live(self, f => f.Stored("ValidationText", Text(""))))

@@ -844,7 +844,8 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         PageAllocator? externalAllocator = null,
         bool deferTableDefCountUpdate = false,
         bool allowInlineOleOnMdb = false,
-        IReadOnlyList<uint>? sessionReservedPages = null)
+        IReadOnlyList<uint>? sessionReservedPages = null,
+        bool reusableExtentSession = false)
     {
         if (_pageCount == 0)
         {
@@ -933,7 +934,7 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         // one allocator of the insert (or the caller's shared allocator for multi-row catalog writes). When the session
         // holds an active page-1 extent reservation (evidence/r-q42-field-rule-and/rule-*, multirow-*), PlaceRow /
         // NewLvalPage consume contiguous pages from sessionReservedPages without re-editing page 1.
-        PageAllocator allocator = externalAllocator ?? new PageAllocator(_cache, _d, ExtentOf(seen), sessionReservedPages);
+        PageAllocator allocator = externalAllocator ?? new PageAllocator(_cache, _d, ExtentOf(seen), sessionReservedPages, reusableExtentSession: reusableExtentSession);
         List<PageEdit> edits = [];
         for (int lvIndex = 0; lvIndex < longValues.Count; lvIndex++)
         {

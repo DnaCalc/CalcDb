@@ -1276,7 +1276,8 @@ public sealed class EditFrame : IDisposable
                 _workspace.OverlayOf(insertWriter.File),
                 reseedAutoNumber: reseedAcceptedAuto,
                 deferTableDefCountUpdate: deferInsertCounts,
-                sessionReservedPages: _workspace.SessionReservedPages(insertWriter.File));
+                sessionReservedPages: _workspace.SessionReservedPages(insertWriter.File),
+                reusableExtentSession: _workspace.HasReusableExtentSession(insertWriter.File));
         }
         else
         {

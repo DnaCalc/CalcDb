@@ -92,6 +92,12 @@ public sealed unsafe class CheckConstraintAndExtentTests
             Assert.True(si.Accepted && si.Error is null && si.Open == MutationOpen.None, si.Detail);
         }
         Assert.Empty(ws.SessionReservedPages(cache));
+        Assert.True(ws.HasReusableExtentSession(cache));
+
+        // Unreserved single-page global-map allocation after block 1 exhaustion refuses by name
+        AcceptOutcome unreserved = PublishAllocatedPages(ws, cache, dummySemantics, pagesToAllocate: 1, reserveExtent: false);
+        Assert.False(unreserved.Accepted);
+        Assert.Equal(MutationOpen.Publication, unreserved.Open);
 
         // Statement 11 (D11): crosses page 32 -> allocates 72..74 and clears 2nd 32-page block (72..103)
         AcceptOutcome s11 = PublishAllocatedPages(ws, cache, dummySemantics, pagesToAllocate: 3, reserveExtent: true);
@@ -214,7 +220,8 @@ public sealed unsafe class CheckConstraintAndExtentTests
         var i4 = new NativeVariant { Vt = (ushort)VarType.I4, Int64 = 1 };
         Assert.Equal(MutationError.Conversion, AssignmentConversion.Convert(i4, colGuid, 7177, allowDaoConversions: true).Error?.Number);
 
-        // DECIMAL(18,4): valid BSTR succeeds; over-scale fails 3759; over-precision fails 3761; bad text fails 3421
+        // DECIMAL(18,4): valid BSTR succeeds; over-scale fails 3759; over-precision fails 3761; bad text fails 3421;
+        // unprobed Currency -> DECIMAL stays ColumnType; unprobed UI1/I2 -> Text stays ConversionNotRecorded.
         using OwnedVariant decOk = OwnedVariant.FromText("12.3456");
         using OwnedVariant decScale = OwnedVariant.FromText("12.34565");
         using OwnedVariant decPrec = OwnedVariant.FromText("999999999999999.0");
@@ -223,6 +230,10 @@ public sealed unsafe class CheckConstraintAndExtentTests
         Assert.Equal(MutationError.DecimalScaleTruncation, AssignmentConversion.Convert(*decScale.Pointer, colDec, 7177, allowDaoConversions: true).Error?.Number);
         Assert.Equal(MutationError.DecimalPrecisionTooSmall, AssignmentConversion.Convert(*decPrec.Pointer, colDec, 7177, allowDaoConversions: true).Error?.Number);
         Assert.Equal(MutationError.Conversion, AssignmentConversion.Convert(*decBad.Pointer, colDec, 7177, allowDaoConversions: true).Error?.Number);
+        var cyVar = new NativeVariant { Vt = (ushort)VarType.Currency, Int64 = 10000 };
+        Assert.Equal(MutationOpen.ColumnType, AssignmentConversion.Convert(cyVar, colDec, 7177, allowDaoConversions: true).Open);
+        var ui1Var = new NativeVariant { Vt = (ushort)VarType.UI1, Int64 = 7 };
+        Assert.Equal(MutationOpen.ConversionNotRecorded, AssignmentConversion.Convert(ui1Var, colText, 7177, allowDaoConversions: true).Open);
     }
 
     private static MutationSemantics DummySemantics(PageCache cache, ulong pageCount)

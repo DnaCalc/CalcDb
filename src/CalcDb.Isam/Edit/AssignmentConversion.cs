@@ -212,7 +212,8 @@ public static unsafe class AssignmentConversion
         // to VT_DECIMAL first.
         if (column.NumericPrecision is 0 or > 28
             || column.NumericScale > column.NumericPrecision
-            || (!allowDaoConversions && incoming.Type is VarType.Bstr or VarType.R8 or VarType.Currency))
+            || incoming.Type == VarType.Currency
+            || (!allowDaoConversions && incoming.Type is VarType.Bstr or VarType.R8))
         {
             return Open(MutationOpen.ColumnType);
         }
@@ -338,8 +339,7 @@ public static unsafe class AssignmentConversion
                 return new ConversionResult(default, new MutationError(MutationError.FieldTooSmall, MutationErrorSource.Field));
             }
         }
-        else if (allowDaoConversions && incoming.Type is VarType.UI1 or VarType.I2 or VarType.I4 or VarType.I8
-            or VarType.R4 or VarType.R8 or VarType.Currency or VarType.Date or VarType.Decimal)
+        else if (allowDaoConversions && incoming.Type is VarType.I4 or VarType.R8 or VarType.Currency or VarType.Date)
         {
             // evidence/r-q53-conv-abspos-subq-loc/conv-dao-scalars-accdb, conv-dao-scalars-mdb (calls 88, 94, 177, 224): numeric,
             // Currency, and Date values format via VariantChangeTypeEx under the session LCID (Date -> "2026/03/15"

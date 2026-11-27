@@ -52,10 +52,11 @@ public sealed class PageAllocator
     {
     }
 
-    public PageAllocator(PageCache cache, FormatDescriptor d, ulong extentPages, IReadOnlyList<uint>? sessionReservedPages, bool allowNonContiguousReserved = false)
+    public PageAllocator(PageCache cache, FormatDescriptor d, ulong extentPages, IReadOnlyList<uint>? sessionReservedPages, bool allowNonContiguousReserved = false, bool reusableExtentSession = false)
         : this(cache, d, extentPages, allowPendingRollbackExtent: false)
     {
         _allowNonContiguousReserved = allowNonContiguousReserved;
+        _hadSessionReservedPages = reusableExtentSession;
         if (sessionReservedPages is { Count: > 0 })
         {
             _hadSessionReservedPages = true;

@@ -1168,17 +1168,23 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         || HasActiveExtentReservation(cache)
         || (_unpublishedGlobalMapActivity.TryGetValue(cache, out int count) && count > 0);
 
+    /// <summary>Whether this session has taken a reusable 32-page page-1 extent on <paramref name="cache"/> (even if its current block is exhausted).</summary>
+    public bool HasReusableExtentSession(PageCache cache) => _reusableExtentSession.Contains(cache);
+
     private bool HasActiveExtentReservation(PageCache cache) =>
         (_reservedExtent.Contains(cache) && !_reusableExtentSession.Contains(cache))
         || (_sessionReservedExtent.TryGetValue(cache, out List<uint>? pool) && pool.Count > 0)
         || _rollbackExtentPending.Contains(cache)
         || (_unpublishedReservedExtent.TryGetValue(cache, out int count) && count > 0);
 
-    private bool ExhaustsSessionReservedExtent(PageCache cache, IReadOnlyList<uint> consumed) =>
-        _sessionReservedExtent.TryGetValue(cache, out List<uint>? pool)
-        && pool.Count > 0
-        && consumed.Count == pool.Count
-        && ValidateConsumedReservedPages(cache, consumed) is null;
+    private bool ExhaustsSessionReservedExtent(PageCache cache, IReadOnlyList<uint> consumed, int priorInBatch = 0)
+    {
+        int offset = PendingConsumedReservedCount(cache) + priorInBatch;
+        return _sessionReservedExtent.TryGetValue(cache, out List<uint>? pool)
+            && pool.Count > 0
+            && offset + consumed.Count == pool.Count
+            && ValidateConsumedReservedPages(cache, consumed, priorInBatch) is null;
+    }
 
     private static bool TouchesGlobalMapPage(IReadOnlyList<PageEdit> edits)
     {
@@ -3638,21 +3644,9 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                         MutationOpen.Publication,
                         physical.File.HasOtherRollbackExtentOwner(Locker) ? OtherWorkspaceRollbackExtentDetail : PendingRollbackExtentWriteDetail);
                 }
-                if (AllocatesGlobalMapPage(physical) && HasActiveExtentReservation(physical.File))
-                {
-                    return new AcceptOutcome(false, null, MutationOpen.Publication, "allocating a page while a session page-1 extent reservation is pending is not recorded (R-CRASH-1 extent reservation Open)");
-                }
+                int priorInBatch = 0;
                 if (physical.ConsumedReservedPages.Count > 0)
                 {
-                    if (InExplicitTransaction)
-                    {
-                        return new AcceptOutcome(false, null, MutationOpen.Publication, "consuming pages from a session page-1 extent reservation inside BeginTrans is not recorded (r-q42-field-rule-and)");
-                    }
-                    if (!InStatement)
-                    {
-                        return new AcceptOutcome(false, null, MutationOpen.Publication, "consuming pages from a session page-1 extent reservation outside a SQL statement (recordset AddNew/Update) is not recorded (r-q42-field-rule-and)");
-                    }
-                    int priorInBatch = 0;
                     if (op.DeferredSingle?.Physical is { } dp && ReferenceEquals(dp.File, physical.File))
                     {
                         priorInBatch += dp.ConsumedReservedPages.Count;
@@ -3670,6 +3664,40 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                                 priorInBatch += ap.ConsumedReservedPages.Count;
                             }
                         }
+                    }
+                }
+                bool exhaustsPriorBlock = physical.ConsumedReservedPages.Count > 0
+                    && ExhaustsSessionReservedExtent(physical.File, physical.ConsumedReservedPages, priorInBatch);
+                if (AllocatesGlobalMapPage(physical)
+                    && ((HasActiveExtentReservation(physical.File) && !exhaustsPriorBlock)
+                        || (_reusableExtentSession.Contains(physical.File) && physical.ReservedExtentPages.Count == 0)))
+                {
+                    return new AcceptOutcome(false, null, MutationOpen.Publication, "allocating a page while a session page-1 extent reservation is pending is not recorded (R-CRASH-1 extent reservation Open)");
+                }
+                if (physical.ReservedExtentPages.Count > 0)
+                {
+                    if (InExplicitTransaction)
+                    {
+                        return new AcceptOutcome(false, null, MutationOpen.Publication, "taking a second session page-1 extent reservation inside BeginTrans is not recorded (r-q54-excl-ddl-ix-cmd/second-32page-extent-accdb)");
+                    }
+                    if (!InStatement)
+                    {
+                        return new AcceptOutcome(false, null, MutationOpen.Publication, "taking a second session page-1 extent reservation outside a SQL statement is not recorded (r-q54-excl-ddl-ix-cmd/second-32page-extent-accdb)");
+                    }
+                    if (HasActiveExtentReservation(physical.File) && !exhaustsPriorBlock)
+                    {
+                        return new AcceptOutcome(false, null, MutationOpen.Publication, "taking a second session page-1 extent reservation while unused reserved pages remain is not recorded (r-q54-excl-ddl-ix-cmd/second-32page-extent-accdb)");
+                    }
+                }
+                if (physical.ConsumedReservedPages.Count > 0)
+                {
+                    if (InExplicitTransaction)
+                    {
+                        return new AcceptOutcome(false, null, MutationOpen.Publication, "consuming pages from a session page-1 extent reservation inside BeginTrans is not recorded (r-q42-field-rule-and)");
+                    }
+                    if (!InStatement)
+                    {
+                        return new AcceptOutcome(false, null, MutationOpen.Publication, "consuming pages from a session page-1 extent reservation outside a SQL statement (recordset AddNew/Update) is not recorded (r-q42-field-rule-and)");
                     }
                     if (ValidateConsumedReservedPages(physical.File, physical.ConsumedReservedPages, priorInBatch) is { } reserveError)
                     {
@@ -3880,7 +3908,9 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                 file.HasOtherRollbackExtentOwner(Locker) ? OtherWorkspaceRollbackExtentDetail : PendingRollbackExtentWriteDetail);
         }
         bool exhaustsPriorBlock = physical.ConsumedReservedPages.Count > 0 && ExhaustsSessionReservedExtent(file, physical.ConsumedReservedPages);
-        if (AllocatesGlobalMapPage(physical) && HasActiveExtentReservation(file) && !exhaustsPriorBlock)
+        if (AllocatesGlobalMapPage(physical)
+            && ((HasActiveExtentReservation(file) && !exhaustsPriorBlock)
+                || (_reusableExtentSession.Contains(file) && physical.ReservedExtentPages.Count == 0)))
         {
             op.Abandon();
             return new AcceptOutcome(false, null, MutationOpen.Publication, "allocating a page while a page-1 extent reservation is pending in this session is not recorded (R-CRASH-1 extent reservation Open)");
