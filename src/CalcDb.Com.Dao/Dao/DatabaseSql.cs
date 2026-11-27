@@ -182,7 +182,9 @@ internal static unsafe class SelectRoute
             }
             DerivedSourceSpec? derivedSpec = singleTableRowSelect && syntax.Where is null && !hasOrderBy
                 ? BuildDerivedSpec(plan, baseWhere: null, baseOrderBy: null)
-                : BuildSubqueryDerivedSpec(plan, sql);
+                : database.ReadOnly
+                    ? BuildSubqueryDerivedSpec(plan, sql)
+                    : null;
             string? resolvedName = name ?? (sql.Length <= 256 ? sql : null);
             var recordset = new SelectRecordsetObject(database, plan, cursor, recordsetType, singleTableRowSelect, hasOrderBy, snapshotView, snapshotOverlay, options, database.Engine.NextSequence(), joinKeys, hasGroupBy, derivedSpec, name: resolvedName);
             adopted = true;
@@ -211,7 +213,8 @@ internal static unsafe class SelectRoute
         {
             cols.Add($"[{col.Name}]");
         }
-        return new DerivedSourceSpec("", string.Join(", ", cols), BaseWhere: null, BaseOrderBy: null, ParentSql: sql);
+        string parentSql = sql.TrimEnd().TrimEnd(';');
+        return new DerivedSourceSpec("", string.Join(", ", cols), BaseWhere: null, BaseOrderBy: null, ParentSql: parentSql);
     }
 
     internal static DerivedSourceSpec? BuildDerivedSpec(BoundSelect plan, string? baseWhere, string? baseOrderBy, bool hasOriginalWhere = false, bool hasOriginalOrderBy = false)

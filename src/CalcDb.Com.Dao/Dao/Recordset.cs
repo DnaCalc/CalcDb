@@ -1268,8 +1268,14 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
                             && failure.Number == 3000;
                         if (isDecimal38)
                         {
+                            if (rows > 0)
+                            {
+                                return CallResult.Fail(Failure.NotModelled(
+                                    "NotModelled.GetRowsDecimal38LaterRow",
+                                    "GetRows meeting a Decimal(38) 3000 failure on a row after row 0 on a table recordset (only row 0 is recorded in r-cursor-1b/getrows-shape-types)"));
+                            }
                             // r-cursor-1b/getrows-shape-types (calls 83, 94, 105 on table WD types 1, 2, 4):
-                            // non-Null Decimal(38) 3000 stops before the failing row without advancing, returning [0+0, 0+colCount] on row 0.
+                            // non-Null Decimal(38) 3000 on row 0 stops without advancing, returning [0+0, 0+colCount].
                             for (int i = rowStart; i < cells.Count; i++)
                             {
                                 cells[i].Dispose();
@@ -2242,6 +2248,7 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         {
             return CallResult.Fail(Failure.NotImplemented("Move with a Rows argument that is not a number"));
         }
+        bool hasStartBookmark = false;
         if (startBookmark != 0)
         {
             NativeVariant* sb = Args.Cell(startBookmark);
@@ -2280,6 +2287,11 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
                     {
                         return CallResult.Fail(Failure.NotModelled("NotModelled.MoveStartBookmarkCursorType", $"Move with Byte array StartBookmark on type {RecordsetType} recordset (only dynaset and snapshot are recorded)"));
                     }
+                    if (rows.Value is int.MaxValue or int.MinValue)
+                    {
+                        return CallResult.Fail(Failure.NotModelled("NotModelled.MoveExtremeWithStartBookmark", $"Move({rows.Value}, StartBookmark) combining extreme sentinel with a StartBookmark (not recorded)"));
+                    }
+                    hasStartBookmark = true;
                     CallResult positioned = SetBookmark(startBookmark);
                     if (positioned.Failure is not null)
                     {
@@ -2293,7 +2305,7 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
                 return CallResult.Fail(Failure.NotModelled("NotModelled.MoveStartBookmarkType", $"Move with StartBookmark of type {sbVt} (not recorded)"));
             }
         }
-        if (rows.Value is int.MaxValue or int.MinValue)
+        if (!hasStartBookmark && rows.Value is int.MaxValue or int.MinValue)
         {
             if (RecordsetType == 8 || Cursor is PopulationCursor { ForwardOnly: true })
             {

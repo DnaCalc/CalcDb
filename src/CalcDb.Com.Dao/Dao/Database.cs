@@ -849,8 +849,15 @@ internal sealed unsafe class DatabaseObject : DaoObject
             CalcDb.Values.NativeVariant* lockCell = Args.Cell(args[3]);
             if (!CalcDb.Values.OwnedVariant.TryChangeScalar(lockCell, CalcDb.Foundation.VarType.I4, SessionLocale.Lcid, out CalcDb.Values.NativeVariant lockConverted, out _))
             {
-                // r-cursor-1b/open-lockedits-values: VT_NULL or non-numeric BSTR LockEdit fails 3421 without IErrorInfo.
-                return Fail(3421, DaoErrors.ConversionError);
+                CalcDb.Foundation.VarType lockVt = Args.TypeOf(args[3]) & ~CalcDb.Foundation.VarType.ByRef;
+                if (lockVt is CalcDb.Foundation.VarType.Null or CalcDb.Foundation.VarType.Bstr)
+                {
+                    // r-cursor-1b/open-lockedits-values: VT_NULL or non-numeric BSTR LockEdit fails 3421 without IErrorInfo.
+                    return Fail(3421, DaoErrors.ConversionError);
+                }
+                return CallResult.Fail(Failure.NotModelled(
+                    "NotModelled.OpenRecordsetLockEditConversion",
+                    $"OpenRecordset LockEdit argument of type {lockVt} failed Int32 conversion (only Null and non-numeric BSTR 3421 are recorded)"));
             }
             lockEdit = (int)lockConverted.Int64;
         }
@@ -864,14 +871,20 @@ internal sealed unsafe class DatabaseObject : DaoObject
             // LockEdit outside {2 dbPessimistic, 3 dbOptimistic, 4 dbReadOnly} fails 3001 without IErrorInfo.
             return Fail(3001, DaoErrors.InvalidArgument);
         }
-        if (type is null && options != 0 && options != 4)
+        CatalogEntry? entry = Catalog.LocalTables(Format).FirstOrDefault(e => string.Equals(e.Name, name, StringComparison.OrdinalIgnoreCase));
+        if (type is null && options != 0 && !(entry is not null && options == 4 && lockEdit is null))
         {
-            // CUR-PROV: with the Type cell omitted, option 4 is recorded (open-argument-shapes, open-argument-shapes-rw call 131); other options are not.
+            // CUR-PROV: with the Type cell omitted, option 4 is recorded only on a local table with no LockEdit (open-argument-shapes, open-argument-shapes-rw call 131).
             return CallResult.Fail(Failure.NotImplemented("OpenRecordset with Options and no Type (CUR-PROV's omitted-Type rule)"));
         }
-        CatalogEntry? entry = Catalog.LocalTables(Format).FirstOrDefault(e => string.Equals(e.Name, name, StringComparison.OrdinalIgnoreCase));
         if (entry is null)
         {
+            if (lockEdit is not null)
+            {
+                return CallResult.Fail(Failure.NotModelled(
+                    "NotModelled.OpenRecordsetQueryLockEdit",
+                    $"OpenRecordset of a query with LockEdit {lockEdit} (only local-table LockEdit is recorded)"));
+            }
             string trimmed = name.TrimStart();
             if (type != 1 && trimmed.StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
             {
@@ -939,6 +952,13 @@ internal sealed unsafe class DatabaseObject : DaoObject
         {
             // r-dao-1-err-1/err-bind-optional-cells call 5: db.OpenRecordset("T", Missing, 0, 3) -> 3001 (table-type rejects dbOptimistic).
             return Fail(3001, DaoErrors.InvalidArgument);
+        }
+        if (lockEdit == 4 && recordsetType != 2)
+        {
+            // r-cursor-1b/open-lockedits-values only probes LockEdit = 4 (dbReadOnly) on dynaset (2).
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.OpenRecordsetLockEditReadOnlyType",
+                $"OpenRecordset type {recordsetType} with LockEdit 4 (dbReadOnly) (only dynaset type 2 is recorded)"));
         }
         switch (RecordsetOptions.Admit(recordsetType, effectiveOptions, readOnlyDatabase: ReadOnly))
         {

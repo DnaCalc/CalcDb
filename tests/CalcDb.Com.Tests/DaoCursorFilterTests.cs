@@ -183,9 +183,10 @@ public sealed unsafe class DaoCursorFilterTests : IDisposable
             AssertDaoError(Method(rs, "Move", 1, new byte[] { 0, 0, 0, 0 }), 3159, "DAO.Recordset", errorInfo: false);
             AssertDaoError(FieldValue(rs, "ID"), 3021, "DAO.Field", errorInfo: true);
 
-            // Unrecorded non-empty BSTR -> NotModelled.
+            // Unrecorded non-empty BSTR -> NotModelled; extreme sentinel + StartBookmark -> NotModelled.
             Ok(Method(rs, "MoveFirst"));
             AssertNotModelled(Method(rs, "Move", 1, "abc"), "NotModelled.MoveStartBookmarkNonEmptyBstr");
+            AssertNotModelled(Method(rs, "Move", int.MaxValue, bm3), "NotModelled.MoveExtremeWithStartBookmark");
             Ok(Method(rs, "Close"));
         }
     }
@@ -262,6 +263,11 @@ public sealed unsafe class DaoCursorFilterTests : IDisposable
         AssertDaoError(Method(rsLock4, "CancelUpdate"), 3020, "DAO.Recordset", errorInfo: false);
         Ok(Method(rsLock4, "Close"));
 
+        // LockEdit = 4 on non-dynaset local table -> NotModelled; LockEdit on SELECT -> NotModelled; (Missing, 4) on SELECT -> NotImplemented.
+        AssertNotModelled(Method(rwDb, "OpenRecordset", "Items", 1, 0, 4), "NotModelled.OpenRecordsetLockEditReadOnlyType");
+        AssertNotModelled(Method(rwDb, "OpenRecordset", "SELECT * FROM Items", 2, 0, 4), "NotModelled.OpenRecordsetQueryLockEdit");
+        Assert.Equal(FailureKind.NotImplemented, Method(rwDb, "OpenRecordset", "SELECT * FROM Items", MissingSentinel.Value, 4).Failure!.Kind);
+
         // Ad-hoc SELECT Name returns SQL text.
         SelectRecordsetObject rsSql = Recover<SelectRecordsetObject>(Ok(Method(rwDb, "OpenRecordset", "SELECT * FROM Items", 2)));
         Assert.Equal("SELECT * FROM Items", TextValue(Ok(Get(rsSql, "Name"))));
@@ -291,6 +297,7 @@ public sealed unsafe class DaoCursorFilterTests : IDisposable
         Ok(Method(rsPct, "MoveLast"));
         Assert.Equal(50f, SingleValue(Ok(Get(rsPct, "PercentPosition"))));
         AssertDaoError(Put(rsPct, "PercentPosition", 150f), 3001, "DAO.Recordset", errorInfo: false);
+        AssertDaoError(Put(rsPct, "PercentPosition", float.NaN), 3001, "DAO.Recordset", errorInfo: false);
         Assert.Equal(50f, SingleValue(Ok(Get(rsPct, "PercentPosition"))));
         Ok(Method(rsPct, "Close"));
 
@@ -305,8 +312,8 @@ public sealed unsafe class DaoCursorFilterTests : IDisposable
         Ok(Method(rsGrp, "Close"));
         Ok(Method(_engine.DefaultWorkspace, "Rollback"));
 
-        // Direct field metadata on SelectFieldObject (field-metadata-rw).
-        SelectRecordsetObject rsMeta = Recover<SelectRecordsetObject>(Ok(Method(db, "OpenRecordset", "SELECT ID, N + 1 AS Np FROM Items WHERE ID = 1", 2)));
+        // Direct field metadata on SelectFieldObject (field-metadata-rw), including Decimal expressions (CollatingOrder == 28).
+        SelectRecordsetObject rsMeta = Recover<SelectRecordsetObject>(Ok(Method(db, "OpenRecordset", "SELECT ID, N + 1 AS Np, N * 1.5 AS A2, 7.5 AS A13 FROM Items WHERE ID = 1", 2)));
         SelectFieldsObject flds = Recover<SelectFieldsObject>(Ok(Get(rsMeta, "Fields")));
         SelectFieldObject fId = Recover<SelectFieldObject>(Ok(Get(flds, "Item", "ID")));
         Assert.Equal(1033, Int32Value(Ok(Get(fId, "CollatingOrder"))));
@@ -321,6 +328,10 @@ public sealed unsafe class DaoCursorFilterTests : IDisposable
         SelectFieldObject fNp = Recover<SelectFieldObject>(Ok(Get(flds, "Item", "Np")));
         Assert.Equal(1033, Int32Value(Ok(Get(fNp, "CollatingOrder"))));
         Assert.Equal(1, Int16Value(Ok(Get(fNp, "CollectionIndex"))));
+        SelectFieldObject fA2 = Recover<SelectFieldObject>(Ok(Get(flds, "Item", "A2")));
+        Assert.Equal(28, Int32Value(Ok(Get(fA2, "CollatingOrder"))));
+        SelectFieldObject fA13 = Recover<SelectFieldObject>(Ok(Get(flds, "Item", "A13")));
+        Assert.Equal(28, Int32Value(Ok(Get(fA13, "CollatingOrder"))));
         Ok(Method(rsMeta, "Close"));
 
         // Derived forward-only recordset (filter-derived-types): walks rows, RecordCount = -1 at EOF.
@@ -347,6 +358,7 @@ public sealed unsafe class DaoCursorFilterTests : IDisposable
         Ok(Method(rsDerDyn, "FindNext", "ID >= 2"));
         Assert.False(BoolValue(Ok(Get(rsDerDyn, "NoMatch"))));
         Assert.Equal(3, Int32Value(Ok(FieldValue(rsDerDyn, "ID"))));
+        AssertNotModelled(Method(rsDerDyn, "FindNext", "ID = 999"), "NotModelled.QueryRecordsetFindNoMatch");
         Ok(Method(rsDerDyn, "Close"));
 
         // Table-qualified Filter ("Items.ID > 2") -> 3061 Expected 2.
@@ -355,8 +367,9 @@ public sealed unsafe class DaoCursorFilterTests : IDisposable
         AssertDaoError(Method(rsBase, "OpenRecordset"), 3061, "DAO.Recordset", errorInfo: false, "Too few parameters. Expected 2.");
         Ok(Method(rsBase, "Close"));
 
-        // Filter + Sort on query source with WHERE/ORDER BY/TOP/GROUP BY (filter-sort-query-source).
-        SelectRecordsetObject rsQ = Recover<SelectRecordsetObject>(Ok(Method(db, "OpenRecordset", "SELECT TOP 3 ID, N FROM Items ORDER BY ID DESC", 2)));
+        // Filter + Sort on query source with WHERE/ORDER BY/TOP/GROUP BY on read-only DB (filter-sort-query-source, trailing ';' trimmed).
+        DatabaseObject roDb = OpenFixture(readOnly: true, out _);
+        SelectRecordsetObject rsQ = Recover<SelectRecordsetObject>(Ok(Method(roDb, "OpenRecordset", "SELECT TOP 3 ID, N FROM Items ORDER BY ID DESC;", 2)));
         Ok(Put(rsQ, "Filter", "ID > 6"));
         Ok(Put(rsQ, "Sort", "ID ASC"));
         SelectRecordsetObject rsQDer = Recover<SelectRecordsetObject>(Ok(Method(rsQ, "OpenRecordset")));

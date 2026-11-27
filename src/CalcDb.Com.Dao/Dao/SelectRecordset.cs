@@ -38,7 +38,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
     private static readonly OperationTable Operations = new OperationTable(Decl)
         .Get("Name", (self, args) => Live(self, r => r._name.Length > 0
             ? Text(r._name)
-            : CallResult.Fail(Failure.NotModelled("NotModelled.SelectRecordsetName", "Recordset.Name on an ad-hoc SQL recordset (only saved QueryDef Name is recorded in r-dao-1b/querydef-state-after-execute)"))))
+            : CallResult.Fail(Failure.NotModelled("NotModelled.SelectRecordsetName", "Recordset.Name on a derived SELECT recordset or ad-hoc SQL longer than 256 characters (not recorded)"))))
         .Get("Type", (self, args) => Live(self, r => Int16(r.RecordsetType)))
         .Get("Updatable", (self, args) => Live(self, r => r.Updatable()))
         .Get("Bookmarkable", (self, args) => Live(self, r => r.Bookmarkable()))
@@ -784,22 +784,18 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
     }
 
     /// <summary>
-    /// PercentPosition put on a single-table SELECT dynaset (2) or snapshot (4) (r-fix-cursor-dao/arg-percentposition-150-readback):
-    /// trunc(percent * count / 100) over the populated RecordCount; values in 0..count clamp to count - 1, outside fail 3001
-    /// leaving the cursor unchanged. Forward-only refuses 3219; non-numeric fails 3421.
+    /// PercentPosition put on a single-table SELECT dynaset (2) (r-fix-cursor-dao/arg-percentposition-150-readback):
+    /// trunc(percent * count / 100) over the populated RecordCount; values in 0..count clamp to count - 1, outside (and NaN)
+    /// fail 3001 leaving the cursor unchanged. Non-numeric fails 3421; other cursor types/shapes refuse by name.
     /// </summary>
     private CallResult SetPercentPosition(nint value)
     {
-        if (RecordsetType == 8 || (_options & 256) != 0)
-        {
-            return Fail(3219, DaoErrors.InvalidOperation);
-        }
-        if (!_isSingleTableRowSelect || _appendOnly || RecordsetType is not (2 or 4)
+        if (!_isSingleTableRowSelect || _appendOnly || RecordsetType != 2 || (_options & 256) != 0
             || _deletedRows is { Count: > 0 } || _addedRows is { Count: > 0 })
         {
             return CallResult.Fail(Failure.NotModelled(
                 "NotModelled.QueryRecordsetPercentPosition",
-                "Recordset.PercentPosition put on this SELECT recordset shape or state (not recorded)"));
+                "Recordset.PercentPosition put on this SELECT recordset shape, cursor type, or state (only single-table dynaset is recorded)"));
         }
         if (!OwnedVariant.TryChangeScalar(Args.Cell(value), VarType.R4, SessionLocale.Lcid, out NativeVariant changed, out _))
         {
@@ -816,7 +812,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         }
         float percent = BitConverter.Int32BitsToSingle((int)changed.Int64);
         double target = Math.Truncate(percent * (double)count / 100.0);
-        if (target < 0 || target > count)
+        if (!(target >= 0 && target <= count))
         {
             return Fail(3001, DaoErrors.InvalidArgument);
         }
@@ -1377,8 +1373,9 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
             : 0;
         if (direction == FindDirection.Next && IsAtEof)
         {
-            _noMatch = true;
-            return CallResult.Nothing;
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.QueryRecordsetFindNoMatch",
+                "Recordset.FindNext at EOF on a SELECT recordset (not recorded)"));
         }
         // Scan Cursor rows from startOrd, then any _addedRows.
         MoveOutcome startOutcome;
@@ -1496,15 +1493,8 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
                 reader.Dispose();
             }
         }
-        if (Cursor.Eof && (_addedRows is null || _addedRows.Count == 0) && startOutcome == MoveOutcome.NoCurrentRecord)
+        if (Cursor.Eof && (_addedRows is null || _addedRows.Count == 0) && startOutcome == MoveOutcome.NoCurrentRecord && direction == FindDirection.First)
         {
-            _noMatch = true;
-            return CallResult.Nothing;
-        }
-        if (direction == FindDirection.Next && savedOrdinal >= 0 && !savedAtAddedRow)
-        {
-            MoveCursorToOrdinal(savedOrdinal);
-            _selectOrdinal = savedOrdinal;
             _noMatch = true;
             return CallResult.Nothing;
         }
@@ -3280,13 +3270,13 @@ internal sealed unsafe class SelectFieldObject : DaoObject
         .Get("Required", (self, args) => Live(self, f => f.Required()))
         .Get("OrdinalPosition", (self, args) => Live(self, f => Int16(f._ordinal)))
         .Get("CollatingOrder", (self, args) => Live(self, f => f.DirectCollatingOrder()))
-        .Get("AllowZeroLength", (self, args) => Live(self, f => Bool(false)))
-        .Get("ValidationRule", (self, args) => Live(self, f => Text("")))
-        .Get("ValidationText", (self, args) => Live(self, f => Text("")))
-        .Get("DefaultValue", (self, args) => Live(self, f => Text("")))
+        .Get("AllowZeroLength", (self, args) => Live(self, f => f.DirectUnsetColumnProperty("AllowZeroLength", Bool(false))))
+        .Get("ValidationRule", (self, args) => Live(self, f => f.DirectUnsetColumnProperty("ValidationRule", Text(""))))
+        .Get("ValidationText", (self, args) => Live(self, f => f.DirectUnsetColumnProperty("ValidationText", Text(""))))
+        .Get("DefaultValue", (self, args) => Live(self, f => f.DirectUnsetColumnProperty("DefaultValue", Text(""))))
         .Get("CollectionIndex", (self, args) => Live(self, f => Int16(f._ordinal)))
         .Get("ForeignName", (self, args) => Live(self, f => f.Fail(3219, DaoErrors.InvalidOperation)))
-        .Get("Expression", (self, args) => Live(self, f => Text("")))
+        .Get("Expression", (self, args) => Live(self, f => f.DirectUnsetColumnProperty("Expression", Text(""))))
         .Get("ValidateOnSet", (self, args) => Live(self, f => Bool(false)))
         .Get("Precision", (self, args) => Live(self, f => f.DirectPrecision()))
         .Get("Scale", (self, args) => Live(self, f => f.DirectScale()))
@@ -4067,8 +4057,47 @@ internal sealed unsafe class SelectFieldObject : DaoObject
     /// <c>groupby-expr-decagg-dao-mdb</c> calls 108[0], 122[0]; <c>r-def-cursor-dao/recordset-field-properties</c>).</item>
     /// </list>
     /// </summary>
+    private CallResult DirectUnsetColumnProperty(string member, CallResult unset)
+    {
+        if (Column.SourceColumn is { } sc)
+        {
+            if (sc.Column.CalculatedResultType is not null)
+            {
+                return CallResult.Fail(Failure.NotModelled(
+                    "NotModelled.FieldProperties.CalculatedColumn",
+                    $"Field.{member} of the calculated column {Column.Name} (not recorded)"));
+            }
+            if (HasStoredColumnProperties(sc.TableName, sc.Column.Name) is { } refused)
+            {
+                return refused;
+            }
+        }
+        else if (Column.SourceTable is { Length: > 0 } st && Column.SourceField is { Length: > 0 } sf
+            && HasStoredColumnProperties(st, sf) is { } refused)
+        {
+            return refused;
+        }
+        return unset;
+    }
+
     private CallResult DirectCollatingOrder()
     {
+        if (Recordset.Cursor.FieldType(_ordinal, out _) == 20)
+        {
+            // r-fix-cursor-dao/field-metadata-rw (calls 24[1].9 A2 = N * 1.5, 24[12].9 A13 = 7.5):
+            // Decimal (DAO type 20) expression columns return CollatingOrder = 28.
+            if (Column.Origin == ColumnOrigin.Expression)
+            {
+                return Int32(28);
+            }
+            if (Column.Origin == ColumnOrigin.BaseColumn && Column.SourceColumn is { } decSc && decSc.Column.CalculatedResultType is null)
+            {
+                return Int32(ColumnFacts.CollatingOrder(decSc.Column));
+            }
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.FieldProperties.CollatingOrder",
+                $"Field.CollatingOrder of Decimal {Column.Origin} column {Column.Name} (not recorded)"));
+        }
         if (Column.SourceColumn is { } sc)
         {
             return Int32(ColumnFacts.CollatingOrder(sc.Column));
