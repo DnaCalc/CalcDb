@@ -1742,7 +1742,7 @@ public sealed class SchemaWriter
             && (request.Route is SchemaRoute.Sql or SchemaRoute.Ado)
             && !workspace.HasGlobalMapAllocationOrReservation(_cache)
             && sessionReserved.Count == 0
-            && (hasDefault || preparedFk is not null || (request.AllIndexes.Count > 0 && !hasLval));
+            && (hasDefault || preparedFk is not null);
         List<DaoPropertyStep> daoSteps = request.Route == SchemaRoute.Dao ? BuildDaoPropertySteps(request.Fields) : [];
         ulong extent = _pageCount;
         uint tdefPage = 0;
@@ -2858,9 +2858,12 @@ public sealed class SchemaWriter
         }
         else if (isMemo)
         {
-            if (f.Required || f.DefaultValue is not null)
+            if (f.Required
+                || f.DefaultValue is not null
+                || (request.Route == SchemaRoute.Sql && table.RowCount > 0)
+                || (request.Route == SchemaRoute.Ado && table.RowCount == 0))
             {
-                return new SchemaOutcome(new SchemaRefusal(null, $"ALTER TABLE ADD COLUMN MEMO on {(isJet4Mdb ? "Jet 4 MDB" : "ACCDB")} {request.Route} (rows={table.RowCount}, required={f.Required}, default={f.DefaultValue is not null}) is not recorded (evidence/r-q44-ddl-alter-types/add-memo-empty-accdb-dao, r-q54-excl-ddl-ix-cmd/excl-alter-add-drop-accdb, r-q54-excl-ddl-ix-cmd/excl-alter-add-drop-mdb, r-q54-excl-ddl-ix-cmd/ado-alter-add-text-nodef-accdb, r-q54-excl-ddl-ix-cmd/ado-alter-add-text-nodef-mdb record nullable MEMO without DEFAULT)"), default, _pageCount);
+                return new SchemaOutcome(new SchemaRefusal(null, $"ALTER TABLE ADD COLUMN MEMO on {(isJet4Mdb ? "Jet 4 MDB" : "ACCDB")} {request.Route} (rows={table.RowCount}, required={f.Required}, default={f.DefaultValue is not null}) is not recorded (evidence/r-q44-ddl-alter-types/add-memo-empty-accdb-dao, r-q54-excl-ddl-ix-cmd/excl-alter-add-drop-accdb, r-q54-excl-ddl-ix-cmd/excl-alter-add-drop-mdb record empty SQL MEMO; r-q54-excl-ddl-ix-cmd/ado-alter-add-text-nodef-accdb, r-q54-excl-ddl-ix-cmd/ado-alter-add-text-nodef-mdb record populated ADO MEMO)"), default, _pageCount);
             }
         }
         else if (f.Type == NewFieldType.DateTime)
@@ -3948,6 +3951,10 @@ public sealed class SchemaWriter
         {
             return new SchemaOutcome(new SchemaRefusal(null, $"DROP INDEX '{targetLogical.Name}': physical index {removedPhysNum} is out of range ({remainingPhysicals.Count})"), default, _pageCount);
         }
+        if (removedPhysNum != remainingPhysicals.Count - 1 && !workspace.IsExclusiveSession(_cache))
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, $"DROP INDEX '{targetLogical.Name}' of non-last physical index {removedPhysNum} of {remainingPhysicals.Count} in a shared session is not recorded (evidence/r-q54-excl-ddl-ix-cmd/excl-alter-add-drop-accdb and excl-alter-add-drop-mdb record exclusive sessions)"), default, _pageCount);
+        }
         PhysicalIndexSpec removedPhys = remainingPhysicals[(int)removedPhysNum];
         if (PinCopy(removedPhys.OwnedMap.Page) is not { } idxMapPage
             || MapPages.InlinePages(idxMapPage, removedPhys.OwnedMap.Row, _d, out string? idxOwnedFail) is not { } idxOwnedPages)
@@ -4781,6 +4788,10 @@ public sealed class SchemaWriter
         if (table.LogicalIndexes.Any(li => li.IndexType == _d.IndexDescriptor.ForeignKeyType || li.RelatedTable != 0))
         {
             return new SchemaOutcome(new SchemaRefusal(null, $"DROP TABLE of '{entry.Name}', which participates in a relationship, is not recorded"), default, _pageCount);
+        }
+        if (table.RowCount > 0 && table.Columns.Any(c => c.IsAutoNumber))
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, $"DROP TABLE of populated table '{entry.Name}' with AutoNumber/COUNTER column is not recorded (evidence/r-q15-ddl-open/counter-drop-pages records empty Counter table; evidence/r-q54-excl-ddl-ix-cmd/drop-populated-indexed-lval-accdb and drop-populated-indexed-lval-mdb record non-Counter Long PK)"), default, _pageCount);
         }
         if (!TryReadTableLvProp(entry, out LongValuePlan? lvPlan, out _, out _, out SchemaRefusal? lvRefusal))
         {
@@ -9588,9 +9599,9 @@ public sealed class SchemaWriter
                         failure = $"{index.Name}: existing Null row in {(index.PrimaryKey ? "PRIMARY" : "DISALLOW NULL")} index (3058)";
                         return false;
                     }
-                    if (keySpecs.Any(k => !k.Ascending))
+                    if (keySpecs.Any(k => !k.Ascending) && keyCols.Any(c => c.TypeCode is NativeTypes.Long or NativeTypes.Text))
                     {
-                        failure = $"{index.Name}: existing Null row in DESC non-IGNORE NULL index is not recorded";
+                        failure = $"{index.Name}: existing Null row in DESC non-IGNORE NULL Long/Text index is not recorded";
                         return false;
                     }
                     nullKeyRows++;
