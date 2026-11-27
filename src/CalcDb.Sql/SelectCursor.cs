@@ -3604,7 +3604,7 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
         private SqlFailure? FeedOrderOpen()
         {
             bool sensitive = plan.Aggregates.Any(a => a.Kind is AggregateKind.First or AggregateKind.Last
-                || (a.Kind is AggregateKind.Sum or AggregateKind.Avg && a.FloatingInput));
+                || (a.Kind is AggregateKind.Sum or AggregateKind.Avg or AggregateKind.Var or AggregateKind.VarP or AggregateKind.StDev or AggregateKind.StDevP && a.FloatingInput));
             if (!sensitive)
             {
                 return null;
@@ -3612,16 +3612,17 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
             if (plan.Tree is not null)
             {
                 // PAR-ORDER: a join's row order is not identified, so neither is the order its rows reach an aggregate.
-                return SqlFailure.Open(SqlPhase.Open, "NotModelled.FeedOrderJoin", "an order-sensitive aggregate (First, Last, a floating Sum or Avg) over a join");
+                return SqlFailure.Open(SqlPhase.Open, "NotModelled.FeedOrderJoin", "an order-sensitive aggregate (First, Last, or a floating Sum, Avg, Var, VarP, StDev, StDevP) over a join");
             }
             SourceSlot s = plan.Sources[0];
             if (s.Subquery is { Order.Count: > 0 })
             {
                 // r-sql-1/agg-order calls 26, 36 and r-par-1/fold-double-large-reordered calls 5 to 115 (Sum(d) over a derived
                 // table with ORDER BY id, id DESC, d or d DESC), r-sql-1/agg-first-last call 26 (First and Last of d over
-                // ORDER BY id DESC: 2 and Null, the reverse of the ORDER BY): the rows do not reach the aggregate in the
-                // derived table's order, and the order they do reach it in is not identified.
-                return SqlFailure.Open(SqlPhase.Open, "NotModelled.FeedOrderDerived", "an order-sensitive aggregate (First, Last, a floating Sum or Avg) over a derived table with ORDER BY");
+                // ORDER BY id DESC: 2 and Null, the reverse of the ORDER BY), r-par-1/fold-double-large-var calls 25 to 55
+                // (Var/VarP/StDev/StDevP over derived ORDER BY d DESC): the rows do not reach the aggregate in the derived
+                // table's order, and the order they do reach it in is not identified.
+                return SqlFailure.Open(SqlPhase.Open, "NotModelled.FeedOrderDerived", "an order-sensitive aggregate (First, Last, or a floating Sum, Avg, Var, VarP, StDev, StDevP) over a derived table with ORDER BY");
             }
             foreach (BoundExpression key in plan.Keys)
             {
@@ -3646,8 +3647,11 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
         {
             public long Count;
             public double Sum;
+            public double SumSquares;
             public long Money;
+            public long MoneySquares;
             public decimal DecimalSum;
+            public decimal DecimalSumSquares;
             public NativeVariant Value;
             public bool Seen;
         }
@@ -3744,7 +3748,18 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                     }
                     else
                     {
-                        if (!RelationalOrder.Number(v, out double d))
+                        double d;
+                        if (v.Vt == (ushort)VarType.Bstr)
+                        {
+                            // r-sql-1/agg-arg-kinds call 6: Sum('3') parses numeric text as Double.
+                            if (!SqlParameters.Convert(v, ScalarOperation.CDbl, plan.Context, out NativeVariant converted))
+                            {
+                                failure = SqlFailure.Ace(SqlPhase.Open, 3464, SqlMessages.DataTypeMismatch);
+                                return false;
+                            }
+                            d = converted.Double;
+                        }
+                        else if (!RelationalOrder.Number(v, out d))
                         {
                             // An expression whose static type is Long or Double evaluating to another type (a Decimal) is not recorded.
                             failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.AggregateArgumentType", $"a Double Sum or Avg over a VARIANT type {v.Vt} value");
@@ -3754,6 +3769,94 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                         if (double.IsInfinity(s.Sum))
                         {
                             // r-sql-13b/agg-sum-boundary: a Double Sum or Avg beyond the range is error 6 at open (SQL-AGG: none below 1E308).
+                            failure = SqlFailure.Ace(SqlPhase.Open, AceError.Overflow, AceError.Describe(AceError.Overflow));
+                            return false;
+                        }
+                    }
+                    break;
+                case AggregateKind.Var or AggregateKind.VarP or AggregateKind.StDev or AggregateKind.StDevP when !isNull:
+                    s.Seen = true;
+                    s.Count++;
+                    if (v.Vt == (ushort)VarType.Currency)
+                    {
+                        // r-par-1/fold-currency-var-stdev, r-fix-expr-sql/agg-stat-argument-types-renamed:
+                        // Currency variance squares and sums in VT_CY (underflowing 0.0001^2 to 0, overflowing |x| >= 10^8 with error 6).
+                        ScalarOutcome mul = ScalarKernel.Apply(
+                            ScalarDescriptor.Binary(ScalarOperation.Multiply, 0, OperandContract.Expression, OperandContract.Expression),
+                            v,
+                            v,
+                            plan.Context);
+                        if (!mul.Succeeded || mul.Value.Vt != (ushort)VarType.Currency)
+                        {
+                            failure = SqlFailure.Ace(SqlPhase.Open, AceError.Overflow, AceError.Describe(AceError.Overflow));
+                            return false;
+                        }
+                        try
+                        {
+                            s.Money = checked(s.Money + v.Int64);
+                            s.MoneySquares = checked(s.MoneySquares + mul.Value.Int64);
+                        }
+                        catch (OverflowException)
+                        {
+                            failure = SqlFailure.Ace(SqlPhase.Open, AceError.Overflow, AceError.Describe(AceError.Overflow));
+                            return false;
+                        }
+                    }
+                    else if (v.Vt == (ushort)VarType.Decimal)
+                    {
+                        // r-par-1/fold-decimal-avg-var-forms, r-fix-expr-sql/fold-decimal-avg-var-forms:
+                        // Decimal variance squares and sums in 96-bit Decimal (overflowing error 6 when x^2 or running sum leaves range).
+                        decimal d = OwnedVariant.ReadDecimal(v).ToDecimal();
+                        try
+                        {
+                            decimal sq = checked(d * d);
+                            s.DecimalSum = s.Count == 1 ? d : checked(s.DecimalSum + d);
+                            s.DecimalSumSquares = s.Count == 1 ? sq : checked(s.DecimalSumSquares + sq);
+                        }
+                        catch (OverflowException)
+                        {
+                            failure = SqlFailure.Ace(SqlPhase.Open, AceError.Overflow, AceError.Describe(AceError.Overflow));
+                            return false;
+                        }
+                    }
+                    else
+                    {
+                        double dx;
+                        double sq;
+                        if (v.Vt == (ushort)VarType.R4)
+                        {
+                            // r-par-1/fold-single-groups calls 65..115: Single squares in VT_R4 (underflowing 1e-45^2 to 0,
+                            // rounding 0.1f^2 in float32), widening to VT_R8 when Single overflows (3.4e38^2), then sums in Double.
+                            float fx = BitConverter.Int32BitsToSingle((int)v.Int64);
+                            dx = fx;
+                            float sqf = fx * fx;
+                            sq = float.IsInfinity(sqf) ? dx * dx : sqf;
+                        }
+                        else if (v.Vt == (ushort)VarType.Bstr)
+                        {
+                            // r-sql-13b/agg-stat-argument-types calls 105, 115: numeric text converts to Double; non-numeric fails 3464.
+                            if (!SqlParameters.Convert(v, ScalarOperation.CDbl, plan.Context, out NativeVariant converted))
+                            {
+                                failure = SqlFailure.Ace(SqlPhase.Open, 3464, SqlMessages.DataTypeMismatch);
+                                return false;
+                            }
+                            dx = converted.Double;
+                            sq = dx * dx;
+                        }
+                        else if (RelationalOrder.Number(v, out dx))
+                        {
+                            sq = dx * dx;
+                        }
+                        else
+                        {
+                            failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.AggregateArgumentType", $"a statistical aggregate over a VARIANT type {v.Vt} value");
+                            return false;
+                        }
+                        s.Sum += dx;
+                        s.SumSquares += sq;
+                        if (double.IsInfinity(s.Sum) || double.IsInfinity(s.SumSquares))
+                        {
+                            // r-q-expr-sql/agg-var-recurrence g7 (1e154): squares leaving Double range fail Overflow (6) at open.
                             failure = SqlFailure.Ace(SqlPhase.Open, AceError.Overflow, AceError.Describe(AceError.Overflow));
                             return false;
                         }
@@ -3811,6 +3914,15 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
             // 10^28 = 0x204FCE5E_3E250261_10000000: 29 decimal digits in 96-bit Decimal exceeds ACE's 28-digit ceiling (3761).
             return hi > 0x204FCE5Eu
                 || (hi == 0x204FCE5Eu && (mid > 0x3E250261u || (mid == 0x3E250261u && lo >= 0x10000000u)));
+        }
+
+        private static decimal StripTrailingZeros(decimal value)
+        {
+            if (value == 0m)
+            {
+                return 0m;
+            }
+            return value / 1.000000000000000000000000000000000m;
         }
 
         private NativeVariant Finish(AggregateSpec a, ref AggregateState s, out SqlFailure? failure)
@@ -3874,6 +3986,88 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
                     return new NativeVariant { Vt = (ushort)VarType.Currency, Int64 = money };
                 case AggregateKind.Avg when s.Seen:
                     return new NativeVariant { Vt = (ushort)VarType.R8, Double = s.Sum / s.Count };
+                case AggregateKind.Var or AggregateKind.VarP or AggregateKind.StDev or AggregateKind.StDevP when s.Seen:
+                {
+                    if (s.Count == 1)
+                    {
+                        // qualified.md SQL-AGG, r-sql-1/agg-single, r-sql-13b/agg-stat-argument-types call 5:
+                        // for n = 1, Var and StDev are Null; VarP and StDevP are 0.
+                        return a.Kind is AggregateKind.Var or AggregateKind.StDev
+                            ? ScalarLiterals.Null
+                            : new NativeVariant { Vt = (ushort)VarType.R8, Double = 0.0 };
+                    }
+                    bool sample = a.Kind is AggregateKind.Var or AggregateKind.StDev;
+                    double variance;
+                    if (a.SourceColumn?.TypeCode == NativeTypes.Currency)
+                    {
+                        // r-par-1/fold-currency-var-stdev, r-fix-expr-sql/agg-stat-argument-types-renamed
+                        NativeVariant cySum = new() { Vt = (ushort)VarType.Currency, Int64 = s.Money };
+                        ScalarOutcome sqSum = ScalarKernel.Apply(
+                            ScalarDescriptor.Binary(ScalarOperation.Multiply, 0, OperandContract.Expression, OperandContract.Expression),
+                            cySum,
+                            cySum,
+                            plan.Context);
+                        if (!sqSum.Succeeded || sqSum.Value.Vt != (ushort)VarType.Currency)
+                        {
+                            failure = SqlFailure.Ace(SqlPhase.Open, AceError.Overflow, AceError.Describe(AceError.Overflow));
+                            return ScalarLiterals.Null;
+                        }
+                        long diff;
+                        try
+                        {
+                            diff = checked(checked(s.Count * s.MoneySquares) - sqSum.Value.Int64);
+                        }
+                        catch (OverflowException)
+                        {
+                            failure = SqlFailure.Ace(SqlPhase.Open, AceError.Overflow, AceError.Describe(AceError.Overflow));
+                            return ScalarLiterals.Null;
+                        }
+                        double n = s.Count;
+                        double num = Math.Abs(diff / 10000.0);
+                        variance = sample ? num / (n * (n - 1.0)) : num / (n * n);
+                    }
+                    else if (a.SourceColumn?.TypeCode == NativeTypes.Numeric)
+                    {
+                        // r-par-1/fold-decimal-avg-var-forms, r-fix-expr-sql/fold-decimal-avg-var-forms:
+                        // Decimal variance uses Decimal sum-of-squares with Double-rounded sum squared, matching FD and FD20.
+                        try
+                        {
+                            decimal n = s.Count;
+                            decimal sDblDec = (decimal)(double)s.DecimalSum;
+                            decimal num = Math.Abs(checked(checked(n * s.DecimalSumSquares) - checked(sDblDec * sDblDec)));
+                            decimal denom = sample ? checked(n * (n - 1m)) : checked(n * n);
+                            decimal q = StripTrailingZeros(num / denom);
+                            variance = (double)q;
+                        }
+                        catch (OverflowException)
+                        {
+                            failure = SqlFailure.Ace(SqlPhase.Open, AceError.Overflow, AceError.Describe(AceError.Overflow));
+                            return ScalarLiterals.Null;
+                        }
+                    }
+                    else
+                    {
+                        // qualified.md SQL-AGG-NUMERIC (r-q-expr-sql/agg-var-recurrence, r-fix-expr-sql/agg-numeric-per-group,
+                        // r-par-1/fold-double-large-var, fold-double-routes-var-minmax, fold-single-groups):
+                        // single-pass IEEE Double recurrence |n*sum(x^2) - (sum(x))^2| / (n*(n-1)) or / n^2.
+                        double n = s.Count;
+                        double raw = (n * s.SumSquares) - (s.Sum * s.Sum);
+                        if (double.IsInfinity(raw) || double.IsNaN(raw))
+                        {
+                            failure = SqlFailure.Ace(SqlPhase.Open, AceError.Overflow, AceError.Describe(AceError.Overflow));
+                            return ScalarLiterals.Null;
+                        }
+                        double num = Math.Abs(raw);
+                        variance = sample ? num / (n * (n - 1.0)) : num / (n * n);
+                    }
+                    if (double.IsInfinity(variance) || double.IsNaN(variance))
+                    {
+                        failure = SqlFailure.Ace(SqlPhase.Open, AceError.Overflow, AceError.Describe(AceError.Overflow));
+                        return ScalarLiterals.Null;
+                    }
+                    double result = a.Kind is AggregateKind.StDev or AggregateKind.StDevP ? Math.Sqrt(variance) : variance;
+                    return new NativeVariant { Vt = (ushort)VarType.R8, Double = result };
+                }
                 case AggregateKind.Min or AggregateKind.Max or AggregateKind.First or AggregateKind.Last when s.Seen:
                     NativeVariant v = s.Value;
                     s.Value = default;
