@@ -2843,6 +2843,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
             targets = [.. cb.Buffer.Rows];
         }
 
+        _activeConnection.OpenSession.Core.RefreshTableBeforeWrite(cb.Buffer.TableName);
         ClientRow? activeBeforeFlush = !_bof && !_eof && !cb.IsDeletedCurrent ? cb.ActiveRow : null;
         int slotBeforeFlush = _position;
         List<BatchRowOutcome> outcomes = cb.Buffer.FlushBatch(

@@ -19,19 +19,39 @@ namespace CalcDb.Com.Dao;
 /// </summary>
 internal static class EditPublication
 {
-    public static CallResult Published(MutationError error) => CallResult.Fail(
-        Failure.Dao(error.Number, error.SourceName, error.Describe()) with { PublishesErrorInfo = error.Source == MutationErrorSource.Field });
+    public static CallResult Published(MutationError error, DatabaseObject? database = null)
+    {
+        if (error.Number == MutationError.LockedBySession && database is not null && database.TryResolveCrossEngineLock(out string adoUser))
+        {
+            // evidence/r-q50-jk44-ddl-vis/vis-cross-conflict-accdb and vis-cross-conflict-mdb calls 95, 104:
+            // Cross-engine ADO transaction lock on pessimistic Edit or optimistic Update fails DAO 3260.
+            return CallResult.Fail(Failure.Dao(3260, error.SourceName, $"Could not update; currently locked by user '{adoUser}' on machine '{Environment.MachineName}'."));
+        }
+        return CallResult.Fail(
+            Failure.Dao(error.Number, error.SourceName, error.Describe()) with { PublishesErrorInfo = error.Source == MutationErrorSource.Field });
+    }
 
     public static CallResult Open(MutationOpen open, string? detail) =>
         CallResult.Fail(Failure.NotModelled("NotModelled.Edit." + open, detail ?? open.ToString()));
 
-    public static CallResult Of(EditOutcome outcome) => outcome.Error is { } error ? Published(error)
+    public static CallResult Of(EditOutcome outcome, DatabaseObject? database = null) => outcome.Error is { } error ? Published(error, database)
         : outcome.Open != MutationOpen.None ? Open(outcome.Open, outcome.Detail)
         : CallResult.Nothing;
 
-    public static CallResult Of(UpdateOutcome outcome) => outcome.Error is { } error ? Published(error)
-        : outcome.Open != MutationOpen.None ? Open(outcome.Open, outcome.Detail)
-        : CallResult.Nothing;
+    public static CallResult Of(UpdateOutcome outcome, DatabaseObject? database = null)
+    {
+        if (outcome.Error is { } error)
+        {
+            return Published(error, database);
+        }
+        if (outcome.Open == MutationOpen.Conflict && database is not null && database.TryResolveCrossEngineLock(out string adoUser))
+        {
+            // evidence/r-q50-jk44-ddl-vis/vis-cross-conflict-accdb and vis-cross-conflict-mdb call 104:
+            // Cross-engine ADO transaction lock on DAO optimistic Recordset.Update fails DAO 3260 (same-engine stays NotModelled.Edit.Conflict).
+            return CallResult.Fail(Failure.Dao(3260, "DAO.Recordset", $"Could not update; currently locked by user '{adoUser}' on machine '{Environment.MachineName}'."));
+        }
+        return outcome.Open != MutationOpen.None ? Open(outcome.Open, outcome.Detail) : CallResult.Nothing;
+    }
 
     /// <summary>
     /// A resolution's outcome. An outer CommitTrans publishes its change set before it returns (W-05/same-width-mutation;

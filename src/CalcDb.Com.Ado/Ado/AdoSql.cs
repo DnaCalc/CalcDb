@@ -159,23 +159,63 @@ internal static class AdoSqlErrors
         -105514571,
         AdoObject.IidRowsetUpdate);
 
-    /// <summary>Lock conflict on server keyset Update/Delete (3218; r-ado-1b/errors-lock-timeout).</summary>
-    public static MappedProviderError CurrentlyLockedOnRowset() => Make(
-        AdoObject.HResultErrorsOccurred,
-        "Could not update; currently locked.",
-        5003218,
-        "3218",
-        -72156238,
-        AdoObject.IidRowsetUpdate);
+    /// <summary>Lock conflict on server keyset Update/Delete (3218 vs peer ADO, 3260 vs DAO; r-ado-1b/errors-lock-timeout, r-q50-jk44-ddl-vis/vis-cross-conflict-accdb, vis-two-ado-txn-accdb).</summary>
+    public static MappedProviderError CurrentlyLockedOnRowset(ComDatabaseSession? session = null)
+    {
+        if (TryGetCrossEngineDaoLocker(session, out string userName))
+        {
+            return Make(
+                AdoObject.HResultErrorsOccurred,
+                $"Could not update; currently locked by user '{userName}' on machine '{Environment.MachineName}'.",
+                5003218,
+                "3260",
+                -533791822,
+                AdoObject.IidRowsetUpdate);
+        }
+        return Make(
+            AdoObject.HResultErrorsOccurred,
+            "Could not update; currently locked.",
+            5003218,
+            "3218",
+            -72156238,
+            AdoObject.IidRowsetUpdate);
+    }
 
-    /// <summary>Lock conflict on Connection.Execute / Command.Execute (3218; r-ado-1b/errors-lock-timeout #45).</summary>
-    public static MappedProviderError CurrentlyLockedOnCommand() => Make(
-        AdoObject.HResultFail,
-        "Could not update; currently locked.",
-        5003218,
-        "3218",
-        -72156238,
-        AdoObject.IidCommand);
+    /// <summary>Lock conflict on Connection.Execute / Command.Execute (3218 vs peer ADO, 3260 vs DAO; r-ado-1b/errors-lock-timeout #45, r-q50-jk44-ddl-vis/vis-cross-conflict-accdb, vis-two-ado-txn-accdb).</summary>
+    public static MappedProviderError CurrentlyLockedOnCommand(ComDatabaseSession? session = null)
+    {
+        if (TryGetCrossEngineDaoLocker(session, out string userName))
+        {
+            return Make(
+                AdoObject.HResultFail,
+                $"Could not update; currently locked by user '{userName}' on machine '{Environment.MachineName}'.",
+                5003218,
+                "3260",
+                -533791822,
+                AdoObject.IidCommand);
+        }
+        return Make(
+            AdoObject.HResultFail,
+            "Could not update; currently locked.",
+            5003218,
+            "3218",
+            -72156238,
+            AdoObject.IidCommand);
+    }
+
+    private static bool TryGetCrossEngineDaoLocker(ComDatabaseSession? session, out string userName)
+    {
+        if (session?.Cache.LastConflictHolder is { } id
+            && session.FileCoordinator is { } coord
+            && coord.TryGetLockerOwner(id, out LockerOwner owner)
+            && owner.Kind == EngineKind.Dao)
+        {
+            userName = owner.UserName;
+            return true;
+        }
+        userName = "";
+        return false;
+    }
 
     /// <summary>Duplicate key / primary key / unique index on server keyset Update (3022; r-ado-1b/errors-by-route, r-oledb-odbc/update-errors #86/#131/#236).</summary>
     public static MappedProviderError DuplicateOnRowset() => Make(
@@ -414,7 +454,8 @@ internal static class AdoSqlErrors
         string? sql = null,
         bool allowAdoCheckViolation = false,
         bool isConnectionExecuteAction = false,
-        bool isSelect = false)
+        bool isSelect = false,
+        ComDatabaseSession? session = null)
     {
         if (failure.IsNotModelled)
         {
@@ -504,8 +545,8 @@ internal static class AdoSqlErrors
                 out unmodelled),
             // r-str-ado-act/ado-errors, r-ado-1b/errors-by-route (duplicate PK/unique index)
             3022 => Make(AdoObject.HResultFail, failure.Message, 5003022, "3022", -105121349, AdoObject.IidCommand),
-            // r-ado-1b/errors-lock-timeout #45 (lock conflict on Execute)
-            3188 or 3218 => CurrentlyLockedOnCommand(),
+            // r-ado-1b/errors-lock-timeout #45, r-q50-jk44-ddl-vis/vis-cross-conflict-accdb, vis-two-ado-txn-accdb (lock conflict on Execute)
+            3188 or 3218 => CurrentlyLockedOnCommand(session),
             // r-str-ado-act/ado-execute-action #18-22, r-ado-1b/errors-by-route (FK delete violation)
             3200 => Make(AdoObject.HResultFail, failure.Message, 5003000, "3200", -534971980, AdoObject.IidCommand),
             // r-oledb-odbc/error-record-channels #82-92 (child FK insert/update violation on Connection.Execute only)
@@ -672,17 +713,17 @@ internal static unsafe class AdoEditErrors
     public static MappedProviderError? MapUpdateError(
         CalcDb.Isam.Edit.MutationError error,
         bool allowOptimisticLockConflict,
-        out Failure? unmodelled)
+        out Failure? unmodelled,
+        ComDatabaseSession? session = null)
     {
         unmodelled = null;
         return error.Number switch
         {
             CalcDb.Isam.Edit.MutationError.WriteConflict => AdoSqlErrors.WriteConflict(),
-            // Finding #8 (r-ado-1b/errors-lock-timeout #66): ISAM emits LockedBySession (3188) for same-process
-            // cross-connection locks; ACE OLE DB reports 3218 on optimistic Recordset.Update() (IidRowsetUpdate).
-            // Pessimistic Field.Value put lock conflict, Delete() lock conflict, and RecordDeleted (3167) on
-            // Update/Delete/Edit are unrecorded and refuse as NotModelled.
-            CalcDb.Isam.Edit.MutationError.LockedBySession when allowOptimisticLockConflict => AdoSqlErrors.CurrentlyLockedOnRowset(),
+            // Finding #8 (r-ado-1b/errors-lock-timeout #66, r-q50-jk44-ddl-vis/vis-cross-conflict-accdb, vis-two-ado-txn-accdb):
+            // ISAM emits LockedBySession (3188) for same-process cross-connection/cross-engine locks; ACE OLE DB reports
+            // 3218 (peer ADO) or 3260 (DAO holder) on optimistic Recordset.Update() (IidRowsetUpdate).
+            CalcDb.Isam.Edit.MutationError.LockedBySession when allowOptimisticLockConflict => AdoSqlErrors.CurrentlyLockedOnRowset(session),
             CalcDb.Isam.Edit.MutationError.Duplicate => AdoSqlErrors.DuplicateOnRowset(),
             CalcDb.Isam.Edit.MutationError.Required => AdoSqlErrors.RequiredOnRowset(error.Describe()),
             CalcDb.Isam.Edit.MutationError.RuleWithText or CalcDb.Isam.Edit.MutationError.RuleWithoutText =>

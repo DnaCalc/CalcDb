@@ -857,6 +857,7 @@ internal sealed unsafe class ClientRowBuffer
     /// </summary>
     public BatchRowOutcome FlushImmediateRow(ClientRow row, int updateCriteria, int updateResync)
     {
+        _session?.Core.RefreshTableBeforeWrite(_tableName);
         BatchRowOutcome outcome = ApplySingleRow(row, updateCriteria, updateResync, isImmediate: true);
         if (outcome.Succeeded && row.State == ClientRowState.Purged)
         {
@@ -958,6 +959,7 @@ internal sealed unsafe class ClientRowBuffer
             return false;
         }
 
+        _session.Core.RefreshExternallyModifiedPages();
         PrivateOverlay? overlay = _session.Transactions.OverlayOf(_session.Cache);
         using RowReader? reader = RowReader.Open(new PageSource(_session.Cache, overlay), _session.Format, _table, _session.PageCount, out TraversalFailure? tf);
         if (reader is null)

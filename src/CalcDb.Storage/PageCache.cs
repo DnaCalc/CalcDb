@@ -172,7 +172,7 @@ public sealed partial class PageCache
     private long _hits, _misses, _coalesced, _loads, _loadFailures, _probes, _evictions, _scanEvictions, _noFrame, _noSource;
     private long _parked, _preservationReads, _spillWrites, _spillFailures, _spillLoads, _spillRejects, _admissionWaits, _drainWaits, _publications;
 
-    public PageCache(IPageSource source, ulong fileIncarnation, int pageSize, int frameCount, int framesPerBlock = 64, int? scanAllowance = null, int maxWaitersPerLoad = 64, ISpillStore? spill = null, IPageCodec? codec = null)
+    public PageCache(IPageSource source, ulong fileIncarnation, int pageSize, int frameCount, int framesPerBlock = 64, int? scanAllowance = null, int maxWaitersPerLoad = 64, ISpillStore? spill = null, IPageCodec? codec = null, LocalLockManager? locks = null)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentOutOfRangeException.ThrowIfLessThan(frameCount, 1);
@@ -184,6 +184,10 @@ public sealed partial class PageCache
         _source = source;
         _spill = spill;
         Codec = codec ?? IdentityPageCodec.Instance;
+        if (locks is not null)
+        {
+            Locks = locks;
+        }
         FileIncarnation = fileIncarnation;
         PageSize = pageSize;
         _scanAllowance = scanAllowance ?? Math.Max(1, frameCount / 4);
@@ -350,6 +354,108 @@ public sealed partial class PageCache
             var image = new ImageId(new PageObject(FileIncarnation, pageNumber, entry.Allocation), 0);
             entry.Current = image;
             entry.NativeSource = image;
+        }
+    }
+
+    /// <summary>The holder of the most recent lock conflict observed on this cache (R-LOCK-3 / r-q50-jk44-ddl-vis/vis-cross-conflict-accdb, vis-two-ado-txn-accdb).</summary>
+    public LockerId? LastConflictHolder { get; set; }
+
+    /// <summary>
+    /// Optional hook invoked right after a write lock is acquired on <see cref="Locks"/> and before optimistic row
+    /// comparison or mutation reads the locked pages, so cross-session disk writes can refresh stale clean pages.
+    /// </summary>
+    public Action<PageCache, IReadOnlyList<LockResource>>? OnWriteLockAcquired { get; set; }
+
+    /// <summary>
+    /// Advance the current image of <paramref name="pages"/> (or every resident page when null) so fresh
+    /// <see cref="Pin(ulong, AdmissionClass, CancellationToken)"/> calls reload from the native file
+    /// (R-LOCK-3 / r-q50-jk44-ddl-vis: DBEngine.Idle(dbRefreshCache) and cross-session write rebase).
+    /// Unpinned, unowned frames are reclaimed immediately; pinned or view-retained images stay valid for their holders.
+    /// </summary>
+    public void RefreshFromFile(IReadOnlyCollection<ulong>? pages = null)
+    {
+        lock (_latch)
+        {
+            if (_closed)
+            {
+                return;
+            }
+            IEnumerable<ulong> targets;
+            if (pages is not null)
+            {
+                targets = pages;
+            }
+            else
+            {
+                var all = new HashSet<ulong>(_pages.Keys);
+                foreach (ImageId id in _directory.Keys)
+                {
+                    all.Add(id.Page.PageNumber);
+                }
+                targets = all;
+            }
+            ulong serial = Interlocked.Increment(ref _published);
+            foreach (ulong pageNumber in targets)
+            {
+                PageEntry entry = GetOrCreateEntry(pageNumber);
+                if (entry.State != PhysicalState.Readable || entry.ActiveLoads > 0)
+                {
+                    continue;
+                }
+                ImageId oldCurrent = entry.Current;
+                _directory.TryGetValue(oldCurrent, out ImageRecord? oldRecord);
+                if (oldRecord?.Loading is not null)
+                {
+                    continue;
+                }
+                bool oldBacked = oldRecord is not null && (oldRecord.Ready is not null || oldRecord.Source == ImageSource.Spill);
+                if (AnyView(entry.CurrentFrom, ulong.MaxValue) && oldBacked)
+                {
+                    if (entry.Versions is null)
+                    {
+                        entry.Versions = [new PageVersion(entry.CurrentFrom, oldCurrent)];
+                        _historyPages.Add(pageNumber);
+                    }
+                    AddOwner(oldCurrent);
+                }
+                else if (entry.Versions is not null)
+                {
+                    entry.Versions.RemoveAt(entry.Versions.Count - 1);
+                }
+                entry.Allocation++;
+                var fresh = new ImageId(new PageObject(FileIncarnation, pageNumber, entry.Allocation), 0);
+                if (entry.Versions is not null)
+                {
+                    entry.Versions.Add(new PageVersion(serial, fresh));
+                    if (entry.Versions.Count == 1)
+                    {
+                        entry.Versions = null;
+                        _historyPages.Remove(pageNumber);
+                    }
+                }
+                if (oldRecord is not null)
+                {
+                    if (oldRecord.Source == ImageSource.Native)
+                    {
+                        oldRecord.Source = ImageSource.ResidentOnly;
+                    }
+                    if (oldRecord.Owners == 0
+                        && oldRecord.Loading is null
+                        && oldRecord.Ready is { } ready
+                        && _slots[ready.Slot].Generation == ready.Generation
+                        && _slots[ready.Slot].Pins == 0
+                        && _slots[ready.Slot].IoReferences == 0
+                        && _slots[ready.Slot].Handoff == 0)
+                    {
+                        oldRecord.Ready = null;
+                        ReleaseFrame(ready.Slot);
+                        DropIfUnreferenced(oldRecord);
+                    }
+                }
+                entry.Current = fresh;
+                entry.CurrentFrom = serial;
+                entry.NativeSource = fresh;
+            }
         }
     }
 

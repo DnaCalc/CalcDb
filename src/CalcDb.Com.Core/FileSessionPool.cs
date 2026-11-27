@@ -1,6 +1,261 @@
+using CalcDb.Format;
 using CalcDb.Isam.Transactions;
+using CalcDb.Storage;
 
 namespace CalcDb.Com;
+
+/// <summary>Which COM engine owns an in-process session or locker (R-LOCK-3 / r-q50-jk44-ddl-vis).</summary>
+public enum EngineKind : byte
+{
+    Dao,
+    Ado,
+}
+
+/// <summary>The engine and user name of a registered in-process <see cref="LockerId"/> (r-q50-jk44-ddl-vis/vis-cross-conflict-accdb, vis-two-ado-txn-accdb).</summary>
+public readonly record struct LockerOwner(EngineKind Kind, string UserName);
+
+/// <summary>
+/// Process-local coordination for a canonical database file shared across independent in-process engine sessions
+/// (DAO pooled session + each open ADO <c>Connection</c>; R-LOCK-3 / R-TXN-1, <c>evidence/r-q50-jk44-ddl-vis/vis-*</c>):
+/// <list type="bullet">
+///   <item>Shares one <see cref="LocalLockManager"/> across all in-process <see cref="PageCache"/>s on the file while keeping their page caches and transactions independent.</item>
+///   <item>Coordinates in-process exclusive vs shared admission between DAO and ADO (<c>3045</c> / <c>0x80004005</c>).</item>
+///   <item>Tracks pages flushed to disk by each session so another session can stay stale until <c>DBEngine.Idle(dbRefreshCache)</c> or refresh targeted pages before writes/optimistic checks.</item>
+/// </list>
+/// </summary>
+public sealed class InProcessFileCoordinator
+{
+    private readonly record struct PageWriteEntry(long Version, ComDatabaseSession Writer);
+    private readonly record struct SessionRegistration(EngineKind Kind, bool Exclusive, bool ReadOnly);
+
+    private readonly Lock _gate = new();
+    private readonly Dictionary<ulong, PageWriteEntry> _pageWrites = [];
+    private readonly Dictionary<ComDatabaseSession, SessionRegistration> _sessions = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<ComDatabaseSession, long> _sessionVersions = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<ComDatabaseSession, HashSet<ulong>> _sessionPendingPages = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<LockerId, LockerOwner> _lockers = [];
+    private long _diskVersion;
+    private ulong _diskExtentPages;
+    private FileFormat? _format;
+
+    internal InProcessFileCoordinator(string fullPath)
+    {
+        FullPath = fullPath;
+    }
+
+    public string FullPath { get; }
+
+    /// <summary>The shared page-lock manager for every in-process <see cref="PageCache"/> opened on this file.</summary>
+    public LocalLockManager Locks { get; } = new();
+
+    internal bool IsEmpty
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _sessions.Count == 0;
+            }
+        }
+    }
+
+    public bool TryGetFormat(out FileFormat format)
+    {
+        lock (_gate)
+        {
+            if (_format is { } known)
+            {
+                format = known;
+                return true;
+            }
+            format = default;
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Check whether a new engine session (<paramref name="kind"/>, <paramref name="exclusive"/>, <paramref name="readOnly"/>)
+    /// conflicts with an active in-process exclusive holder (or whether requesting exclusive conflicts with any active holder).
+    /// Respects <c>R-LOCK-2 RO-PAIR</c>: exclusive read-only coexists with read-only.
+    /// </summary>
+    public bool HasExclusiveConflict(
+        EngineKind kind,
+        bool exclusive,
+        bool readOnly,
+        out EngineKind holderKind,
+        out bool holderExclusive,
+        out bool holderReadOnly,
+        out FileFormat? format)
+    {
+        lock (_gate)
+        {
+            format = _format;
+            foreach (SessionRegistration existing in _sessions.Values)
+            {
+                if (existing.Exclusive)
+                {
+                    if (existing.ReadOnly && readOnly)
+                    {
+                        continue; // R-LOCK-2 RO-PAIR: exclusive read-only coexists with read-only
+                    }
+                    holderKind = existing.Kind;
+                    holderExclusive = true;
+                    holderReadOnly = existing.ReadOnly;
+                    return true;
+                }
+            }
+            if (exclusive)
+            {
+                foreach (SessionRegistration existing in _sessions.Values)
+                {
+                    if (readOnly && existing.ReadOnly)
+                    {
+                        continue; // R-LOCK-2 RO-PAIR
+                    }
+                    holderKind = existing.Kind;
+                    holderExclusive = existing.Exclusive;
+                    holderReadOnly = existing.ReadOnly;
+                    return true;
+                }
+            }
+            holderKind = default;
+            holderExclusive = false;
+            holderReadOnly = false;
+            return false;
+        }
+    }
+
+    public void RegisterSession(ComDatabaseSession session, EngineKind kind, bool exclusive, bool readOnly)
+    {
+        lock (_gate)
+        {
+            _sessions[session] = new SessionRegistration(kind, exclusive, readOnly);
+            _format ??= session.Profile.Format;
+            _sessionVersions[session] = _diskVersion;
+            _sessionPendingPages[session] = [];
+            if (session.PageCount > _diskExtentPages)
+            {
+                _diskExtentPages = session.PageCount;
+            }
+        }
+    }
+
+    internal bool UnregisterSession(ComDatabaseSession session)
+    {
+        lock (_gate)
+        {
+            _sessions.Remove(session);
+            _sessionVersions.Remove(session);
+            _sessionPendingPages.Remove(session);
+            return _sessions.Count == 0;
+        }
+    }
+
+    public void RegisterLocker(LockerId locker, EngineKind kind, string userName)
+    {
+        lock (_gate)
+        {
+            _lockers[locker] = new LockerOwner(kind, userName);
+        }
+    }
+
+    public void UnregisterLocker(LockerId locker)
+    {
+        lock (_gate)
+        {
+            _lockers.Remove(locker);
+        }
+    }
+
+    public bool TryGetLockerOwner(LockerId locker, out LockerOwner owner)
+    {
+        lock (_gate)
+        {
+            return _lockers.TryGetValue(locker, out owner);
+        }
+    }
+
+    /// <summary>Record that <paramref name="writer"/> flushed <paramref name="pages"/> to disk, growing extent to <paramref name="extentPages"/>.</summary>
+    public void RecordDiskWrite(ComDatabaseSession writer, IReadOnlyCollection<ulong> pages, ulong extentPages)
+    {
+        lock (_gate)
+        {
+            long version = ++_diskVersion;
+            if (extentPages > _diskExtentPages)
+            {
+                _diskExtentPages = extentPages;
+            }
+            foreach (ulong page in pages)
+            {
+                _pageWrites[page] = new PageWriteEntry(version, writer);
+            }
+            _sessionVersions[writer] = version;
+            foreach ((ComDatabaseSession peer, HashSet<ulong> pending) in _sessionPendingPages)
+            {
+                if (!ReferenceEquals(peer, writer))
+                {
+                    foreach (ulong page in pages)
+                    {
+                        pending.Add(page);
+                    }
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Return and clear pages written to disk by other in-process sessions that <paramref name="reader"/> has not yet
+    /// refreshed. When <paramref name="filterPages"/> is non-null, only matching pages are taken (leaving other pending
+    /// pages stale for subsequent reads, matching ACE per-page cache refresh in <c>vis-two-ado-txn</c>).
+    /// </summary>
+    public ulong[] TakeExternallyModifiedPages(ComDatabaseSession reader, IReadOnlyCollection<ulong>? filterPages, out ulong diskExtentPages)
+    {
+        lock (_gate)
+        {
+            diskExtentPages = _diskExtentPages;
+            if (!_sessionPendingPages.TryGetValue(reader, out HashSet<ulong>? pending) || pending.Count == 0)
+            {
+                return [];
+            }
+            if (filterPages is null)
+            {
+                ulong[] all = [.. pending];
+                pending.Clear();
+                _sessionVersions[reader] = _diskVersion;
+                return all;
+            }
+            List<ulong>? matched = null;
+            foreach (ulong page in filterPages)
+            {
+                if (pending.Remove(page))
+                {
+                    (matched ??= []).Add(page);
+                }
+            }
+            return matched is null ? [] : [.. matched];
+        }
+    }
+
+    /// <summary>Whether any other in-process session has written any of <paramref name="pages"/> to disk that <paramref name="reader"/> has not refreshed yet.</summary>
+    public bool HasPendingExternalPages(ComDatabaseSession reader, IReadOnlyCollection<ulong> pages)
+    {
+        lock (_gate)
+        {
+            if (!_sessionPendingPages.TryGetValue(reader, out HashSet<ulong>? pending) || pending.Count == 0)
+            {
+                return false;
+            }
+            foreach (ulong page in pages)
+            {
+                if (pending.Contains(page))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
+}
 
 /// <summary>The mode of one in-process binding of a database file: DAO OpenDatabase's Options (exclusive) and ReadOnly.</summary>
 public readonly record struct FileBinding(bool Exclusive, bool ReadOnly, string UserName);
@@ -106,7 +361,9 @@ public sealed class PooledFileSession
 /// <see cref="PooledFileSession"/> instead of opening the file again, so same-Workspace, cross-Workspace and further
 /// DBEngine bindings share one page cache, local lock manager, session file, lock file, catalog and edit contexts. Paths
 /// compare by <see cref="Path.GetFullPath(string)"/> without case (alias spellings in-process are qualified.md EX-PUBLIC
-/// Open). ADO's connection pool (<c>AdoFilePool</c>) stays its own for now; joining it here is register task <c>jk44</c>.
+/// Open). Cross-engine DAO+ADO and multi-ADO coordination (separate <see cref="ComDatabaseSession"/>s, separate
+/// <c>.laccdb</c>/<c>.ldb</c> slots, shared <see cref="LocalLockManager"/> and exclusive-admission checks; R-LOCK-3 /
+/// R-TXN-1, <c>evidence/r-q50-jk44-ddl-vis/vis-*</c>) lives in <see cref="InProcessFileCoordinator"/>.
 /// </summary>
 public static class FileSessionPool
 {
@@ -127,6 +384,58 @@ public static class FileSessionPool
 
     private static readonly Lock Gate = new();
     private static readonly Dictionary<Key, PooledFileSession> Open = new(KeyComparer.Instance);
+    private static readonly Dictionary<string, InProcessFileCoordinator> Coordinators = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Get or create the process-local <see cref="InProcessFileCoordinator"/> for <paramref name="fullPath"/>.</summary>
+    public static InProcessFileCoordinator GetOrCreateCoordinator(string fullPath)
+    {
+        lock (Gate)
+        {
+            if (!Coordinators.TryGetValue(fullPath, out InProcessFileCoordinator? coordinator))
+            {
+                coordinator = new InProcessFileCoordinator(fullPath);
+                Coordinators[fullPath] = coordinator;
+            }
+            return coordinator;
+        }
+    }
+
+    /// <summary>Return the existing <see cref="InProcessFileCoordinator"/> for <paramref name="fullPath"/>, or null.</summary>
+    public static InProcessFileCoordinator? FindCoordinator(string fullPath)
+    {
+        lock (Gate)
+        {
+            return Coordinators.TryGetValue(fullPath, out InProcessFileCoordinator? coordinator) ? coordinator : null;
+        }
+    }
+
+    /// <summary>Atomically unregister <paramref name="session"/> from <paramref name="coordinator"/> and remove the coordinator if empty.</summary>
+    public static void UnregisterSession(InProcessFileCoordinator coordinator, ComDatabaseSession session)
+    {
+        lock (Gate)
+        {
+            if (coordinator.UnregisterSession(session)
+                && Coordinators.TryGetValue(coordinator.FullPath, out InProcessFileCoordinator? current)
+                && ReferenceEquals(current, coordinator))
+            {
+                Coordinators.Remove(coordinator.FullPath);
+            }
+        }
+    }
+
+    /// <summary>Remove <paramref name="coordinator"/> if it has no registered sessions (used on open-failure cleanup).</summary>
+    public static void ReleaseCoordinatorIfEmpty(InProcessFileCoordinator coordinator)
+    {
+        lock (Gate)
+        {
+            if (coordinator.IsEmpty
+                && Coordinators.TryGetValue(coordinator.FullPath, out InProcessFileCoordinator? current)
+                && ReferenceEquals(current, coordinator))
+            {
+                Coordinators.Remove(coordinator.FullPath);
+            }
+        }
+    }
 
     /// <summary>The open session of <paramref name="fullPath"/> this thread and host binding may join, or null.</summary>
     public static PooledFileSession? Find(string fullPath, ulong bindingIdentity)

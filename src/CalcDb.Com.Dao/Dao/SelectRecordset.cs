@@ -218,12 +218,14 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         bool hasGroupBy = false,
         DerivedSourceSpec? derivedSpec = null,
         bool isDerived = false,
-        string? name = null) : base(Decl, Vtable, database.Engine, "DAO.Recordset")
+        string? name = null,
+        bool pessimistic = true) : base(Decl, Vtable, database.Engine, "DAO.Recordset")
     {
         Database = database;
         Plan = plan;
         Cursor = cursor;
         RecordsetType = recordsetType;
+        _pessimistic = pessimistic;
         _options = options;
         _joinKeys = joinKeys;
         OpenSequence = openSequence;
@@ -2230,7 +2232,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         // and re-reads the current row.
         bool allowNoOrderByDynasetAfterEdit = !IsMdb && !Database.ReadOnly && RecordsetType == 2 && _isSingleTableRowSelect && !_hasOrderBy && _openLevels.Length == 1 && _frame is { Mode: EditMode.Edit };
         if (_appendOnly
-            || (IsMdb && !(Database.ReadOnlyFirst && Database.ReadOnly && RecordsetType == 2 && _openLevels.Length == 0))
+            || (IsMdb && !(RecordsetType is 2 or 4 && _openLevels.Length == 0))
             || RecordsetType is not (2 or 4)
             || !_isSingleTableRowSelect
             || (!_hasOrderBy && !allowNoOrderByDynasetAfterEdit)
@@ -2766,7 +2768,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
                     "Edit on a SELECT dynaset whose source cursor has no current row (not recorded)"));
             }
             _editReader!.Position(currentRow);
-            return EditPublication.Of(frame.Edit());
+            return EditPublication.Of(frame.Edit(), Database);
         }
         PositionJoinCursorSources();
         RowId? row0 = (((IExpressionRow)Cursor).Source(0) as RowReader)?.Current;
@@ -2784,12 +2786,12 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
             _joinCurrentChildAbsent = false;
             _joinReaders![0]!.Position(r0);
             _joinReaders[1]!.Position(r1);
-            CallResult edit0 = EditPublication.Of(frame.Edit());
+            CallResult edit0 = EditPublication.Of(frame.Edit(), Database);
             if (edit0.Failure is not null)
             {
                 return edit0;
             }
-            CallResult edit1 = EditPublication.Of(frame1!.Edit());
+            CallResult edit1 = EditPublication.Of(frame1!.Edit(), Database);
             if (edit1.Failure is not null)
             {
                 frame.Discard();
@@ -2805,13 +2807,13 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
             // attempts an insert (failing 3058 when child PK is Null).
             _joinCurrentChildAbsent = true;
             _joinReaders![0]!.Position(r0);
-            CallResult edit0 = EditPublication.Of(frame.Edit());
+            CallResult edit0 = EditPublication.Of(frame.Edit(), Database);
             if (edit0.Failure is not null)
             {
                 _joinCurrentChildAbsent = false;
                 return edit0;
             }
-            CallResult add1 = EditPublication.Of(frame1!.AddNew());
+            CallResult add1 = EditPublication.Of(frame1!.AddNew(), Database);
             if (add1.Failure is not null)
             {
                 frame.Discard();
@@ -2971,7 +2973,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         }
         _editReader!.Position(rowId);
         UpdateOutcome outcome = frame.Delete();
-        CallResult result = EditPublication.Of(outcome);
+        CallResult result = EditPublication.Of(outcome, Database);
         if (result.Failure is null)
         {
             if (outcome.Change is { } change && Database.Workspace.Transactions.Depth == 0)
@@ -3023,7 +3025,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
             int active = _joinAddNew ? _joinChildSource : (_dirtyJoinSource >= 0 ? _dirtyJoinSource : 0);
             EditFrame targetFrame = _joinFrames?[active] ?? jf0;
             UpdateOutcome joinOutcome = targetFrame.Update(type: 1, force: false);
-            CallResult joinResult = EditPublication.Of(joinOutcome);
+            CallResult joinResult = EditPublication.Of(joinOutcome, Database);
             if (joinResult.Failure is null && targetFrame.Mode == EditMode.None)
             {
                 if (joinOutcome.Change is { } jChange && Database.Workspace.Transactions.Depth == 0)
@@ -3057,7 +3059,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
                 "Update of AddNew on a dbAppendOnly SELECT dynaset inside an active transaction (not recorded)"));
         }
         UpdateOutcome outcome = frame.Update(type: 1, force: false);
-        CallResult result = EditPublication.Of(outcome);
+        CallResult result = EditPublication.Of(outcome, Database);
         if (result.Failure is null && frame.Mode == EditMode.None)
         {
             if (mode == EditMode.AddNew && _appendOnly)
