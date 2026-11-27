@@ -119,6 +119,9 @@ public static class SqlMessages
     /// <summary>3086 when DELETE targets a read-only database alone (r-q43-schema-lval-index/ro-ddl-disc-accdb call 16).</summary>
     public const string CouldNotDeleteFromTables = "Could not delete from specified tables.";
 
+    /// <summary>3058 when CREATE INDEX WITH DISALLOW NULL or WITH PRIMARY finds an existing Null value (r-q50-jk44-ddl-vis/ddl-index-ignore-null-rows-*, ddl-index-disallow-primary-rows-*).</summary>
+    public const string NullInIndex = "Index or primary key cannot contain a Null value.";
+
     /// <summary>3067 for a subquery inside INSERT VALUES (...) (r-def-expr-sql/sql-insert-values-forms).</summary>
     public const string MustContainTable = "Query input must contain at least one table or query.";
 

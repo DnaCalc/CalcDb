@@ -94,10 +94,15 @@ public static class QuerySql
         {
             return RenderedSql.Refuse(optionFailure);
         }
-        if ((options & OwnerAccess) != 0)
+        bool ownerAccess = (options & OwnerAccess) != 0;
+        if (ownerAccess && (family != QueryFamily.Select || (options & ~OwnerAccess) != 0
+            || q.Role(QueryAttributes.Parameter).Any()
+            || q.Role(QueryAttributes.Where).Any()
+            || q.Role(QueryAttributes.OrderBy).Any()))
         {
-            return RenderedSql.Refuse("WITH OWNERACCESS OPTION (its rendering is not observed)");
+            return RenderedSql.Refuse("WITH OWNERACCESS OPTION combined with non-SELECT, PARAMETERS, WHERE, ORDER BY, or other SELECT option bits (only plain SELECT WITH OWNERACCESS OPTION is observed in r-q50-jk44-ddl-vis/ddl-view-create-drop-accdb, ddl-view-create-drop-mdb)");
         }
+        short selectOptions = (short)(options & ~OwnerAccess);
         QueryRow[] outputs = [.. q.Role(QueryAttributes.Output)];
         QueryRow? type = q.TypeRow;
         if (family != QueryFamily.Select && type is null)
@@ -129,7 +134,7 @@ public static class QuerySql
                 {
                     return RenderedSql.Refuse("a SELECT output row with flags or a target");
                 }
-                if (Select(sql, options, TopCount(q), projected) is { } selectFailure)
+                if (Select(sql, selectOptions, TopCount(q), projected) is { } selectFailure)
                 {
                     return RenderedSql.Refuse(selectFailure);
                 }
@@ -199,7 +204,7 @@ public static class QuerySql
             default:
                 return RenderedSql.Refuse($"the {family} family");
         }
-        return Tail(q, sql, from: true, family);
+        return Tail(q, sql, from: true, family, ownerAccess);
     }
 
     private static string? Parameters(SavedQuery q, StringBuilder sql)
@@ -302,8 +307,8 @@ public static class QuerySql
 
     private static string Projection(QueryRow output) => output.Name1 is { } alias ? $"{output.Expression} AS {alias}" : output.Expression!;
 
-    /// <summary>FROM, WHERE, GROUP BY, HAVING, PIVOT and ORDER BY, then the closing semicolon.</summary>
-    private static RenderedSql Tail(SavedQuery q, StringBuilder sql, bool from, QueryFamily family)
+    /// <summary>FROM, WHERE, GROUP BY, HAVING, PIVOT, ORDER BY, and optional WITH OWNERACCESS OPTION, then the closing semicolon.</summary>
+    private static RenderedSql Tail(SavedQuery q, StringBuilder sql, bool from, QueryFamily family, bool ownerAccess = false)
     {
         if (from)
         {
@@ -362,6 +367,11 @@ public static class QuerySql
             {
                 return RenderedSql.Refuse(orderFailure);
             }
+        }
+        if (ownerAccess)
+        {
+            // r-q50-jk44-ddl-vis/ddl-view-create-drop-accdb, ddl-view-create-drop-mdb V2: "SELECT ID\r\nFROM T\r\nWITH OWNERACCESS OPTION;\r\n"
+            sql.Append(Line).Append("WITH OWNERACCESS OPTION");
         }
         sql.Append(';').Append(Line);
         return RenderedSql.Of(sql.ToString());

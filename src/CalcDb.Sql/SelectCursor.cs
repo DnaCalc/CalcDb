@@ -267,6 +267,13 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
 
     internal static SelectCursor? Open(BoundSelect plan, ISqlDatabase database, ResultKind kind, IReadOnlyList<NativeVariant?>? parameters, bool[]? observableColumns, out SqlFailure? failure)
     {
+        if (plan.WithOwnerAccess)
+        {
+            // r-q50-jk44-ddl-vis/ddl-view-create-drop-accdb, ddl-view-create-drop-mdb only inspect QueryDef metadata
+            // (Type/SQL/Parameters) on WITH OWNERACCESS OPTION views; executing a SELECT with WITH OWNERACCESS OPTION is unrecorded.
+            failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.WithOwnerAccessOption", "executing a SELECT with WITH OWNERACCESS OPTION is not recorded");
+            return null;
+        }
         if (plan.ParametersFailure is not null)
         {
             failure = SqlFailure.Open(SqlPhase.Open, "NotModelled.ParameterDeclarations", "an open of a statement declaring one parameter with two types (3060 at Parameters)");

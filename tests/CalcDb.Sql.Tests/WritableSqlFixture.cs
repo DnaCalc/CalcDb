@@ -118,6 +118,12 @@ internal sealed class WritableSqlFixture : ISqlSchemaDatabase, IPublicationTarge
         _catalog.TablesContainer is int container
         && _catalog.Entries.Any(e => e.ParentId == container && (e.Type == 4 || e.Type == 6) && NamesEqual(e.Name, name));
 
+    public string? SavedSelectSql(string name)
+    {
+        SavedQuery? q = _queries?.Queries.FirstOrDefault(x => string.Equals(x.Name, name, StringComparison.OrdinalIgnoreCase));
+        return q is { Family: QueryFamily.Select } ? QuerySql.Render(q).Text : null;
+    }
+
     public bool IsTableInRelationship(string tableName) =>
         _relationships.Any(r => NamesEqual(r.Table, tableName) || NamesEqual(r.ForeignTable, tableName));
 

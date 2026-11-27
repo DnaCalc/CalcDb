@@ -321,7 +321,9 @@ public static class SqlParser
         }
         var p = new Parser(source);
         var statement = new SelectSyntax(source);
-        failure = p.Select(statement);
+        // r-q50-jk44-ddl-vis/ddl-view-create-drop-accdb, ddl-view-create-drop-mdb: trailing WITH OWNERACCESS OPTION
+        // on SELECT is accepted so QueryDef.Parameters and SELECT binding work on views created with that option.
+        failure = p.Select(statement, allowWith: true);
         if (failure is null && p.BadName)
         {
             failure = SqlFailure.Ace(SqlPhase.Parse, 3141, SelectSyntaxError);

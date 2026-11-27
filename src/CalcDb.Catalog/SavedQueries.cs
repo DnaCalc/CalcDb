@@ -50,7 +50,7 @@ public enum QueryFamily
 public sealed record QueryParameter(string Name, short NativeType, int? TextSize);
 
 /// <summary>A compiled saved-query definition ready for <see cref="SchemaWriter.CreateQueryDef"/>.</summary>
-public sealed record CreateQueryDefRequest(string Name, QueryFamily Family, IReadOnlyList<QueryRow> Rows);
+public sealed record CreateQueryDefRequest(string Name, QueryFamily Family, IReadOnlyList<QueryRow> Rows, bool IsAdoDdl = false);
 
 /// <summary>A compiled saved-query SQL replacement ready for <see cref="SchemaWriter.UpdateQueryDefSql"/>.</summary>
 public sealed record UpdateQueryDefSqlRequest(string Name, QueryFamily Family, IReadOnlyList<QueryRow> Rows);

@@ -8,6 +8,10 @@ public enum DdlKind : byte
     DropTable,
     DropIndex,
     AlterTable,
+    CreateView,
+    DropView,
+    CreateProcedure,
+    DropProcedure,
 }
 
 /// <summary>
@@ -57,13 +61,14 @@ public enum DdlConstraintKind : byte
     Check,
 }
 
-/// <summary>A column-level constraint (<c>[CONSTRAINT name] PRIMARY KEY | UNIQUE | REFERENCES t [(c, …)] [ON DELETE CASCADE]</c>).</summary>
+/// <summary>A column-level constraint (<c>[CONSTRAINT name] PRIMARY KEY | UNIQUE | REFERENCES t [(c, …)] [ON DELETE CASCADE] [ON UPDATE CASCADE]</c>).</summary>
 public sealed record DdlColumnConstraint(
     string? Name,
     DdlConstraintKind Kind,
     string? RefTable = null,
     IReadOnlyList<string>? RefColumns = null,
-    bool OnDeleteCascade = false);
+    bool OnDeleteCascade = false,
+    bool OnUpdateCascade = false);
 
 /// <summary>One column definition in <c>CREATE TABLE</c> or <c>ALTER TABLE ADD</c>.</summary>
 public sealed record DdlColumnDef(
@@ -82,7 +87,8 @@ public sealed record DdlTableConstraint(
     string? RefTable = null,
     IReadOnlyList<string>? RefColumns = null,
     string? CheckExpression = null,
-    bool OnDeleteCascade = false);
+    bool OnDeleteCascade = false,
+    bool OnUpdateCascade = false);
 
 /// <summary>One key column in <c>CREATE [UNIQUE] INDEX … (col [ASC|DESC], …)</c>.</summary>
 public sealed record DdlIndexColumn(string Name, bool Descending);
@@ -174,6 +180,36 @@ public sealed record AlterTableStatement(
     string TableName,
     DdlAlterAction Action)
     : DdlStatement(Source, DdlKind.AlterTable);
+
+/// <summary>One parameter declaration in ADO <c>CREATE PROCEDURE name (p1 LONG, p2 TEXT(20)) AS …</c> (r-q50-jk44-ddl-vis/ddl-proc-create-exec-drop-*).</summary>
+public sealed record DdlProcedureParameter(string Name, DdlDataType DataType);
+
+/// <summary>ADO <c>CREATE VIEW name AS select_sql</c> (r-q50-jk44-ddl-vis/ddl-view-create-drop-*).</summary>
+public sealed record CreateViewStatement(
+    string Source,
+    string ViewName,
+    string SelectSql)
+    : DdlStatement(Source, DdlKind.CreateView);
+
+/// <summary>ADO <c>DROP VIEW name</c> (r-q50-jk44-ddl-vis/ddl-view-create-drop-*).</summary>
+public sealed record DropViewStatement(
+    string Source,
+    string ViewName)
+    : DdlStatement(Source, DdlKind.DropView);
+
+/// <summary>ADO <c>CREATE PROCEDURE name [(params)] AS body_sql</c> (r-q50-jk44-ddl-vis/ddl-proc-create-exec-drop-*).</summary>
+public sealed record CreateProcedureStatement(
+    string Source,
+    string ProcedureName,
+    IReadOnlyList<DdlProcedureParameter> Parameters,
+    string BodySql)
+    : DdlStatement(Source, DdlKind.CreateProcedure);
+
+/// <summary>ADO <c>DROP PROCEDURE name</c> (r-q50-jk44-ddl-vis/ddl-proc-create-exec-drop-*).</summary>
+public sealed record DropProcedureStatement(
+    string Source,
+    string ProcedureName)
+    : DdlStatement(Source, DdlKind.DropProcedure);
 
 /// <summary>
 /// Access DAO ANSI-89 SQL DDL parser (W-07/native-metadata-write stretch 2; II-11 §28).
@@ -574,10 +610,108 @@ public static class DdlParser
             {
                 return ParseCreateIndex(unique: false, out failure);
             }
-            // r-sql-2-3/act-ddl-objects, ddl-index-forms, sql-unsupported-statements:
-            // CREATE VIEW / PROCEDURE / USER / GROUP / TEMPORARY TABLE / CLUSTERED|HASH|FULLTEXT INDEX / DATABASE -> 3290.
+            if (allowAdoCheck && TakeWord("VIEW"))
+            {
+                return ParseCreateView(out failure);
+            }
+            if (allowAdoCheck && TakeWord("PROCEDURE"))
+            {
+                return ParseCreateProcedure(out failure);
+            }
+            // r-sql-2-3/act-ddl-objects, ddl-index-forms, sql-unsupported-statements, r-q50-jk44-ddl-vis/ddl-view-proc-dao-errors-*:
+            // DAO CREATE VIEW / PROCEDURE / USER / GROUP / TEMPORARY TABLE / CLUSTERED|HASH|FULLTEXT INDEX / DATABASE -> 3290.
             failure = Syntax(3290, SqlMessages.CreateTableSyntaxError);
             return null;
+        }
+
+        private CreateViewStatement? ParseCreateView(out SqlFailure? failure)
+        {
+            string? viewName = ReadIdentifier(IdentifierMode.OtherDdlName, out SqlFailure? nameFail);
+            if (viewName is null)
+            {
+                failure = nameFail ?? Open("NotModelled.DdlCreateViewSyntax", "missing or malformed view name in CREATE VIEW");
+                return null;
+            }
+            if (!TakeWord("AS"))
+            {
+                failure = Open("NotModelled.DdlCreateViewSyntax", "missing AS keyword in CREATE VIEW");
+                return null;
+            }
+            Skip();
+            string body = s[_p..].Trim();
+            if (body.EndsWith(';'))
+            {
+                body = body[..^1].TrimEnd();
+            }
+            if (body.Length == 0)
+            {
+                failure = Open("NotModelled.DdlCreateViewSyntax", "empty SELECT body in CREATE VIEW");
+                return null;
+            }
+            failure = null;
+            return new CreateViewStatement(s, viewName, body);
+        }
+
+        private CreateProcedureStatement? ParseCreateProcedure(out SqlFailure? failure)
+        {
+            string? procName = ReadIdentifier(IdentifierMode.OtherDdlName, out SqlFailure? nameFail);
+            if (procName is null)
+            {
+                failure = nameFail ?? Open("NotModelled.DdlCreateProcedureSyntax", "missing or malformed procedure name in CREATE PROCEDURE");
+                return null;
+            }
+            var parameters = new List<DdlProcedureParameter>();
+            if (TakeSymbol('('))
+            {
+                if (TakeSymbol(')'))
+                {
+                    failure = Open("NotModelled.DdlCreateProcedureSyntax", "empty parameter list () in CREATE PROCEDURE is not recorded");
+                    return null;
+                }
+                while (true)
+                {
+                        string? pName = ReadIdentifier(IdentifierMode.OtherDdlName, out SqlFailure? pNameFail);
+                        if (pName is null)
+                        {
+                            failure = pNameFail ?? Open("NotModelled.DdlCreateProcedureSyntax", "missing or malformed parameter name in CREATE PROCEDURE");
+                            return null;
+                        }
+                        DdlDataType? pType = ParseDataType(isAlter: true, out failure);
+                        if (pType is null)
+                        {
+                            return null;
+                        }
+                        parameters.Add(new DdlProcedureParameter(pName, pType));
+                        if (TakeSymbol(','))
+                        {
+                            continue;
+                        }
+                        if (TakeSymbol(')'))
+                        {
+                            break;
+                        }
+                        failure = Open("NotModelled.DdlCreateProcedureSyntax", "expected ',' or ')' in CREATE PROCEDURE parameter list");
+                        return null;
+                }
+            }
+            if (!TakeWord("AS"))
+            {
+                failure = Open("NotModelled.DdlCreateProcedureSyntax", "missing AS keyword in CREATE PROCEDURE");
+                return null;
+            }
+            Skip();
+            string body = s[_p..].Trim();
+            if (body.EndsWith(';'))
+            {
+                body = body[..^1].TrimEnd();
+            }
+            if (body.Length == 0)
+            {
+                failure = Open("NotModelled.DdlCreateProcedureSyntax", "empty body in CREATE PROCEDURE");
+                return null;
+            }
+            failure = null;
+            return new CreateProcedureStatement(s, procName, parameters, body);
         }
 
         private CreateTableStatement? ParseCreateTable(out SqlFailure? failure)
@@ -1115,11 +1249,11 @@ public static class DdlParser
             }
             if (TakeWord("REFERENCES"))
             {
-                if (!ParseReferencesTarget(out string? refTable, out List<string>? refCols, out bool onDeleteCascade, out failure))
+                if (!ParseReferencesTarget(out string? refTable, out List<string>? refCols, out bool onDeleteCascade, out bool onUpdateCascade, out failure))
                 {
                     return null;
                 }
-                return new DdlColumnConstraint(name, DdlConstraintKind.ForeignKey, refTable, refCols, onDeleteCascade);
+                return new DdlColumnConstraint(name, DdlConstraintKind.ForeignKey, refTable, refCols, onDeleteCascade, onUpdateCascade);
             }
             if (allowAdoCheck && IsWord("CHECK"))
             {
@@ -1173,12 +1307,12 @@ public static class DdlParser
                     failure ??= Syntax(3289, SqlMessages.ConstraintSyntaxError);
                     return null;
                 }
-                if (!TakeWord("REFERENCES") || !ParseReferencesTarget(out string? refTable, out List<string>? refCols, out bool onDeleteCascade, out failure))
+                if (!TakeWord("REFERENCES") || !ParseReferencesTarget(out string? refTable, out List<string>? refCols, out bool onDeleteCascade, out bool onUpdateCascade, out failure))
                 {
                     failure ??= Syntax(3289, SqlMessages.ConstraintSyntaxError);
                     return null;
                 }
-                return new DdlTableConstraint(name, DdlConstraintKind.ForeignKey, cols!, refTable, refCols, OnDeleteCascade: onDeleteCascade);
+                return new DdlTableConstraint(name, DdlConstraintKind.ForeignKey, cols!, refTable, refCols, OnDeleteCascade: onDeleteCascade, OnUpdateCascade: onUpdateCascade);
             }
             if (TakeWord("CHECK"))
             {
@@ -1189,9 +1323,9 @@ public static class DdlParser
                     failure = Syntax(3289, SqlMessages.ConstraintSyntaxError);
                     return null;
                 }
-                if (!inAlter)
+                if (!inAlter && name is null)
                 {
-                    failure = Open("NotModelled.DdlCreateTableCheck", "CHECK constraint inside CREATE TABLE via ADO is not modelled");
+                    failure = Open("NotModelled.DdlCreateTableCheck", "unnamed CHECK constraint inside CREATE TABLE via ADO is not recorded");
                     return null;
                 }
                 if (!ParseCheckExpression(out string? expr, out failure))
@@ -1337,11 +1471,12 @@ public static class DdlParser
             return true;
         }
 
-        private bool ParseReferencesTarget(out string? refTable, out List<string>? refCols, out bool onDeleteCascade, out SqlFailure? failure)
+        private bool ParseReferencesTarget(out string? refTable, out List<string>? refCols, out bool onDeleteCascade, out bool onUpdateCascade, out SqlFailure? failure)
         {
             refTable = ReadIdentifier(IdentifierMode.OtherDdlName, out SqlFailure? reservedFail);
             refCols = null;
             onDeleteCascade = false;
+            onUpdateCascade = false;
             if (refTable is null)
             {
                 failure = reservedFail ?? Syntax(3289, SqlMessages.ConstraintSyntaxError);
@@ -1354,7 +1489,7 @@ public static class DdlParser
                     return false;
                 }
             }
-            if (IsWord("ON"))
+            while (IsWord("ON"))
             {
                 if (!allowAdoCheck)
                 {
@@ -1364,20 +1499,25 @@ public static class DdlParser
                     return false;
                 }
                 TakeWord("ON");
-                if (TakeWord("DELETE") && TakeWord("CASCADE"))
+                if (TakeWord("DELETE") && TakeWord("CASCADE") && !onDeleteCascade)
                 {
-                    if (IsWord("ON"))
-                    {
-                        failure = Open("NotModelled.DdlForeignKeyAction", "combining ON DELETE CASCADE with another ON referential action is not recorded");
-                        return false;
-                    }
                     onDeleteCascade = true;
+                }
+                else if (TakeWord("UPDATE") && TakeWord("CASCADE") && !onUpdateCascade)
+                {
+                    // r-q50-jk44-ddl-vis/ddl-multi-constraint-table-accdb, ddl-multi-constraint-table-mdb: ON DELETE CASCADE ON UPDATE CASCADE.
+                    onUpdateCascade = true;
                 }
                 else
                 {
-                    failure = Open("NotModelled.DdlForeignKeyAction", "FOREIGN KEY referential action other than ADO ON DELETE CASCADE is not recorded (ON UPDATE CASCADE, SET NULL, NO ACTION, SET DEFAULT, RESTRICT)");
+                    failure = Open("NotModelled.DdlForeignKeyAction", "FOREIGN KEY referential action other than ADO ON DELETE CASCADE / ON UPDATE CASCADE is not recorded (SET NULL, NO ACTION, SET DEFAULT, RESTRICT, or duplicate action)");
                     return false;
                 }
+            }
+            if (onUpdateCascade && !onDeleteCascade)
+            {
+                failure = Open("NotModelled.DdlForeignKeyAction", "FOREIGN KEY ON UPDATE CASCADE without ON DELETE CASCADE is not recorded (r-q50-jk44-ddl-vis/ddl-multi-constraint-table-* records ON DELETE CASCADE ON UPDATE CASCADE)");
+                return false;
             }
             failure = null;
             return true;
@@ -1563,7 +1703,40 @@ public static class DdlParser
                 return new DropIndexStatement(s, indexName, tableName);
             }
 
-            // r-def-expr-sql/ddl-drop-and-missing-objects, r-sql-2-3/act-ddl-objects: DROP VIEW / PROCEDURE -> 3295.
+            if (allowAdoCheck && TakeWord("VIEW"))
+            {
+                string? viewName = ReadIdentifier(IdentifierMode.OtherDdlName, out SqlFailure? viewNameFail);
+                if (viewName is null)
+                {
+                    failure = viewNameFail ?? Syntax(3295, SqlMessages.DropSyntaxError);
+                    return null;
+                }
+                failure = ExpectEnd(3295, SqlMessages.DropSyntaxError);
+                if (failure is not null)
+                {
+                    return null;
+                }
+                return new DropViewStatement(s, viewName);
+            }
+
+            if (allowAdoCheck && TakeWord("PROCEDURE"))
+            {
+                string? procName = ReadIdentifier(IdentifierMode.OtherDdlName, out SqlFailure? procNameFail);
+                if (procName is null)
+                {
+                    failure = procNameFail ?? Syntax(3295, SqlMessages.DropSyntaxError);
+                    return null;
+                }
+                failure = ExpectEnd(3295, SqlMessages.DropSyntaxError);
+                if (failure is not null)
+                {
+                    return null;
+                }
+                return new DropProcedureStatement(s, procName);
+            }
+
+            // r-def-expr-sql/ddl-drop-and-missing-objects, r-sql-2-3/act-ddl-objects, r-q50-jk44-ddl-vis/ddl-view-proc-dao-errors-*:
+            // DAO DROP VIEW / PROCEDURE -> 3295.
             failure = Syntax(3295, SqlMessages.DropSyntaxError);
             return null;
         }

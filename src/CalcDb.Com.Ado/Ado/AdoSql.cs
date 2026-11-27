@@ -409,8 +409,33 @@ internal static class AdoSqlErrors
             3732 => Make(AdoObject.HResultErrorsInCommand, failure.Message, 5003732, "3000", 0, AdoObject.IidCommandText),
             // r-str-ado-act/ado-execute-action #18-22, r-ado-1b/errors-by-route, r-ado-1b/rs-source-kinds #43
             3078 => Make(AdoObject.HResultNoTable, failure.Message, 5003011, "3078", -524420377, AdoObject.IidCommand),
-            // r-str-ado-act/ado-execute-action #12 (INSERT INTO missing table): scode/helpContext/IID recorded; SQLState/NativeError not observed.
-            3192 => Make(AdoObject.HResultNoTable, failure.Message, 5003011, null, null, AdoObject.IidCommand),
+            // r-str-ado-act/ado-execute-action #12 (INSERT INTO missing table);
+            // r-q49-dt2-draftprops/ddl-default-eval-edge-ado-accdb, ddl-default-eval-edge-ado-mdb #116-119: SQLState "3192", NativeError -534185241.
+            3192 => Make(AdoObject.HResultNoTable, failure.Message, 5003011, "3192", -534185241, AdoObject.IidCommand),
+            // r-q49-dt2-draftprops/ddl-default-eval-edge-ado-accdb, ddl-default-eval-edge-ado-mdb #46-61:
+            // ad-hoc Connection.Execute CREATE TABLE syntax error (e.g. compound/missing DEFAULT) fails 0x80040E14,
+            // helpContext 5003290, SQLState "3000", NativeError -537529823, IID_ICommandText.
+            3290 when !isSavedQuery && isConnectionExecuteAction && sql is not null && IsCreateTableSql(sql) =>
+                Make(AdoObject.HResultErrorsInCommand, failure.Message, 5003290, "3000", -537529823, AdoObject.IidCommandText),
+            3290 => FailUnmodelledDetail(
+                "ADO OLE DB error detail for ACE error 3290 on this route or statement is not recorded (only ad-hoc Connection.Execute CREATE TABLE is recorded in r-q49-dt2-draftprops/ddl-default-eval-edge-ado-*)",
+                out unmodelled),
+            // r-q49-dt2-draftprops/ddl-default-eval-edge-ado-accdb, ddl-default-eval-edge-ado-mdb #64-67:
+            // ad-hoc Connection.Execute CREATE TABLE DEFAULT type mismatch fails 0x80004005 (E_FAIL),
+            // helpContext 5003000, SQLState "3072", NativeError -529731193, IID_ICommand.
+            3000 when !isSavedQuery && isConnectionExecuteAction && sql is not null && IsCreateTableSql(sql) =>
+                Make(AdoObject.HResultFail, failure.Message, 5003000, "3072", -529731193, AdoObject.IidCommand),
+            3000 => FailUnmodelledDetail(
+                "ADO OLE DB error detail for ACE error 3000 on this route or statement is not recorded (only ad-hoc Connection.Execute CREATE TABLE is recorded in r-q49-dt2-draftprops/ddl-default-eval-edge-ado-*)",
+                out unmodelled),
+            // r-q49-dt2-draftprops/ddl-default-eval-edge-ado-accdb, ddl-default-eval-edge-ado-mdb #70-73:
+            // ad-hoc Connection.Execute CREATE TABLE DEFAULT referencing a field fails 0x80004005 (E_FAIL),
+            // helpContext 5003355, SQLState "3344", NativeError -536678012, IID_ICommand.
+            3355 when !isSavedQuery && isConnectionExecuteAction && sql is not null && IsCreateTableSql(sql) =>
+                Make(AdoObject.HResultFail, failure.Message, 5003355, "3344", -536678012, AdoObject.IidCommand),
+            3355 => FailUnmodelledDetail(
+                "ADO OLE DB error detail for ACE error 3355 on this route or statement is not recorded (only ad-hoc Connection.Execute CREATE TABLE is recorded in r-q49-dt2-draftprops/ddl-default-eval-edge-ado-*)",
+                out unmodelled),
             // r-str-ado-act/ado-errors (CREATE TABLE existing)
             3010 => Make(AdoObject.HResultErrorsInCommand, failure.Message, 5003010, "3010", -534840599, AdoObject.IidCommand),
             // r-str-ado-act/ado-errors (DROP TABLE missing)
@@ -931,6 +956,169 @@ internal static class AdoSqlText
             }
         }
         return true;
+    }
+
+    /// <summary>
+    /// Parse the argument after <c>EXEC</c>/<c>EXECUTE</c> into a query/procedure name and optional comma-separated
+    /// positional literal arguments (r-q50-jk44-ddl-vis/ddl-proc-create-exec-drop-*: <c>EXEC P1</c>,
+    /// <c>EXEC P2 1, 'updated'</c>, <c>EXEC P3 20</c>). Returns false when the query name is missing or malformed
+    /// (caller reports ACE 3732 Expected query name after EXECUTE, r-ado-1b/rs-source-kinds #191).
+    /// </summary>
+    public static bool TryParseExecCall(string procArg, out string queryName, out List<AdoCommandParam>? literalArgs, out string? unmodelledArg)
+    {
+        queryName = "";
+        literalArgs = null;
+        unmodelledArg = null;
+        ReadOnlySpan<char> s = procArg.AsSpan().Trim();
+        if (s.IsEmpty)
+        {
+            return false;
+        }
+        int pos = 0;
+        if (s[0] == '[')
+        {
+            int close = s[1..].IndexOf(']');
+            if (close <= 0)
+            {
+                return false;
+            }
+            ReadOnlySpan<char> inside = s.Slice(1, close);
+            if (inside.Contains('['))
+            {
+                return false;
+            }
+            queryName = inside.ToString();
+            pos = close + 2;
+        }
+        else
+        {
+            if (!(char.IsLetter(s[0]) || s[0] == '_'))
+            {
+                return false;
+            }
+            while (pos < s.Length && !char.IsWhiteSpace(s[pos]))
+            {
+                char c = s[pos];
+                if (c is ',' or '(' or ')' or ';' or '*')
+                {
+                    return false;
+                }
+                pos++;
+            }
+            queryName = s[..pos].ToString();
+        }
+        ReadOnlySpan<char> rest = s[pos..].Trim();
+        if (rest.IsEmpty)
+        {
+            return true;
+        }
+        var parsed = new List<AdoCommandParam>();
+        int i = 0;
+        while (i < rest.Length)
+        {
+            while (i < rest.Length && char.IsWhiteSpace(rest[i]))
+            {
+                i++;
+            }
+            if (i >= rest.Length)
+            {
+                break;
+            }
+            if (rest[i] == '\'')
+            {
+                i++;
+                var sb = new System.Text.StringBuilder();
+                bool closed = false;
+                while (i < rest.Length)
+                {
+                    if (rest[i] == '\'')
+                    {
+                        i++;
+                        if (i < rest.Length && rest[i] == '\'')
+                        {
+                            sb.Append('\'');
+                            i++;
+                            continue;
+                        }
+                        closed = true;
+                        break;
+                    }
+                    sb.Append(rest[i++]);
+                }
+                if (!closed)
+                {
+                    DisposeParams(parsed);
+                    unmodelledArg = "unterminated string literal in EXEC argument list";
+                    return true;
+                }
+                parsed.Add(new AdoCommandParam(CalcDb.Values.OwnedVariant.FromText(sb.ToString())));
+            }
+            else if (rest[i] is '+' or '-' || char.IsAsciiDigit(rest[i]))
+            {
+                int start = i;
+                if (rest[i] is '+' or '-')
+                {
+                    i++;
+                }
+                int digits = i;
+                while (i < rest.Length && char.IsAsciiDigit(rest[i]))
+                {
+                    i++;
+                }
+                if (i == digits || !int.TryParse(rest[start..i], System.Globalization.NumberStyles.AllowLeadingSign, System.Globalization.CultureInfo.InvariantCulture, out int intVal))
+                {
+                    DisposeParams(parsed);
+                    unmodelledArg = $"unrecorded numeric EXEC argument '{rest[start..i].ToString()}'";
+                    return true;
+                }
+                parsed.Add(new AdoCommandParam(CalcDb.Values.OwnedVariant.FromInt32(intVal)));
+            }
+            else
+            {
+                DisposeParams(parsed);
+                unmodelledArg = $"unrecorded EXEC argument starting at '{rest[i..Math.Min(rest.Length, i + 12)].ToString()}'";
+                return true;
+            }
+            while (i < rest.Length && char.IsWhiteSpace(rest[i]))
+            {
+                i++;
+            }
+            if (i < rest.Length)
+            {
+                if (rest[i] == ',')
+                {
+                    i++;
+                    while (i < rest.Length && char.IsWhiteSpace(rest[i]))
+                    {
+                        i++;
+                    }
+                    if (i >= rest.Length)
+                    {
+                        DisposeParams(parsed);
+                        unmodelledArg = "trailing comma in EXEC argument list";
+                        return true;
+                    }
+                    continue;
+                }
+                DisposeParams(parsed);
+                unmodelledArg = $"unexpected token in EXEC argument list at '{rest[i..Math.Min(rest.Length, i + 12)].ToString()}'";
+                return true;
+            }
+        }
+        literalArgs = parsed;
+        return true;
+    }
+
+    public static void DisposeParams(List<AdoCommandParam>? list)
+    {
+        if (list is null)
+        {
+            return;
+        }
+        foreach (AdoCommandParam p in list)
+        {
+            p.Value.Dispose();
+        }
     }
 
     /// <summary>

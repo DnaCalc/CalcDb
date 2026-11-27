@@ -190,7 +190,7 @@ internal sealed unsafe class SelectRowSource : IAdoRowSource
         string effectiveSql = !isSavedQuery && commandParameters is not null
             ? AdoSqlText.RewriteQuestionMarkParameters(sql, out _)
             : sql;
-        BoundSelect? plan = BoundSelect.Prepare(effectiveSql, session.Sql, out SqlFailure? failure);
+        BoundSelect? plan = BoundSelect.Prepare(effectiveSql, session.SqlWithViews, out SqlFailure? failure);
         if (plan is null)
         {
             providerError = AdoSqlErrors.TryMap(failure!, isSavedQuery, out refusal, isSelect: true);
@@ -5320,13 +5320,32 @@ internal sealed unsafe class RecordsetObject : AdoObject
             || (cmdType is AdoSqlText.AdCmdText or AdoSqlText.AdCmdUnknown or AdoSqlText.AdCmdUnspecified
                 && AdoSqlText.TryParseExec(effectiveSource, out procArg)))
         {
-            if (!AdoSqlText.IsSimpleQueryName(procArg, out string queryName))
+            if (!AdoSqlText.TryParseExecCall(procArg, out string queryName, out List<AdoCommandParam>? execLiteralArgs, out string? unmodelledExecArg))
             {
                 providerError = AdoSqlErrors.ExpectedQueryNameAfterExecute();
                 recordPrepareErrorOnFields = true;
                 return null;
             }
-            return OpenSavedQuery(session, queryName, selectContext, preferKeyset, updatableKeyset, lockPessimistic, preferClientBatch, clientBatchOptimistic, out providerError, out refusal, out failedOpenColumns, commandParameters);
+            if (unmodelledExecArg is not null)
+            {
+                refusal = Failure.NotModelled("NotModelled.AdoExecArguments", unmodelledExecArg);
+                return null;
+            }
+            if (execLiteralArgs is not null && selectContext.Route != AdoSelectRoute.ConnectionExecuteSql)
+            {
+                AdoSqlText.DisposeParams(execLiteralArgs);
+                refusal = Failure.NotModelled("NotModelled.AdoExecArguments", "EXEC with inline literal arguments outside Connection.Execute is not recorded (r-q50-jk44-ddl-vis/ddl-proc-create-exec-drop-accdb, ddl-proc-create-exec-drop-mdb)");
+                return null;
+            }
+            try
+            {
+                IReadOnlyList<AdoCommandParam>? effectiveParams = commandParameters ?? execLiteralArgs;
+                return OpenSavedQuery(session, queryName, selectContext, preferKeyset, updatableKeyset, lockPessimistic, preferClientBatch, clientBatchOptimistic, out providerError, out refusal, out failedOpenColumns, effectiveParams);
+            }
+            finally
+            {
+                AdoSqlText.DisposeParams(execLiteralArgs);
+            }
         }
 
         if (cmdType == AdoSqlText.AdCmdTable)

@@ -19,6 +19,12 @@ public interface ISqlDatabase
     /// <summary>Whether a saved query has that name (a query source is not bound yet: NotModelled.QuerySource).</summary>
     bool IsQuery(string name);
 
+    /// <summary>
+    /// Rendered SQL of a saved SELECT query/view named <paramref name="name"/>, or null when unavailable or non-SELECT
+    /// (r-q50-jk44-ddl-vis/ddl-view-create-drop-*: <c>SELECT ID, A FROM V1 ORDER BY ID</c>).
+    /// </summary>
+    string? SavedSelectSql(string name) => null;
+
     /// <summary>A reader over the table's rows, or null with the storage failure.</summary>
     RowReader? OpenRows(TableDefinition table, out string? failure);
 
@@ -759,6 +765,9 @@ public sealed class BoundSelect : IDisposable
         return false;
     }
 
+    /// <summary>Whether the statement carried trailing <c>WITH OWNERACCESS OPTION</c>.</summary>
+    internal bool WithOwnerAccess => _syntax.WithOwnerAccess;
+
     /// <summary>Parse and bind a statement.</summary>
     public static BoundSelect? Prepare(string sql, ISqlDatabase database, out SqlFailure? failure)
     {
@@ -798,7 +807,8 @@ public sealed class BoundSelect : IDisposable
         out SqlFailure? failure,
         bool allowRepeatedSingleSourceColumn = false,
         OuterScopeChain? outerChain = null,
-        bool allowDuplicateOutputNames = false)
+        bool allowDuplicateOutputNames = false,
+        bool allowViewExpansion = true)
     {
         var bound = new BoundSelect(syntax, database.Context, parameters, ownsSyntax);
         failure = bound.Declare(syntax.Parameters);
@@ -814,7 +824,7 @@ public sealed class BoundSelect : IDisposable
         }
         else if (failure is null)
         {
-            failure = new Binder(bound, syntax, database, allowRepeatedSingleSourceColumn, outerChain, allowDuplicateOutputNames).Run();
+            failure = new Binder(bound, syntax, database, allowRepeatedSingleSourceColumn, outerChain, allowDuplicateOutputNames, allowViewExpansion).Run();
         }
         if (failure is not null)
         {
@@ -1733,7 +1743,7 @@ public sealed class BoundSelect : IDisposable
         }
     }
 
-    private sealed class Binder(BoundSelect bound, SelectSyntax syntax, ISqlDatabase database, bool allowRepeatedSingleSourceColumn = false, OuterScopeChain? outerChain = null, bool allowDuplicateOutputNames = false)
+    private sealed class Binder(BoundSelect bound, SelectSyntax syntax, ISqlDatabase database, bool allowRepeatedSingleSourceColumn = false, OuterScopeChain? outerChain = null, bool allowDuplicateOutputNames = false, bool allowViewExpansion = true)
     {
         private readonly ExpressionContext _context = database.Context;
         private SourceScope _scope = null!;
@@ -2021,9 +2031,35 @@ public sealed class BoundSelect : IDisposable
                 case NamedSource named:
                     if (database.Table(named.Name) is not { } table)
                     {
-                        return database.IsQuery(named.Name)
-                            ? Open("NotModelled.QuerySource", $"saved query {named.Name} as a source (W-07/saved-definition reads it)")
-                            : SqlFailure.Ace(SqlPhase.Bind, 3078, SqlMessages.NoInputTable(named.Name));
+                        if (database.IsQuery(named.Name))
+                        {
+                            if (allowViewExpansion && database.SavedSelectSql(named.Name) is { } viewSql)
+                            {
+                                SelectSyntax? viewSyntax = SqlParser.Parse(viewSql, out _);
+                                if (viewSyntax is not null && !viewSyntax.WithOwnerAccess)
+                                {
+                                    BoundSelect? viewInner = Bind(viewSyntax, database, ownsSyntax: true, parameters: [], out SqlFailure? viewBindFail, allowViewExpansion: false);
+                                    if (viewBindFail is null && viewInner is not null && viewInner.ParameterList.Count == 0)
+                                    {
+                                        int viewIndex = bound.SourceList.Count;
+                                        bound.SourceList.Add(new SourceSlot(viewIndex, named.ScopeName, viewInner));
+                                        node = new TableNode(viewIndex);
+                                        return null;
+                                    }
+                                    viewInner?.Dispose();
+                                    if (viewInner is null)
+                                    {
+                                        viewSyntax.Dispose();
+                                    }
+                                }
+                                else
+                                {
+                                    viewSyntax?.Dispose();
+                                }
+                            }
+                            return Open("NotModelled.QuerySource", $"saved query {named.Name} as a source (W-07/saved-definition reads it)");
+                        }
+                        return SqlFailure.Ace(SqlPhase.Bind, 3078, SqlMessages.NoInputTable(named.Name));
                     }
                     if (database.IsSystemTable(named.Name, table))
                     {
