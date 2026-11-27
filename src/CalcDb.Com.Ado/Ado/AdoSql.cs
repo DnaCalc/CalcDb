@@ -522,6 +522,22 @@ internal static class AdoSqlErrors
             3001 => FailUnmodelledDetail(
                 "ADO OLE DB error detail for ACE error 3001 on this route or statement is not recorded (only ad-hoc Connection.Execute CREATE TABLE is recorded in r-q44-ddl-alter-types/ext-bigint-mdb-ado and ext-datetime2-mdb-ado)",
                 out unmodelled),
+            // r-q-wire/dec-ddl-precision-limits #23, #28, #48: ad-hoc Connection.Execute CREATE TABLE with
+            // out-of-range DECIMAL precision (0, 29, 38) fails 0x80004005 (E_FAIL), helpContext 5003700,
+            // SQLState "3700", IID_ICommandText; NativeError was not observed and refuses on read.
+            3700 when !isSavedQuery && isConnectionExecuteAction && sql is not null && IsCreateTableSql(sql) =>
+                Make(AdoObject.HResultFail, failure.Message, 5003700, "3700", null, AdoObject.IidCommandText),
+            3700 => FailUnmodelledDetail(
+                "ADO OLE DB error detail for ACE error 3700 on this route or statement is not recorded (only ad-hoc Connection.Execute CREATE TABLE is recorded in r-q-wire/dec-ddl-precision-limits)",
+                out unmodelled),
+            // r-q-wire/dec-ddl-precision-limits #33: ad-hoc Connection.Execute CREATE TABLE with
+            // out-of-range DECIMAL scale (scale > precision) fails 0x80004005 (E_FAIL), helpContext 5003701,
+            // SQLState "3701", IID_ICommandText; NativeError was not observed and refuses on read.
+            3701 when !isSavedQuery && isConnectionExecuteAction && sql is not null && IsCreateTableSql(sql) =>
+                Make(AdoObject.HResultFail, failure.Message, 5003701, "3701", null, AdoObject.IidCommandText),
+            3701 => FailUnmodelledDetail(
+                "ADO OLE DB error detail for ACE error 3701 on this route or statement is not recorded (only ad-hoc Connection.Execute CREATE TABLE is recorded in r-q-wire/dec-ddl-precision-limits)",
+                out unmodelled),
             // r-oledb-odbc/error-record-channels #173-183, r-q2-expr-sql/act-ado-failure-lane #62 (data type mismatch on Connection.Execute action)
             3464 when !isSavedQuery && isConnectionExecuteAction => Make(AdoObject.HResultCantConvertValue, failure.Message, 5003071, "3464", -539888598, AdoObject.IidCommand),
             // r-q47-bigint-expr-edges/meta-dollar-str-dao-ado-accdb, meta-fmt-date-strconv-dao-ado-accdb,

@@ -347,15 +347,15 @@ internal sealed unsafe class CommandObject : AdoObject
         List<AdoCommandParam>? boundParams = null;
         if (!parametersOmitted)
         {
-            NativeVariant* pCell = Args.Cell(parametersArg);
-            VarType pVt = (VarType)pCell->Vt & ~VarType.ByRef;
+            NativeVariant pDeref = ByRefValues.Dereference(Args.Cell(parametersArg));
+            VarType pVt = (VarType)pDeref.Vt;
             if ((pVt & VarType.Array) != 0)
             {
                 return CallResult.Fail(Failure.NotModelled(
                     "NotModelled.AdoCommandExecuteVariantArrayParameters",
                     "Command.Execute with a SAFEARRAY Parameters argument is not recorded"));
             }
-            if (AdoArgs.IsObject(parametersArg))
+            if (pVt is VarType.Dispatch or VarType.Unknown)
             {
                 return NotImplemented("Command.Execute with an object Parameters argument (not recorded)");
             }
@@ -370,14 +370,17 @@ internal sealed unsafe class CommandObject : AdoObject
                     _activeConnection.SetProviderError(noDef.ErrorEntry);
                     return CallResult.Fail(noDef.ComFailure);
                 }
-                return NotImplemented("Command.Execute with VT_EMPTY Parameters argument on a command without ? markers (not recorded)");
+                // r-q2-wire/byref-ado-command-execute #21: Command.Execute with VT_EMPTY (including VT_BYREF|VT_VARIANT -> VT_EMPTY)
+                // Parameters argument on a command without ? markers fails 0x800A0E7C (ADODB.Command, ParameterImproperlyDefined),
+                // leaving ByRef args untouched.
+                return Fail(AdoErrors.ParameterImproperlyDefined);
             }
             else
             {
                 // r-q54-excl-ddl-ix-cmd/ado-cmd-exec-params-accdb #110, #124, #138; r-q54-excl-ddl-ix-cmd/ado-cmd-exec-params-mdb #110: scalar Parameters argument (I4 / Null) binds position 0 and persists for subsequent Missing Execute.
                 OwnedVariant? copied = pVt == VarType.Null
                     ? OwnedVariant.Null()
-                    : OwnedVariant.ChangeType(pCell, pVt, SessionLocale.Lcid, out _);
+                    : OwnedVariant.ChangeType(&pDeref, pVt, SessionLocale.Lcid, out _);
                 if (copied is null)
                 {
                     return NotImplemented($"Command.Execute with scalar Parameters argument of VarType {pVt} (not recorded)");
