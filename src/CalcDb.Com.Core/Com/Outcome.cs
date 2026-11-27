@@ -123,9 +123,9 @@ public static unsafe partial class ErrorPublication
             // r-ado-1b/persist-overwrite-flags #31, r-fix-wire-ado/persist-save-two-parameter #39/#47/#55:
             // STG_E_FILEALREADYEXISTS publishes an IErrorInfo whose GetGUID returns S_OK (Guid.Empty) and whose
             // GetSource, GetDescription, GetHelpFile, and GetHelpContext return E_FAIL (0x80004005).
-            var custom = new NullStringsErrorInfo(iid);
-            _ = OleAut.SetErrorInfo(0, custom.Identity);
-            custom.Release();
+            nint custom = NullStringsErrorInfo.Create(iid);
+            _ = OleAut.SetErrorInfo(0, custom);
+            OleAutRelease(custom);
             return failure.Scode;
         }
         if (OleAut.CreateErrorInfo(out nint create) >= 0 && create != 0)
@@ -167,19 +167,33 @@ public static unsafe partial class ErrorPublication
     private static void OleAutRelease(nint unknown) => ((delegate* unmanaged<nint, uint>)(*(nint**)unknown)[2])(unknown);
 
     /// <summary>
-    /// Minimal COM <c>IErrorInfo</c> for failures with <see cref="Failure.NullExcepStrings"/>:
+    /// Minimal native COM <c>IErrorInfo</c> for failures with <see cref="Failure.NullExcepStrings"/>:
     /// <c>GetGUID</c> returns <c>S_OK</c> with the configured GUID, while <c>GetSource</c>, <c>GetDescription</c>,
     /// <c>GetHelpFile</c>, and <c>GetHelpContext</c> return <c>E_FAIL</c> (<c>0x80004005</c>)
     /// (r-ado-1b/persist-overwrite-flags #31, r-fix-wire-ado/persist-save-two-parameter #39/#47/#55).
+    /// Allocated as an unmanaged COM block rather than a <see cref="ComObject"/> so thread-local OLEAUT32
+    /// <c>SetErrorInfo</c> ownership does not keep <see cref="ModuleLifetime.Objects"/> incremented.
     /// </summary>
-    private sealed class NullStringsErrorInfo : ComObject
+    private static class NullStringsErrorInfo
     {
+        [StructLayout(LayoutKind.Sequential)]
+        private struct Block
+        {
+            public nint Vtable;
+            public int RefCount;
+            public Guid Guid;
+        }
+
         private static readonly nint Vtable = BuildVtable();
-        private readonly Guid _guid;
 
-        public NullStringsErrorInfo(in Guid guid) : base(Vtable) => _guid = guid;
-
-        protected override int HeadFor(in Guid iid) => iid == ComIids.IErrorInfo ? 0 : -1;
+        public static nint Create(in Guid guid)
+        {
+            Block* block = (Block*)NativeMemory.AllocZeroed((nuint)sizeof(Block));
+            block->Vtable = Vtable;
+            block->RefCount = 1;
+            block->Guid = guid;
+            return (nint)block;
+        }
 
         private static nint BuildVtable()
         {
@@ -196,14 +210,37 @@ public static unsafe partial class ErrorPublication
         }
 
         [UnmanagedCallersOnly]
-        private static int QueryInterfaceEntry(nint self, Guid* iid, nint* result) =>
-            result is null ? HResults.E_POINTER : Recover<NullStringsErrorInfo>(self).QueryInterface(*iid, result);
+        private static int QueryInterfaceEntry(nint self, Guid* iid, nint* result)
+        {
+            if (result is null)
+            {
+                return HResults.E_POINTER;
+            }
+            if (iid is not null && (*iid == ComIids.IUnknown || *iid == ComIids.IErrorInfo))
+            {
+                _ = Interlocked.Increment(ref ((Block*)self)->RefCount);
+                *result = self;
+                return HResults.S_OK;
+            }
+            *result = 0;
+            return HResults.E_NOINTERFACE;
+        }
 
         [UnmanagedCallersOnly]
-        private static uint AddRefEntry(nint self) => Recover<NullStringsErrorInfo>(self).AddRef();
+        private static uint AddRefEntry(nint self) =>
+            (uint)Interlocked.Increment(ref ((Block*)self)->RefCount);
 
         [UnmanagedCallersOnly]
-        private static uint ReleaseEntry(nint self) => Recover<NullStringsErrorInfo>(self).Release();
+        private static uint ReleaseEntry(nint self)
+        {
+            Block* block = (Block*)self;
+            int left = Interlocked.Decrement(ref block->RefCount);
+            if (left == 0)
+            {
+                NativeMemory.Free(block);
+            }
+            return (uint)left;
+        }
 
         [UnmanagedCallersOnly]
         private static int GetGuidEntry(nint self, Guid* pGuid)
@@ -212,7 +249,7 @@ public static unsafe partial class ErrorPublication
             {
                 return HResults.E_POINTER;
             }
-            *pGuid = Recover<NullStringsErrorInfo>(self)._guid;
+            *pGuid = ((Block*)self)->Guid;
             return HResults.S_OK;
         }
 

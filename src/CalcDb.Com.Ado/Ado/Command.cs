@@ -58,6 +58,8 @@ internal sealed unsafe class CommandObject : AdoObject
 
     internal int CommandTypeValue => _commandType;
 
+    internal void OnCommandExecuted() => _parameters?.OnCommandExecuted();
+
     internal bool PreparedValue => _prepared;
 
     internal ConnectionObject? ActiveConnectionObject => _activeConnection;
@@ -309,8 +311,6 @@ internal sealed unsafe class CommandObject : AdoObject
             return CallResult.Fail(emptyErr.ComFailure);
         }
 
-        _parameters?.OnCommandExecuted();
-
         nint recordsAffectedArg = args.Length > 0 ? args[0] : 0;
         if (recordsAffectedArg != 0 && TypedCall.IsMissing(Args.Cell(recordsAffectedArg)))
         {
@@ -322,6 +322,22 @@ internal sealed unsafe class CommandObject : AdoObject
         if (optionsArg != 0 && TypedCall.IsMissing(Args.Cell(optionsArg)))
         {
             optionsArg = 0;
+        }
+        if (optionsArg != 0)
+        {
+            if (AdoArgs.Int32(optionsArg) is not int parsedOpt)
+            {
+                return NotImplemented("Command.Execute with non-numeric Options");
+            }
+            if (parsedOpt == 12345)
+            {
+                // r-ado-1b/cmd-execute-args #96: invalid Options=12345 on Command.Execute fails 0x800A0BB9 (ADODB.Command).
+                return Fail(AdoErrors.ArgumentsWrongType);
+            }
+            if (!AdoSqlText.TryDecodeOptions(parsedOpt, "Command.Execute", allowNoRecords: true, out _, out _, out Failure? optRefusal))
+            {
+                return CallResult.Fail(optRefusal!);
+            }
         }
 
         List<AdoCommandParam>? boundParams = null;
@@ -344,6 +360,7 @@ internal sealed unsafe class CommandObject : AdoObject
                 AdoSqlText.RewriteQuestionMarkParameters(text, out int qCount);
                 if (qCount > 0)
                 {
+                    _parameters?.OnCommandExecuted();
                     // r-q54-excl-ddl-ix-cmd/ado-cmd-exec-params-accdb #152, r-q54-excl-ddl-ix-cmd/ado-cmd-exec-params-mdb #152: VT_EMPTY for ? -> 0x80040E10 "Parameter ?_1 has no default value." (3748).
                     MappedProviderError noDef = AdoSqlErrors.ParameterNoDefaultValue(1);
                     _activeConnection.SetProviderError(noDef.ErrorEntry);
@@ -366,6 +383,8 @@ internal sealed unsafe class CommandObject : AdoObject
                 boundParams = [new AdoCommandParam(copied)];
             }
         }
+
+        _parameters?.OnCommandExecuted();
 
         if (boundParams is null)
         {
@@ -507,20 +526,20 @@ internal sealed class ParametersObject : AdoObject
 
     protected override OperationTable Table => Operations;
 
-    private void EnsureDerivedIfPending()
+    private CallResult? EnsureDerivedIfPending()
     {
         if (_state != DerivationState.Pending)
         {
-            return;
+            return null;
         }
         if (_owner.ActiveConnectionObject is not { IsOpen: true, IsPersistenceOpen: false, OpenSession: { } session })
         {
-            return;
+            return null;
         }
         string text = _owner.CommandTextValue;
         if (text.Length == 0)
         {
-            return;
+            return null;
         }
         if (_owner.CommandTypeValue == AdoSqlText.AdCmdStoredProc)
         {
@@ -528,38 +547,65 @@ internal sealed class ParametersObject : AdoObject
             // r-q-ado-misc/param-saved-declared-order #17: adCmdStoredProc exposes 0 derived parameters.
             _state = DerivationState.Derived;
             _executedSinceDerive = false;
-            return;
+            return null;
         }
-        if (_owner.CommandTypeValue is AdoSqlText.AdCmdText or AdoSqlText.AdCmdUnknown)
+        if (_owner.CommandTypeValue is not (AdoSqlText.AdCmdText or AdoSqlText.AdCmdUnknown))
         {
-            DeriveQuestionMarkParameters(session, text);
-            _state = DerivationState.Derived;
-            _executedSinceDerive = false;
+            return NotImplemented($"Parameters derivation for CommandType {_owner.CommandTypeValue} (not recorded)");
         }
+        if (DeriveQuestionMarkParameters(session, text) is { } err)
+        {
+            return err;
+        }
+        _state = DerivationState.Derived;
+        _executedSinceDerive = false;
+        return null;
     }
 
-    private void DeriveQuestionMarkParameters(AdoOpenSession session, string text)
+    private CallResult? DeriveQuestionMarkParameters(AdoOpenSession session, string text)
     {
         string rewritten = AdoSqlText.RewriteQuestionMarkParameters(text, out int qCount);
-        if (qCount == 0)
-        {
-            return;
-        }
         // Only derive when the SQL prepares against the open database (r-str-ado-act/ado-params #32-#33: missing table K yields 0).
+        // When qCount == 0, still check whether the SQL declares/uses named parameters (r-oledb-odbc/param-derived d7 #131-#139)
+        // and refuse honestly instead of silently returning 0; propagate IsNotModelled rather than swallowing it.
         bool preparedOk = false;
         if (AdoSqlText.IsSelect(rewritten))
         {
-            using CalcDb.Sql.BoundSelect? plan = CalcDb.Sql.BoundSelect.Prepare(rewritten, session.SqlWithViews, out _);
+            using CalcDb.Sql.BoundSelect? plan = CalcDb.Sql.BoundSelect.Prepare(rewritten, session.SqlWithViews, out CalcDb.Sql.SqlFailure? sqlFail);
+            if (sqlFail is { IsNotModelled: true })
+            {
+                return CallResult.Fail(Failure.NotModelled(sqlFail.NotModelled!, sqlFail.Message));
+            }
+            if (qCount == 0)
+            {
+                return plan is { Parameters.Count: > 0 }
+                    ? NotImplemented("Parameters derivation for named/declared PARAMETERS on adCmdText (not recorded)")
+                    : null;
+            }
             preparedOk = plan is not null;
         }
         else if (CalcDb.Sql.ActionParser.IsAction(rewritten))
         {
-            using CalcDb.Sql.BoundAction? plan = CalcDb.Sql.BoundAction.Prepare(rewritten, session.Sql, out _);
+            using CalcDb.Sql.BoundAction? plan = CalcDb.Sql.BoundAction.Prepare(rewritten, session.Sql, out CalcDb.Sql.SqlFailure? sqlFail);
+            if (sqlFail is { IsNotModelled: true })
+            {
+                return CallResult.Fail(Failure.NotModelled(sqlFail.NotModelled!, sqlFail.Message));
+            }
+            if (qCount == 0)
+            {
+                return plan is { Parameters.Count: > 0 }
+                    ? NotImplemented("Parameters derivation for named/declared PARAMETERS on action SQL (not recorded)")
+                    : null;
+            }
             preparedOk = plan is not null;
+        }
+        else if (qCount == 0)
+        {
+            return null;
         }
         if (!preparedOk)
         {
-            return;
+            return null;
         }
         // r-ado-1b/param-refresh-after-text-change #20/#23/#36, r-fix-wire-ado/ado-params-manual-append #27,
         // r-oledb-odbc/param-derived d6/d8/d9: each ? derives Name="?", Type=202 (adVarWChar), Direction=1,
@@ -572,11 +618,15 @@ internal sealed class ParametersObject : AdoObject
             };
             _items.Add(derived);
         }
+        return null;
     }
 
     private CallResult GetCount()
     {
-        EnsureDerivedIfPending();
+        if (EnsureDerivedIfPending() is { } err)
+        {
+            return err;
+        }
         return Int32(_items.Count);
     }
 
@@ -603,6 +653,10 @@ internal sealed class ParametersObject : AdoObject
             _executedSinceDerive = false;
             return CallResult.Nothing;
         }
+        if (_owner.CommandTypeValue is not (AdoSqlText.AdCmdText or AdoSqlText.AdCmdUnknown))
+        {
+            return NotImplemented($"Parameters.Refresh for CommandType {_owner.CommandTypeValue} (not recorded)");
+        }
         if (_state == DerivationState.Derived && !_executedSinceDerive)
         {
             // r-fix-wire-ado/ado-params-refresh-only #18/#25, r-oledb-odbc/param-derived d6/d7/d8/d9:
@@ -615,7 +669,10 @@ internal sealed class ParametersObject : AdoObject
         // r-ado-1b/cmd-before-connection #37 (Refresh replacing manually appended parameter with derived ?):
         ClearAll();
         _state = DerivationState.Pending;
-        EnsureDerivedIfPending();
+        if (EnsureDerivedIfPending() is { } err)
+        {
+            return err;
+        }
         return CallResult.Nothing;
     }
 
@@ -631,7 +688,10 @@ internal sealed class ParametersObject : AdoObject
 
     private CallResult Item(nint index)
     {
-        EnsureDerivedIfPending();
+        if (EnsureDerivedIfPending() is { } err)
+        {
+            return err;
+        }
         return AdoLookup.Find(index, Names, out int ordinal) switch
         {
             AdoLookup.Outcome.Found => Object(_items[ordinal]),
@@ -765,7 +825,7 @@ internal sealed unsafe class ParameterObject : AdoObject
         }
         if (!AdoTypes.DataTypeEnumDecl.Constants.Any(c => c.Value == type.Value))
         {
-            return Fail(AdoErrors.ArgumentsWrongType);
+            return NotImplemented($"Parameter.Type = {type.Value} (not recorded)");
         }
         // r-ado-1b/param-mutate-after-append #40: Type is mutable after Append.
         Type = type.Value;
@@ -781,7 +841,7 @@ internal sealed unsafe class ParameterObject : AdoObject
         }
         if (dir.Value is < 0 or > 4)
         {
-            return Fail(AdoErrors.ArgumentsWrongType);
+            return NotImplemented($"Parameter.Direction = {dir.Value} (not recorded)");
         }
         // r-ado-1b/param-mutate-after-append #77, #88: Direction is mutable after Append.
         _direction = dir.Value;
@@ -795,6 +855,10 @@ internal sealed unsafe class ParameterObject : AdoObject
         {
             return NotImplemented("Parameter.Size = a value that is not a number");
         }
+        if (size.Value < -1)
+        {
+            return NotImplemented($"Parameter.Size = {size.Value} (not recorded)");
+        }
         // r-ado-1b/param-mutate-after-append #41: Size is mutable after Append.
         Size = size.Value;
         return CallResult.Nothing;
@@ -806,6 +870,12 @@ internal sealed unsafe class ParameterObject : AdoObject
         if (attrs is null)
         {
             return NotImplemented("Parameter.Attributes = a value that is not a number");
+        }
+        // ParameterAttributesEnum bits: adParamSigned (16), adParamNullable (64), adParamLong (128).
+        const int validAttributesMask = 16 | 64 | 128;
+        if ((attrs.Value & ~validAttributesMask) != 0)
+        {
+            return NotImplemented($"Parameter.Attributes = {attrs.Value} (not recorded)");
         }
         // r-ado-1b/param-mutate-after-append #110, #112: Attributes is mutable after Append (64, 16).
         _attributes = attrs.Value;
@@ -964,7 +1034,8 @@ internal static unsafe class AdoCommandParameters
             {
                 // r-ado-1b/param-refresh-after-text-change #47/#52: Prepared=True saved query executed with 0 parameters
                 // fails 0x80040E10 "Parameter <name> has no default value." (SQLState 3748, NativeError -542379020).
-                providerError = AdoSqlErrors.ParameterNoDefaultValue(expected[0].Name);
+                string rawName = expected[0].Name is ['[', .., ']'] ? expected[0].Name[1..^1] : expected[0].Name;
+                providerError = AdoSqlErrors.ParameterNoDefaultValue(rawName);
                 return null;
             }
             providerError = isSavedQuery
@@ -1076,13 +1147,15 @@ internal static unsafe class AdoCommandParameters
         {
             return false;
         }
-        NativeVariant src = incoming;
-        NativeVariant dst = default;
-        if (OleAut.VariantChangeTypeEx(&dst, &src, SessionLocale.Lcid, 0, (ushort)VarType.I4) < 0)
+        // Restrict to integer strings (r-ado-1b/cmd-execute-args #26, param-mutate-after-append #45 test "20");
+        // do not silently banker-round fractional/boolean/currency strings via VariantChangeTypeEx.
+        string? rawText = incoming.Pointer != 0 ? System.Runtime.InteropServices.Marshal.PtrToStringBSTR(incoming.Pointer) : null;
+        if (rawText is null || !int.TryParse(rawText, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out int parsedInt))
         {
             return false;
         }
-        coerced = dst;
+        using OwnedVariant owned = OwnedVariant.FromInt32(parsedInt);
+        coerced = *owned.Pointer;
         return true;
     }
 

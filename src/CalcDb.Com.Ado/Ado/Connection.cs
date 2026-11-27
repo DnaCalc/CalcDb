@@ -2162,6 +2162,7 @@ internal sealed unsafe class ConnectionObject : AdoObject
         {
             cmdType = defaultCommandType;
         }
+        explicitCommand?.OnCommandExecuted();
 
         void EmitWillExec() => AdoEvents.WillExecute(_events, commandText, -1, -1, options, explicitCommand, null, this);
 
