@@ -47,6 +47,14 @@ internal sealed unsafe class DatabaseObject : DaoObject
             return Live(self, d => d.CreateRelation(name, table, foreignTable, attributes));
         })
         .Get("Properties", (self, args) => Live(self, d => d.PropertiesCollection()))
+        .Method("CreateProperty", (self, args) =>
+        {
+            nint name = args.Length > 0 ? args[0] : 0;
+            nint type = args.Length > 1 ? args[1] : 0;
+            nint value = args.Length > 2 ? args[2] : 0;
+            nint ddl = args.Length > 3 ? args[3] : 0;
+            return Live(self, d => PropertyObject.CreateDraft(d.Engine, name, type, value, ddl));
+        })
         .Get("Updatable", (self, args) => Live(self, d => d.UpdatableResult()))
         .Get("Transactions", (self, args) => Live(self, d => Bool(true)))
         .Get("Connect", (self, args) => Live(self, d => Text("")))
@@ -2370,13 +2378,14 @@ internal sealed unsafe class DatabaseObject : DaoObject
         return container is null ? null : Catalog.Entries.FirstOrDefault(e => e.ParentId == container.Id && e.Name == "MSysDb");
     }
 
-    /// <summary>The 11 built-ins and the MSysDb stored properties (R-DAO-1 DAO-PROP; r-dao-1b/db-properties-enumerated-accdb).</summary>
+    /// <summary>The 11 built-ins and the MSysDb stored properties (R-DAO-1 DAO-PROP; r-dao-1b/db-properties-enumerated-accdb, r-q51-codecs-props-compact/prop-db-lifecycle-accdb).</summary>
     private CallResult PropertiesCollection()
     {
         if (_properties is null)
         {
             PropertyMap? stored = null;
-            if (DatabaseDocument() is { } document)
+            CatalogEntry? document = DatabaseDocument();
+            if (document is not null)
             {
                 stored = StoredProperties(document, out string? failure);
                 if (failure is not null)
@@ -2384,9 +2393,66 @@ internal sealed unsafe class DatabaseObject : DaoObject
                     return CallResult.Fail(Failure.NotImplemented("Database.Properties when the MSysDb property blob cannot be read: " + failure));
                 }
             }
-            _properties = new PropertiesObject(this, BuiltInProperties.With(BuiltInProperties.Database, stored));
+            PropertyMutationHost? host = document is null
+                ? null
+                : new PropertyMutationHost(
+                    Append: prop => MutateUserProperty(document.Root, "Database (MSysDb)", PropertySectionKind.ObjectValues, "", prop.Name, prop, isAppend: true),
+                    Update: prop => MutateUserProperty(document.Root, "Database (MSysDb)", PropertySectionKind.ObjectValues, "", prop.Name, prop, isAppend: false),
+                    Delete: name => MutateUserProperty(document.Root, "Database (MSysDb)", PropertySectionKind.ObjectValues, "", name, propertyValue: null, isAppend: false));
+            _properties = new PropertiesObject(this, BuiltInProperties.With(BuiltInProperties.Database, stored), host);
         }
         return Object(_properties);
+    }
+
+    /// <summary>
+    /// Persist a user-defined DAO <c>Property</c> Append, Value put, or Delete into <c>MSysObjects.LvProp</c>
+    /// (W-05, W-07, W-08 / R-CAT-1, R-DAO-1; <c>evidence/r-q51-codecs-props-compact/prop-db-lifecycle-accdb</c>,
+    /// <c>prop-tdf-lifecycle-accdb</c>, <c>prop-fld-lifecycle-accdb</c>, and Jet 4 MDB twins).
+    /// </summary>
+    internal CallResult MutateUserProperty(
+        RowId objectRow,
+        string objectLabel,
+        PropertySectionKind sectionKind,
+        string mapName,
+        string propertyName,
+        StoredProperty? propertyValue,
+        bool isAppend,
+        TableDefObject? tableDef = null)
+    {
+        if (ReadOnly)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.UserPropertyReadOnly", $"mutating user property '{propertyName}' on read-only {objectLabel} is not recorded (evidence/r-q51-codecs-props-compact)"));
+        }
+        if (InheritedWritable)
+        {
+            return InheritedWriteRefusal($"Property mutation on {objectLabel}");
+        }
+        TransactionCoordinator workspace = _workspace.Transactions;
+        if (workspace.Depth > 0)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.UserPropertyInTransaction", $"mutating user property '{propertyName}' on {objectLabel} inside a transaction is not recorded (evidence/r-q51-codecs-props-compact)"));
+        }
+        if (OpenSchemaWriter(out string? writerFailure) is not { } writer)
+        {
+            return CallResult.Fail(Failure.NotImplemented($"Property mutation on {objectLabel}: " + writerFailure));
+        }
+        SchemaOutcome outcome = writer.MutateUserProperty(workspace, objectRow, objectLabel, sectionKind, mapName, propertyName, propertyValue, isAppend);
+        if (outcome.PublishedAny)
+        {
+            if (SchemaPublished(outcome.ExtentPages) is { } stale)
+            {
+                return CallResult.Fail(Failure.NotImplemented(stale));
+            }
+            tableDef?.Refresh(preserveProperties: true);
+        }
+        if (outcome.Refused is { } refused)
+        {
+            return CallResult.Fail(Failure.NotImplemented($"Property mutation on {objectLabel}: " + refused.NotWritten));
+        }
+        AcceptOutcome accepted = outcome.Accepted;
+        return accepted.Error is { } error ? EditPublication.Published(error)
+            : accepted.Open != MutationOpen.None ? EditPublication.Open(accepted.Open, accepted.Detail)
+            : CallResult.Nothing;
     }
 
     /// <summary>ReplicaID and DesignMasterID of an unreplicated database: VT_BSTR with a null pointer (r-dao-1b/db-properties-enumerated-accdb and -mdb).</summary>

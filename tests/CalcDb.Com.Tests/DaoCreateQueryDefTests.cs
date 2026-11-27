@@ -427,9 +427,9 @@ public sealed unsafe class DaoCreateQueryDefTests : IDisposable
         Assert.NotNull(dml.Failure);
         Assert.Equal(unchecked((int)0x80004001), dml.Failure!.Scode);
 
+        // SQL CREATE TABLE flushes the deferred QueryDef commit and succeeds (r-q54-excl-ddl-ix-cmd/qd-deferred-then-ddl-accdb).
         CallResult ddl = Method(db2, "Execute", "CREATE TABLE U (ID LONG)", DbFailOnError);
-        Assert.NotNull(ddl.Failure);
-        Assert.Equal(unchecked((int)0x80004001), ddl.Failure!.Scode);
+        Assert.Null(ddl.Failure);
 
         Assert.Null(Method(db2, "Close").Failure);
 

@@ -1693,10 +1693,57 @@ public sealed class SchemaWriter
 
         DeferredCatalogCommit? absorbedDeferred = null;
         bool flushedPriorDeferred = false;
+        List<DaoPropertyStep> daoSteps = request.Route == SchemaRoute.Dao ? BuildDaoPropertySteps(request.Fields) : [];
+        if (request.Route == SchemaRoute.Sql
+            && !exclusiveSession
+            && !request.IsMakeTable
+            && preparedFk is null
+            && !hasExtendedType
+            && workspace.TryPeekDeferredCatalogCommit(_cache, out DeferredCatalogCommit? sqlPriorDeferred)
+            && sqlPriorDeferred!.Kind == DeferredCatalogCommitKind.QueryDef)
+        {
+            // evidence/r-q54-excl-ddl-ix-cmd/qd-deferred-then-ddl-accdb, qd-deferred-then-ddl-mdb (after-qd1-then-sql-ddl):
+            // SQL CREATE TABLE immediately after CreateQueryDef flushes the deferred QueryDef commit (+1, MSysQueries
+            // TableDef counts) before publishing CREATE TABLE (+1, +2 total on 0xE02).
+            (MutationOpen flushOpen, string? flushDetail) = workspace.FlushDeferredCatalogCommit(_cache);
+            if (flushOpen != MutationOpen.None)
+            {
+                return new SchemaOutcome(null, new AcceptOutcome(false, null, flushOpen, flushDetail), _pageCount);
+            }
+            flushedPriorDeferred = true;
+        }
         if (request.Route == SchemaRoute.Dao
             && workspace.TryPeekDeferredCatalogCommit(_cache, out DeferredCatalogCommit? priorDeferred))
         {
-            if (priorDeferred!.Kind != DeferredCatalogCommitKind.TableDefAppend)
+            if (priorDeferred!.Kind == DeferredCatalogCommitKind.QueryDef)
+            {
+                // evidence/r-q54-excl-ddl-ix-cmd/qd-deferred-then-ddl-accdb, qd-deferred-then-ddl-mdb (after-qd2-then-dao-tdf, after-s2-close):
+                // DAO TableDefs.Append immediately after CreateQueryDef absorbs the deferred QueryDef commit into
+                // Commit 1 (+1 on 0xE02, writing MSysQueries TableDef counts) and defers MSysObjects/MSysACEs TableDef
+                // counts to the trailing TableDefAppend deferred commit (+2 at Close: deferred counts + extent return).
+                byte[] qdFirstBlob = request.Fields.Count == 1
+                    ? PropertyBlob.Encode([new PropertyMap(PropertySectionKind.ColumnValues, request.Fields[0].Name, [DaoFieldRequired])])
+                    : [];
+                if (exclusiveSession
+                    || request.Fields.Count != 1
+                    || request.AllIndexes.Count > 0
+                    || request.ForeignKey is not null
+                    || hasExtendedType
+                    || daoSteps.Count != 1
+                    || qdFirstBlob.Length > LongValuePlan.InlinePayloadMax)
+                {
+                    return new SchemaOutcome(
+                        null,
+                        new AcceptOutcome(
+                            false,
+                            null,
+                            MutationOpen.Publication,
+                            "a DAO TableDefs.Append (exclusive, multi-field, indexed, FK, extended-type, AutoNumber/Text/Memo, or LVAL-spilling) while a QueryDef deferred catalog commit is pending is not recorded (evidence/r-q54-excl-ddl-ix-cmd/qd-deferred-then-ddl-accdb records a 1-Long-field inline-LvProp shared TableDefs.Append)"),
+                        _pageCount);
+                }
+                absorbedDeferred = priorDeferred;
+            }
+            else if (priorDeferred.Kind != DeferredCatalogCommitKind.TableDefAppend)
             {
                 return new SchemaOutcome(
                     null,
@@ -1704,9 +1751,11 @@ public sealed class SchemaWriter
                         false,
                         null,
                         MutationOpen.Publication,
-                        "a DAO TableDefs.Append while a QueryDef deferred catalog commit is pending is not recorded (qualified.md R-CAT-1 CAT-Q r-q39)"),
+                        "a DAO TableDefs.Append while an unknown deferred catalog commit is pending is not recorded"),
                     _pageCount);
             }
+            else
+            {
             if (!exclusiveSession)
             {
                 return new SchemaOutcome(
@@ -1758,8 +1807,10 @@ public sealed class SchemaWriter
                         $"elapsed {elapsed.TotalSeconds:F3} s since the previous DAO TableDefs.Append falls in the unobserved [{TransactionCoordinator.ObservedSameBurstMax.TotalSeconds:F2} s, {TransactionCoordinator.ObservedNewBurstMin.TotalSeconds:F1} s) deferred-TableDef window (evidence/r-q41-create-session-counter/ddl-tabledefs-append-*)"),
                     _pageCount);
             }
+            }
         }
 
+        bool deferCatalogCountsAfterQueryDef = absorbedDeferred is { Kind: DeferredCatalogCommitKind.QueryDef };
         bool allowedWithReserved =
             (request.Route == SchemaRoute.Sql && !hasExtendedType && !request.Fields.Any(f => f.Required))
             || (hasDefault && preparedFk is null && !hasExtendedType)
@@ -1780,11 +1831,10 @@ public sealed class SchemaWriter
         }
         bool useSessionExtentReservation =
             workspace.Depth == 0
-            && (request.Route is SchemaRoute.Sql or SchemaRoute.Ado)
             && !workspace.HasGlobalMapAllocationOrReservation(_cache)
             && sessionReserved.Count == 0
-            && (hasDefault || preparedFk is not null);
-        List<DaoPropertyStep> daoSteps = request.Route == SchemaRoute.Dao ? BuildDaoPropertySteps(request.Fields) : [];
+            && (((request.Route is SchemaRoute.Sql or SchemaRoute.Ado) && (hasDefault || preparedFk is not null))
+                || deferCatalogCountsAfterQueryDef);
         bool daoWithDraftIndexes = request.Route == SchemaRoute.Dao && request.AllIndexes.Count > 0;
         if (daoWithDraftIndexes && workspace.IsExclusiveSession(_cache))
         {
@@ -1797,8 +1847,8 @@ public sealed class SchemaWriter
         AcceptOutcome accepted = workspace.AcceptSchemaChange(
             _cache,
             ObjectSemantics,
-            p => CompileCreateTable(p, compileRequest, preparedFk, dateCreateBits, dateUpdateBits, initialLvProp: null, firstDaoStep: daoSteps.Count > 0 ? daoSteps[0] : null, out tdefPage, out _, out objectRow, out _, out extent, absorbedDeferred, sessionReserved, useSessionExtentReservation),
-            allowPendingDeferredKind: absorbedDeferred is not null ? DeferredCatalogCommitKind.TableDefAppend : null);
+            p => CompileCreateTable(p, compileRequest, preparedFk, dateCreateBits, dateUpdateBits, initialLvProp: null, firstDaoStep: daoSteps.Count > 0 ? daoSteps[0] : null, out tdefPage, out _, out objectRow, out _, out extent, absorbedDeferred, sessionReserved, useSessionExtentReservation, deferCatalogCounts: deferCatalogCountsAfterQueryDef),
+            allowPendingDeferredKind: absorbedDeferred?.Kind);
         if (!accepted.Accepted)
         {
             return new SchemaOutcome(null, accepted, _pageCount, PublishedAny: flushedPriorDeferred);
@@ -1870,11 +1920,26 @@ public sealed class SchemaWriter
             }
             return new SchemaOutcome(null, accepted, extent, PublishedAny: true);
         }
+        List<PageEdit> deferredTdefEdits = [new PageEdit(tdefPage, NoOpPageDelta.Instance, PageRole.Catalog)];
+        List<LockResource> deferredTdefFootprint = [new LockResource(tdefPage, LockPurpose.TableDef)];
+        if (deferCatalogCountsAfterQueryDef)
+        {
+            TableDefinition objectsDef = _catalog.ObjectTable;
+            int[] objIdxIncrements = [.. objectsDef.PhysicalIndexes.Select(i => i.Number)];
+            deferredTdefEdits.Add(new PageEdit(objectsDef.FirstPage, new TableDefUniqueCountsDelta(objIdxIncrements, _d, rowCountDelta: 1), PageRole.Catalog));
+            deferredTdefFootprint.Add(new LockResource(objectsDef.FirstPage, LockPurpose.TableDef));
+            if (SystemTable("MSysACEs", out _) is { } acesDef)
+            {
+                int[] aceIdxIncrements = acesDef.PhysicalIndexes.Count > 0 ? [acesDef.PhysicalIndexes[0].Number] : [];
+                deferredTdefEdits.Add(new PageEdit(acesDef.FirstPage, new TableDefUniqueCountsDelta(aceIdxIncrements, _d, rowCountDelta: DefaultAdminSecurity.NewTableAces.Count), PageRole.Catalog));
+                deferredTdefFootprint.Add(new LockResource(acesDef.FirstPage, LockPurpose.TableDef));
+            }
+        }
         workspace.SetDeferredCatalogCommit(
             _cache,
             new DeferredCatalogCommit(
-                [new PageEdit(tdefPage, NoOpPageDelta.Instance, PageRole.Catalog)],
-                [new LockResource(tdefPage, LockPurpose.TableDef)],
+                deferredTdefEdits,
+                deferredTdefFootprint,
                 Kind: DeferredCatalogCommitKind.TableDefAppend,
                 QueuedAt: workspace.Clock(),
                 PendingTableDefPage: tdefPage));
@@ -5038,8 +5103,23 @@ public sealed class SchemaWriter
         {
             return new SchemaOutcome(new SchemaRefusal(null, $"DROP TABLE of '{entry.Name}' with external MSysObjects.LvProp LVAL pages or non-ColumnValues LvProp sections (e.g. CheckConstraints) is not recorded"), default, _pageCount);
         }
+        bool flushedPriorDeferred = false;
+        if (!workspace.IsExclusiveSession(_cache)
+            && workspace.TryPeekDeferredCatalogCommit(_cache, out DeferredCatalogCommit? priorDeferred)
+            && priorDeferred!.Kind == DeferredCatalogCommitKind.QueryDef)
+        {
+            // evidence/r-q54-excl-ddl-ix-cmd/qd-deferred-then-ddl-accdb, qd-deferred-then-ddl-mdb (after-qd3-then-drop):
+            // SQL DROP TABLE immediately after CreateQueryDef flushes the deferred QueryDef commit (+1, MSysQueries
+            // TableDef counts) before publishing DROP TABLE (+1, +2 total on 0xE02).
+            (MutationOpen flushOpen, string? flushDetail) = workspace.FlushDeferredCatalogCommit(_cache);
+            if (flushOpen != MutationOpen.None)
+            {
+                return new SchemaOutcome(null, new AcceptOutcome(false, null, flushOpen, flushDetail), _pageCount);
+            }
+            flushedPriorDeferred = true;
+        }
         AcceptOutcome accepted = workspace.AcceptSchemaChange(_cache, ObjectSemantics, p => CompileDropTable(p, entry, table));
-        return new SchemaOutcome(null, accepted, _pageCount, PublishedAny: Published(accepted));
+        return new SchemaOutcome(null, accepted, _pageCount, PublishedAny: Published(accepted) || flushedPriorDeferred);
     }
 
     /// <summary>
@@ -5838,6 +5918,222 @@ public sealed class SchemaWriter
     }
 
     /// <summary>
+    /// Append, update, or delete a user-defined DAO <c>Property</c> in an <c>MSysObjects.LvProp</c> MR2 blob
+    /// (W-05, W-07, W-08 / R-CAT-1, R-DAO-1; <c>evidence/r-q51-codecs-props-compact/prop-db-lifecycle-accdb</c>,
+    /// <c>prop-tdf-lifecycle-accdb</c>, <c>prop-fld-lifecycle-accdb</c>, <c>prop-errors-accdb</c>, and Jet 4 MDB twins).
+    /// Preserves <c>MSysObjects.DateUpdate</c> unchanged, keeps deleted property names in the MR2 <c>Names</c> dictionary,
+    /// removes empty value sections (yielding a Names-only MR2 blob when all properties are deleted), and shares the
+    /// <c>MSysObjects.LvProp</c> LVAL page across updates and objects.
+    /// </summary>
+    public SchemaOutcome MutateUserProperty(
+        TransactionCoordinator workspace,
+        RowId objectRow,
+        string objectLabel,
+        PropertySectionKind sectionKind,
+        string mapName,
+        string propertyName,
+        StoredProperty? propertyValue,
+        bool isAppend)
+    {
+        if (FileRefusal(allowJet4Mdb: true) is { } file)
+        {
+            return new SchemaOutcome(file, default, _pageCount);
+        }
+        if (workspace.Depth > 0)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, $"mutating user property '{propertyName}' on {objectLabel} inside BeginTrans is not recorded (evidence/r-q51-codecs-props-compact/prop-db-lifecycle-accdb)"), default, _pageCount);
+        }
+        if (workspace.IsExclusiveSession(_cache))
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, $"mutating user property '{propertyName}' on {objectLabel} in an exclusive session is not recorded (evidence/r-q51-codecs-props-compact/prop-db-lifecycle-accdb)"), default, _pageCount);
+        }
+
+        TableDefinition objects = _catalog.ObjectTable;
+        ColumnDescriptor lvPropCol = objects.Columns[Ordinal(objects, "LvProp")];
+        using RowView? objResolved = RowResolver.Resolve(_cache, _d, objectRow, out TraversalFailure? objFailure);
+        if (objResolved is not { } objRow)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, $"{objectLabel} MSysObjects row {objectRow} cannot be read: {objFailure?.Predicate ?? "deleted"}"), default, _pageCount);
+        }
+        if (objRow.Data != objRow.Root)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, $"{objectLabel} MSysObjects row {objectRow} is an overflow row: rewriting it is not recorded"), default, _pageCount);
+        }
+        if (!RowEnvelope.TryOpen(objRow.Body, _d, out RowEnvelope env, out string? envFail))
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, $"{objectLabel} MSysObjects row {objectRow}: {envFail}"), default, _pageCount);
+        }
+        if (env.ColumnCount != objects.MaxColumns)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, $"{objectLabel} MSysObjects row {objectRow} records {env.ColumnCount} of {objects.MaxColumns} columns"), default, _pageCount);
+        }
+        int knownFixedEnd = objects.KnownFixedEnd(env.ColumnCount, _d);
+        FieldRead lvRead = env.ReadField(lvPropCol, knownFixedEnd);
+        if (lvRead.Outcome == FieldOutcome.Malformed)
+        {
+            return new SchemaOutcome(new SchemaRefusal(null, $"{objectLabel} MSysObjects.LvProp: {lvRead.Failure}"), default, _pageCount);
+        }
+
+        PropertyBlob? existingBlob = null;
+        if (lvRead.Outcome == FieldOutcome.Bytes)
+        {
+            if (LongValuePlan.Inspect(objRow.Body[lvRead.Start..lvRead.End], out string? planFail) is not { } inspected)
+            {
+                return new SchemaOutcome(new SchemaRefusal(null, $"{objectLabel} MSysObjects.LvProp: {planFail}"), default, _pageCount);
+            }
+            if (inspected.Form == LongValueForm.Chain)
+            {
+                return new SchemaOutcome(new SchemaRefusal(null, $"mutating user property '{propertyName}' on {objectLabel} with a chained MSysObjects.LvProp is not recorded (evidence/r-q51-codecs-props-compact)"), default, _pageCount);
+            }
+            NativeValue lvValue = FieldDecoder.Read(objRow, objects, lvPropCol, _cache, _d);
+            if (lvValue.Kind != NativeKind.LongBinary || lvValue.Bytes is not { } rawBlob)
+            {
+                return new SchemaOutcome(new SchemaRefusal(null, $"{objectLabel} MSysObjects.LvProp could not be decoded ({lvValue.Kind}: {lvValue.Failure})"), default, _pageCount);
+            }
+            if (PropertyBlob.Read(rawBlob, out string? blobFail) is not { } decoded)
+            {
+                return new SchemaOutcome(new SchemaRefusal(null, $"{objectLabel} MSysObjects.LvProp: {blobFail}"), default, _pageCount);
+            }
+            if (decoded.OpaqueSections != 0)
+            {
+                return new SchemaOutcome(new SchemaRefusal(null, $"{objectLabel} MSysObjects.LvProp holds {decoded.OpaqueSections} opaque section(s): rewriting opaque MR2 sections is not recorded"), default, _pageCount);
+            }
+            if (decoded.NamesSections != 1)
+            {
+                return new SchemaOutcome(new SchemaRefusal(null, $"{objectLabel} MSysObjects.LvProp holds {decoded.NamesSections} Names section(s): only a single Names section is recorded"), default, _pageCount);
+            }
+            existingBlob = decoded;
+        }
+
+        List<string> names = existingBlob is null ? [] : [.. existingBlob.Names];
+        List<PropertyMap> updatedMaps = existingBlob is null ? [] : [.. existingBlob.Maps];
+        int targetMapIndex = -1;
+        for (int i = 0; i < updatedMaps.Count; i++)
+        {
+            PropertyMap m = updatedMaps[i];
+            if (m.Kind == sectionKind && string.Equals(m.MapName, mapName, StringComparison.OrdinalIgnoreCase))
+            {
+                targetMapIndex = i;
+                break;
+            }
+        }
+
+        if (propertyValue is null)
+        {
+            if (targetMapIndex >= 0)
+            {
+                PropertyMap existing = updatedMaps[targetMapIndex];
+                List<StoredProperty> kept = [.. existing.Properties.Where(p => !string.Equals(p.Name, propertyName, StringComparison.OrdinalIgnoreCase))];
+                if (kept.Count == 0)
+                {
+                    updatedMaps.RemoveAt(targetMapIndex);
+                }
+                else
+                {
+                    updatedMaps[targetMapIndex] = new PropertyMap(existing.Kind, existing.MapName, kept);
+                }
+            }
+        }
+        else if (isAppend)
+        {
+            if (!names.Contains(propertyValue.Name, StringComparer.Ordinal))
+            {
+                names.Add(propertyValue.Name);
+            }
+            if (targetMapIndex >= 0)
+            {
+                PropertyMap existing = updatedMaps[targetMapIndex];
+                List<StoredProperty> props = [.. existing.Properties, propertyValue];
+                updatedMaps[targetMapIndex] = new PropertyMap(existing.Kind, existing.MapName, props);
+            }
+            else
+            {
+                updatedMaps.Add(new PropertyMap(sectionKind, mapName, [propertyValue]));
+            }
+        }
+        else
+        {
+            if (targetMapIndex < 0)
+            {
+                return new SchemaOutcome(new SchemaRefusal(null, $"updating user property '{propertyName}' on {objectLabel}: target map '{mapName}' is missing from MSysObjects.LvProp"), default, _pageCount);
+            }
+            PropertyMap existing = updatedMaps[targetMapIndex];
+            List<StoredProperty> props = [.. existing.Properties];
+            int propIndex = props.FindIndex(p => string.Equals(p.Name, propertyName, StringComparison.OrdinalIgnoreCase));
+            if (propIndex < 0)
+            {
+                return new SchemaOutcome(new SchemaRefusal(null, $"updating user property '{propertyName}' on {objectLabel}: property is missing from MSysObjects.LvProp"), default, _pageCount);
+            }
+            string canonicalName = props[propIndex].Name;
+            if (!names.Contains(canonicalName, StringComparer.Ordinal))
+            {
+                names.Add(canonicalName);
+            }
+            props[propIndex] = propertyValue with { Name = canonicalName };
+            updatedMaps[targetMapIndex] = new PropertyMap(existing.Kind, existing.MapName, props);
+        }
+
+        IReadOnlyList<uint> sessionReserved = workspace.SessionReservedPages(_cache);
+        bool useSessionExtentReservation = !workspace.IsExclusiveSession(_cache) && !workspace.HasGlobalMapActivity(_cache);
+        ulong extent = _pageCount;
+        PropertyMap[] finalMaps = [.. updatedMaps];
+        AcceptOutcome accepted = workspace.AcceptSchemaChange(
+            _cache,
+            ObjectSemantics,
+            p => CompileMutateUserProperty(
+                p,
+                objectRow,
+                names,
+                finalMaps,
+                sessionReserved,
+                useSessionExtentReservation,
+                out extent));
+        return new SchemaOutcome(null, accepted, accepted.Accepted ? extent : _pageCount, PublishedAny: Published(accepted));
+    }
+
+    private CompiledChange CompileMutateUserProperty(
+        FileParticipant p,
+        RowId objectRow,
+        IReadOnlyList<string> explicitNames,
+        PropertyMap[] propMaps,
+        IReadOnlyList<uint> sessionReserved,
+        bool useSessionExtentReservation,
+        out ulong extent)
+    {
+        extent = _pageCount;
+        var work = new Work(p);
+        var allocator = new PageAllocator(_cache, _d, _pageCount, sessionReserved);
+        List<uint> releasedAtClose = [];
+        List<uint> reservedExtentPages = [];
+        if (!ApplyObjectProperties(
+            work,
+            p.Overlay,
+            allocator,
+            objectRow,
+            propMaps,
+            dateUpdateBits: 0,
+            releasedAtClose,
+            explicitNames: explicitNames,
+            useSessionExtentReservation: useSessionExtentReservation,
+            allowShrinkToInline: true,
+            allowTwoPageChain: false,
+            refuse65ByteBlob: false,
+            reservedExtentPages: reservedExtentPages,
+            allowSharedLvalPage: true,
+            updateDateUpdate: false))
+        {
+            return work.NotWritten();
+        }
+        extent = PageAllocator.ExtentOf(_cache, Math.Max(_pageCount, allocator.ExtentPages), p.Overlay);
+        return work.Change(
+            _cache,
+            releasedAtClose,
+            hasReservedExtent: reservedExtentPages.Count > 0,
+            reservedExtentPages: reservedExtentPages,
+            consumedReservedPages: allocator.ConsumedReservedPages);
+    }
+
+    /// <summary>
     /// Create a saved QueryDef through <paramref name="workspace"/>'s coordinator (W-07/saved-definition;
     /// qualified.md R-CAT-1 CAT-Q r-q39; evidence/r-q39-querydef-bytes):
     /// <list type="bullet">
@@ -6193,6 +6489,12 @@ public sealed class SchemaWriter
             if (priorQueryDeferred is not null)
             {
                 workspace.ClearDeferredCatalogCommit(_cache);
+            }
+            if (isAdoDdl)
+            {
+                // evidence/r-q50-jk44-ddl-vis/ddl-view-create-drop-accdb, ddl-view-create-drop-mdb (step 110 after-drop-close):
+                // ADO DROP VIEW / DROP PROCEDURE steps page-0 0xE02 +1 at Connection.Close even when page 1 does not change.
+                workspace.MarkCloseCommitRequired(_cache);
             }
             deletedObjectId = entry.Id;
         }
@@ -6731,7 +7033,8 @@ public sealed class SchemaWriter
         out ulong extent,
         DeferredCatalogCommit? absorbedDeferred = null,
         IReadOnlyList<uint>? sessionReserved = null,
-        bool useSessionExtentReservation = false)
+        bool useSessionExtentReservation = false,
+        bool deferCatalogCounts = false)
     {
         tdefPage = 0;
         mapPage = 0;
@@ -6825,7 +7128,7 @@ public sealed class SchemaWriter
         {
             Set(objects, row, "LvProp", new NativeValue(NativeKind.LongBinary) { Bytes = initialLvProp });
         }
-        if (!work.Insert(this, objects, row, out objectRow, extent: allocator.ExtentPages, externalAllocator: allocator))
+        if (!work.Insert(this, objects, row, out objectRow, extent: allocator.ExtentPages, externalAllocator: allocator, deferTableDefCountUpdate: deferCatalogCounts))
         {
             return work.NotWritten();
         }
@@ -6842,7 +7145,7 @@ public sealed class SchemaWriter
             Set(aces, ace, "SID", new NativeValue(NativeKind.Binary) { Bytes = DefaultAdminSecurity.Mask(sid, keystream) });
             Set(aces, ace, "ACM", Long(acm));
             Set(aces, ace, "FInheritable", new NativeValue(NativeKind.Boolean) { Boolean = false });
-            if (!work.Insert(this, aces, ace, out RowId aceRow, extent: allocator.ExtentPages, externalAllocator: allocator))
+            if (!work.Insert(this, aces, ace, out RowId aceRow, extent: allocator.ExtentPages, externalAllocator: allocator, deferTableDefCountUpdate: deferCatalogCounts))
             {
                 return work.NotWritten();
             }
@@ -7262,7 +7565,8 @@ public sealed class SchemaWriter
         List<uint>? reservedExtentPages = null,
         uint? longValueTicks = null,
         bool allowSharedLvalPage = false,
-        bool deferExtentReservation = false)
+        bool deferExtentReservation = false,
+        bool updateDateUpdate = true)
     {
         TableDefinition objects = _catalog.ObjectTable;
         var source = new PageSource(_cache, overlay);
@@ -7674,11 +7978,11 @@ public sealed class SchemaWriter
             newLvPropField = LongValuePlan.EncodeReference(LongValueForm.Chain, (uint)blob.Length, new RowLocator(pages[0], 0), stamp);
         }
 
-        // Re-encode the MSysObjects row preserving every column other than DateUpdate and LvProp byte-for-byte.
+        // Re-encode the MSysObjects row preserving every column other than DateUpdate (when requested) and LvProp byte-for-byte.
         var encodedFields = new EncodedField[objects.Columns.Count];
         for (int i = 0; i < objects.Columns.Count; i++)
         {
-            if (i == dateUpdateOrdinal)
+            if (updateDateUpdate && i == dateUpdateOrdinal)
             {
                 byte[] dateBytes = new byte[8];
                 BitConverter.TryWriteBytes(dateBytes, dateUpdateBits);
@@ -10028,7 +10332,9 @@ public sealed class SchemaWriter
         {
             return NotWritten("MSysACEs: " + readFailure);
         }
-        if (!work.Delete(this, _catalog.ObjectTable, entry.Root))
+        // evidence/r-q54-excl-ddl-ix-cmd/qd-deferred-then-ddl-mdb (call 89 DROP TABLE T2):
+        // catalogDelete: true allows removing an MSysObjects row with inline LvProp on Jet 4 MDB as well as ACCDB.
+        if (!work.Delete(this, _catalog.ObjectTable, entry.Root, catalogDelete: true))
         {
             return work.NotWritten();
         }

@@ -24,11 +24,21 @@ internal sealed unsafe class NewTableDefObject : DaoObject
         .Put("Name", (self, args) => { nint value = args[^1]; return Live(self, t => { t.Name = Args.Text(value) ?? ""; return CallResult.Nothing; }); })
         .Method("CreateField", (self, args) => { nint name = args.Length > 0 ? args[0] : 0, type = args.Length > 1 ? args[1] : 0, size = args.Length > 2 ? args[2] : 0; return Live(self, t => t.CreateField(name, type, size)); })
         .Method("CreateIndex", (self, args) => { nint name = args.Length > 0 ? args[0] : 0; return Live(self, t => NewIndexObject.Create(t.Engine, name)); })
+        .Method("CreateProperty", (self, args) =>
+        {
+            nint name = args.Length > 0 ? args[0] : 0;
+            nint type = args.Length > 1 ? args[1] : 0;
+            nint value = args.Length > 2 ? args[2] : 0;
+            nint ddl = args.Length > 3 ? args[3] : 0;
+            return Live(self, t => PropertyObject.CreateDraft(t.Engine, name, type, value, ddl));
+        })
+        .Get("Properties", (self, args) => Live(self, t => Object(t._properties ??= new PropertiesObject(t, BuiltInProperties.TableDef, new PropertyMutationHost(null, null, null, DetachedAppendErrorSource: "DAO.Properties")))))
         .Get("Fields", (self, args) => Live(self, t => Object(t.Fields)))
         .Get("Indexes", (self, args) => Live(self, t => Object(t.Indexes)))
         .Method("OpenRecordset", static (self, args) => CallResult.Fail(Failure.NotModelled("NotModelled.DraftTableDefOpenRecordset", "TableDef.OpenRecordset on a draft (unappended) TableDef is not recorded")));
 
     private readonly DatabaseObject _database;
+    private PropertiesObject? _properties;
 
     public NewTableDefObject(DatabaseObject database, string name) : base(Decl, Vtable, database.Engine, "DAO.TableDef")
     {
@@ -90,6 +100,7 @@ internal sealed unsafe class NewTableDefObject : DaoObject
 
     protected override void OnFinalRelease()
     {
+        _properties?.Release();
         Fields.Release();
         Indexes.Release();
     }
@@ -218,7 +229,15 @@ internal sealed unsafe class NewFieldObject : DaoObject
         .Get("FieldSize", (self, args) => ForwardOrDraft(self, "FieldSize", InvokeKind.PropertyGet, args, f => f.Fail(3267, DaoErrors.RecordsetFieldOnly)))
         .Get("OriginalValue", (self, args) => ForwardOrDraft(self, "OriginalValue", InvokeKind.PropertyGet, args, f => f.Fail(3251, DaoErrors.NotSupportedForType)))
         .Get("VisibleValue", (self, args) => ForwardOrDraft(self, "VisibleValue", InvokeKind.PropertyGet, args, f => f.Fail(3251, DaoErrors.NotSupportedForType)))
-        .Get("Properties", (self, args) => ForwardOrDraft(self, "Properties", InvokeKind.PropertyGet, args, _ => CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldProperties", "Field.Properties on an unappended draft Field is not recorded"))))
+        .Get("Properties", (self, args) => ForwardOrDraft(self, "Properties", InvokeKind.PropertyGet, args, f => Object(f._properties ??= new PropertiesObject(f, BuiltInProperties.TableDefField(f.Type), new PropertyMutationHost(null, null, null, DetachedAppendErrorSource: "DAO.Property")))))
+        .Method("CreateProperty", (self, args) =>
+        {
+            nint name = args.Length > 0 ? args[0] : 0;
+            nint type = args.Length > 1 ? args[1] : 0;
+            nint value = args.Length > 2 ? args[2] : 0;
+            nint ddl = args.Length > 3 ? args[3] : 0;
+            return ForwardOrDraft(self, "CreateProperty", InvokeKind.Method, args, f => PropertyObject.CreateDraft(f.Engine, name, type, value, ddl));
+        })
         .Put("Type", (self, args) => ((NewFieldObject)self).SetType(args[^1]))
         .Put("Attributes", (self, args) => ((NewFieldObject)self).SetAttributes(args[^1]))
         .Put("DefaultValue", (self, args) => ((NewFieldObject)self).Keep("DefaultValue", args[^1], v => Args.TypeOf(v) == VarType.Bstr))
@@ -230,6 +249,7 @@ internal sealed unsafe class NewFieldObject : DaoObject
     private int _attributes;
     private DefinitionCollection? _attachedOwner;
     private DefinitionFieldObject? _attachedField;
+    private PropertiesObject? _properties;
 
     /// <summary>The draft Fields this field was appended to, or null.</summary>
     public NewFieldsObject? AppendedTo { get; set; }
@@ -598,6 +618,7 @@ internal sealed unsafe class NewFieldObject : DaoObject
 
     protected override void OnFinalRelease()
     {
+        _properties?.Release();
         if (_attachedOwner is not null)
         {
             _attachedOwner.Released(this);
