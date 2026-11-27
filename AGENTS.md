@@ -138,10 +138,16 @@ parameter-type disambiguation) as well as `edit.rename_symbol`, `edit.change_sig
 `nav.find_invocations` in one pass, and a missed column names the symbols on that line.
 
 - **MCP slim server wired globally:** `RoslynSkills.McpServer --mode slim` (12 tools, `6,016 B`) is configured in
-  `mcp_config.json`. Whenever `roslyn_*` MCP tools are available in your toolset, call `roslyn_context`,
-  `roslyn_search`, and `roslyn_run` (`ctx.read_window`, `diag.get_workspace_snapshot`) directly (`~5–15 ms` over the
-  persistent pipe) rather than spawning shell commands (`roscli-fast.exe`, `rg`) or repeating `read_file` loops. When
-  only shell tools are mounted, follow the same workflow via `roscli-fast.exe`.
+  `mcp_config.json`. You choose whether to use `roslynskills` MCP (`roslyn_context`, `roslyn_search`,
+  `roslyn_diag_snapshot`, `roslyn_run`), `roscli-fast.exe`, or `rg`/`read_file` — use whatever makes your task
+  fastest. For C# work, `roslyn_context` returns definition + refs + 1-hop callers/callees + diagnostics in one
+  round trip (`~5–15 ms` over the persistent pipe once warm), `roslyn_search` filters code vs comments/strings,
+  `roslyn_run` (`ctx.read_window`) reads windows with zero disk I/O + `file_sha256` + `enclosing_symbol`, and
+  `roslyn_diag_snapshot` checks compile diagnostics without a slow MSBuild invocation. In a worktree (`CalcDb-w1`,
+  `CalcDb-w2`, `CalcDb-probe`), pass your worktree's `.slnx` as `workspace_path` so queries hit your own live index
+  rather than the integration checkout (`roslyn_*` tools are lazy-loaded: read `<appDataDir>\mcp\roslynskills\<tool>.json`
+  once if needed, then use `call_mcp_tool`). When only shell tools are mounted, follow the same workflow via
+  `roscli-fast.exe`.
 - **Overlay search & zero-disk reads first (when warm).** Once `WorkspaceHost` is warm (`workspace.use CalcDb.slnx --wait-warmup true`),
   prefer `roslyn_search` / `ctx.search_text` (with `--syntax-filter code|declarations|invocations|identifiers|comments|strings` and batched
   `queries`) over `rg` to eliminate false-positive comment/string hits, and use `ctx.read_window` (single or batched,
@@ -188,15 +194,18 @@ parameter-type disambiguation) as well as `edit.rename_symbol`, `edit.change_sig
 
 ## Check cadence
 
-- Work in large coding batches using Roslyn's live workspace diagnostics (`diag.get_workspace_snapshot`) to stay compiled
-  without invoking MSBuild after small edits, and targeted `dotnet test --no-build --filter ...` (or `-InPlace -Fast` for
-  managed-only checks that skip NativeAOT `CalcDb.Com` publishing unless `Com` changed). Commit as the batch progresses.
-- After a batch ends and passes Gate 4 review, land quickly with `tools/landing-check.ps1 -Land -DetachSlot` (using
-  `-Fast` on purely managed slices when appropriate, or full graph checks for multi-area/COM landings), immediately
-  returning clean writer slots (`CalcDb-w1`, `CalcDb-w2`) to `master` without blocking on the oracle compare.
-- Run full solution builds, NativeAOT `CalcDb.Com` publish, all graph tests, and core compare (`-Snapshot` +
-  `compare-set`) once per wave checkpoint (every 2–4 landings) and asynchronously in the background so it never stalls
-  writer slots; run the wide compare set once a day and before recording wide baselines ([docs/work/landing-check.md](docs/work/landing-check.md)).
+- Work in focused coding batches using Roslyn live diagnostics (`roslyn_diag_snapshot` / `diag.get_workspace_snapshot`)
+  to stay compiled while editing without invoking MSBuild after small edits. Verify your new work with targeted
+  `dotnet test <project> --no-build --filter ...` (and `-InPlace -Fast` or `-SkipNativePublish` for managed/DAO
+  checks), skipping NativeAOT `CalcDb.Com` publishing and unrelated transitive or oracle suites on inner iterations.
+- After a batch passes Gate 4 review, land clean managed/DAO slices quickly with `tools/landing-check.ps1 -Land
+  -DetachSlot -Fast` (adding `-SkipNativePublish` when only managed code changed, or running full graph + NativeAOT
+  checks when `CalcDb.Com` / `CalcDb.Com.Core` / `CalcDb.Com.Ado` native boundaries changed), immediately returning clean
+  writer slots (`CalcDb-w1`, `CalcDb-w2`) to `master` without blocking on the oracle compare.
+- Run full solution builds, NativeAOT `CalcDb.Com` publish, full transitive project-graph tests, and core compare
+  (`-Snapshot` + `-Compare`) periodically at wave checkpoints (every 2–4 landings) in the background so regressions and
+  NativeAOT differences are still caught promptly without dragging down everyday managed landings; run the wide
+  compare set once a day and before recording wide baselines ([docs/work/landing-check.md](docs/work/landing-check.md)).
 
 ## Oracle conduct (ACE, Access and DAO on Windows)
 

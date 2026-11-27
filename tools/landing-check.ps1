@@ -31,7 +31,8 @@ param(
     [string] $CheckTree = "",                       # default: <repository>-check beside the integration checkout
     [switch] $Land,                                 # with -Branch: after a pass, land on master (ff or merge over docs/work/) and push
     [switch] $DetachSlot,                           # with -Land: detach a clean writer slot at master and delete merged branch immediately after push
-    [switch] $Fast,                                 # managed fast check: direct test deps only and skips NativeAOT unless Com is tested
+    [switch] $Fast,                                 # managed fast check: direct test deps only and skips NativeAOT unless native COM changed
+    [switch] $SkipNativePublish,                    # skip NativeAOT publish (with Com tests, scopes unfiltered run to managed Dao tests)
     [switch] $Compare,                              # with -Land and -Snapshot: then run the core compare from the snapshot
     [switch] $Finish,                               # with -Land and -Compare: if nothing lost, record baseline, push and clean up
     [int] $MaxCpuCount = 4,                         # MSBuild -m cap (with -nr:false) so builds do not spawn 16 resident nodes
@@ -49,6 +50,7 @@ if ($Filter -and $Snapshot) { throw "-Filter runs part of the tests: it is for i
 if ($Land -and (-not $Branch -or $Filter)) { throw "-Land lands a -Branch check that ran every selected test (no -Filter)" }
 if ($DetachSlot -and -not $Land) { throw "-DetachSlot requires -Land" }
 if ($Fast -and ($Snapshot -or $Compare -or $Finish)) { throw "-Fast skips full graph/NativeAOT and cannot be combined with -Snapshot, -Compare, or -Finish" }
+if ($SkipNativePublish -and ($Snapshot -or $Questions.Count)) { throw "-SkipNativePublish cannot be combined with -Snapshot or -Questions" }
 if ($Compare -and -not ($Land -and $Snapshot)) { throw "-Compare compares what -Land landed, from the -Snapshot binaries" }
 if ($Finish -and -not ($Land -and $Compare)) { throw "-Finish requires -Land and -Compare" }
 if ($MaxParallelTests -lt 1) { throw "-MaxParallelTests must be at least 1" }
@@ -575,13 +577,18 @@ try {
             } | Sort-Object -Unique)
         $graphTests = @($testProjects | Where-Object {
                 $everything -or @((Closure $_) | Where-Object { $_ -in $changedProjects }).Count } | ForEach-Object { $_ -replace '^CalcDb\.|\.Tests$', '' })
+        $nativeComChanged = [bool]($changedProjects | Where-Object { $_ -in @('CalcDb.Com', 'CalcDb.Com.Core', 'CalcDb.Com.Ado') })
+        $nativeComTestChanged = [bool]($changed | Where-Object {
+                $_ -like 'tests/CalcDb.Com.Tests/*.cs' -and
+                ($_ -match '/(Ado|Ddl|FactoryHostCore|NativeRoute|PerUserRegistration)')
+            })
         if ($Fast -and -not $everything) {
-            $comChanged = [bool]($changedProjects | Where-Object { $_ -like 'CalcDb.Com*' })
+            $daoOrComTestsChanged = $nativeComChanged -or ('CalcDb.Com.Dao' -in $changedProjects) -or ('CalcDb.Com.Tests' -in $changedProjects)
             $graphTests = @($testProjects | Where-Object {
                     ($_ -in $changedProjects) -or
                     (@($projects[$_].Refs | Where-Object { $_ -in $changedProjects }).Count -gt 0) -or
                     (@($projects[$_].Linked | Where-Object { $_ -in $changed }).Count -gt 0)
-                } | Where-Object { $comChanged -or $_ -ne 'CalcDb.Com.Tests' } | ForEach-Object { $_ -replace '^CalcDb\.|\.Tests$', '' })
+                } | Where-Object { $daoOrComTestsChanged -or $_ -ne 'CalcDb.Com.Tests' } | ForEach-Object { $_ -replace '^CalcDb\.|\.Tests$', '' })
         }
         $inFilter = if ($Solution -ne "CalcDb.slnx") {
             @((Get-Content (Join-Path $work $Solution) -Raw | ConvertFrom-Json).solution.projects | ForEach-Object { $_ -replace '\\', '/' })
@@ -668,10 +675,16 @@ try {
             }
             Step "built $buildLabel$(if ($canSkipRestore) { ' (no-restore)' } else { '' })"
 
-            # The NativeAOT publish takes about 30-60 s: run it only when a source of CalcDb.Com's closure changed since the
-            # last publish here (and skip in -Fast mode when Com tests are not requested). Four Com test classes, the
-            # candidate check and the snapshot load the published module.
-            $needNativePublish = ($Tests -contains 'Com' -or $Questions.Count -or $Snapshot) -and (-not $Fast -or ($Tests -contains 'Com'))
+            # The NativeAOT publish takes about 30-60 s: skip under -SkipNativePublish, or under -Fast when neither
+            # native COM (Com/Core/Ado), native-module Com tests, -Questions, nor -Snapshot is in play.
+            $needNativePublish = -not $SkipNativePublish -and (
+                ($Questions.Count -gt 0) -or
+                $Snapshot -or
+                (($Tests -contains 'Com') -and (-not $Fast -or $nativeComChanged -or $nativeComTestChanged -or $everything))
+            )
+            if (($Tests -contains 'Com') -and -not $needNativePublish -and -not $Filter) {
+                Step "Com tests scoped to managed Dao tests (NativeAOT publish skipped)"
+            }
             if ($needNativePublish) {
                 $pubSw = [Diagnostics.Stopwatch]::StartNew()
                 $dirs = @((Closure 'CalcDb.Com') | ForEach-Object { $projects[$_].Dir }) + @('Directory.Build.props', 'global.json')
@@ -723,7 +736,12 @@ try {
                 $psi.RedirectStandardOutput = $true
                 $psi.RedirectStandardError = $true
                 $psi.Environment['COLUMNS'] = '4000'
-                foreach ($a in @('test', "tests/CalcDb.$TestName.Tests", '--no-build') + $filterArgs + @('--logger', 'console;verbosity=detailed', '--logger', "trx;LogFileName=$TestName.trx", '--results-directory', $out)) {
+                $projFilterArgs = if ($TestName -eq 'Com' -and -not $needNativePublish -and -not $Filter) {
+                    @('--filter', 'FullyQualifiedName~CalcDb.Com.Tests.Dao')
+                } else {
+                    $filterArgs
+                }
+                foreach ($a in @('test', "tests/CalcDb.$TestName.Tests", '--no-build') + $projFilterArgs + @('--logger', 'console;verbosity=detailed', '--logger', "trx;LogFileName=$TestName.trx", '--results-directory', $out)) {
                     [void] $psi.ArgumentList.Add($a)
                 }
                 $outStream = $null; $errStream = $null; $proc = $null

@@ -66,10 +66,12 @@ Every brief says "follow the standard brief of docs/work/landing-check.md" and a
 - **Counts before** come from the baselines, not from a build of master: a folder's rows in
   [compare-baseline-wide.tsv](compare-baseline-wide.tsv) (or compare-baseline.tsv for the core set). Counts after come
   from your self-check's `-Questions`.
-- Build only the solution filter the brief names. Before a full self-check, build the test projects you changed and run
-  your new tests (`dotnet test <project> --no-build --filter ...`) until they pass: x8vx started six self-checks for
-  compile errors in its own tests (2026-11-24). Run long checks or candidate comparisons asynchronously as background
-  shell commands (`WaitMsBeforeAsync` / `NotificationTimeoutSeconds`); never sleep-poll them in a loop.
+- Build only the solution filter the brief names (or use `roslyn_diag_snapshot` while editing). Before running a
+  self-check, test your new code with targeted `dotnet test <project> --no-build --filter ...` until it passes: x8vx
+  started six self-checks for compile errors in its own tests (2026-11-24). Prefer `-InPlace -Fast` (plus
+  `-SkipNativePublish` on managed/DAO iterations) so you do not pay the 30–60 s NativeAOT publish or unrelated
+  transitive/question suites on every cycle. Run long checks asynchronously as background shell commands
+  (`WaitMsBeforeAsync` / `NotificationTimeoutSeconds`); never sleep-poll them in a loop.
 - Every rule cites the record (folder/question, call, page and offset) that shows its very case. A byte or a value no
   record decides: stop and report it, or refuse it by name and list it under Open; never guess. Tests replay the
   record's kept pages or calls.
@@ -81,9 +83,11 @@ Every brief says "follow the standard brief of docs/work/landing-check.md" and a
   ByRef Move and Seek that r-q2-cursor-dao/byref-dao-move-seek records and qualified.md states; its reviewer and the
   organizer checked only what it admitted).
 - One of everything: extend the writer, reader or helper that exists; never add a second one.
-- Start a roscli daemon only when the brief says so (`roscli workspace.use CalcDb.slnx` or NativeAOT
-  `roscli-fast.exe`, then `ROSCLI_DAEMON=required`), run `roscli daemon.stop` before you end, and verify
-  `roscli daemon.list` shows your worktree stopped.
+- You have `roslynskills` MCP (`roslyn_context`, `roslyn_search`, `roslyn_diag_snapshot`, `roslyn_run`) alongside
+  `roscli-fast.exe` and `rg`/`read_file` — choose whichever fits best. For multi-file C# navigation or live compile
+  diagnostics, MCP avoids shell startup, multi-turn `read_file` chains, and comment/string `rg` hits (in a worktree,
+  pass `<worktree>\CalcDb.slnx` as `workspace_path`). If you start a CLI `roscli` daemon, run `roscli daemon.stop`
+  before you end and verify `roscli daemon.list` shows your worktree stopped.
 - Do not touch the bookkeeping files (register.md, qualified.md, book-proposals.md, compare-baseline*.tsv,
   process-log.md): give their lines in the report.
 - Commit on your branch with `git commit -F <unique message file in $TEMP>`, the message starting with the book ID and
@@ -143,7 +147,7 @@ integration checkout and `git push`. With `-Land` it runs them itself. With `-De
 `-Compare`), it immediately returns a clean writer slot (`CalcDb-w1`, `CalcDb-w2`) to detached `master`, removes
 `<slot>\.oracle-runs`, and deletes the merged `alta/<name>` branch so the next worker can start immediately while
 core compares run asynchronously per wave. If `git merge --ff-only` refuses because master moved while the check ran and every path changed on master since the checked base is under `docs/work/`, `-Land` merges the checked commit onto the new master (`Merge <branch> (<Name>)`, never a rebase, aborting on conflict) and pushes without checking again; any other move refuses and names the moved paths.
-With `-Compare` it then runs the core compare from the snapshot once the check worktree is free; with `-Finish` (only with `-Land -Compare`), when the core compare exits 0, diffs against baseline and loses nothing (`Lost` 0, `Removed` 0, no flagged timing boundary, no `RuleChange` loss), it commits `docs/work/compare-baseline.tsv`, pushes, and detaches the slot. With `-Fast` (managed iteration / fast-path check without `-Snapshot`), it runs only directly affected test projects and skips NativeAOT `CalcDb.Com` publishing unless `Com` is tested; full solution + NativeAOT publish + all graph tests + `-Compare` runs at each wave checkpoint.
+With `-Compare` it then runs the core compare from the snapshot once the check worktree is free; with `-Finish` (only with `-Land -Compare`), when the core compare exits 0, diffs against baseline and loses nothing (`Lost` 0, `Removed` 0, no flagged timing boundary, no `RuleChange` loss), it commits `docs/work/compare-baseline.tsv`, pushes, and detaches the slot. With `-Fast` (managed iteration / fast-path check without `-Snapshot`), it runs only directly affected test projects (excluding `CalcDb.Com.Tests` unless `CalcDb.Com*` or its tests changed) and skips NativeAOT `CalcDb.Com` publishing unless `CalcDb.Com`/`Com.Core`/`Com.Ado` or native-module `Com` tests changed (`-SkipNativePublish` also skips NativeAOT publish explicitly and scopes unfiltered `Com` runs to managed `Dao` tests). Full solution + NativeAOT publish + all graph tests + `-Compare` runs at each wave checkpoint.
 
 **Telemetry:** Every run logs a 1-line summary to `%LOCALAPPDATA%\CalcDb\landing-runs.tsv` and per-phase seconds plus exact failure reason tags (`build`, `publish`, `test:<name>`, `questions:<q>`, `land`, `ok`) to `%LOCALAPPDATA%\CalcDb\landing-phases.tsv`.
 

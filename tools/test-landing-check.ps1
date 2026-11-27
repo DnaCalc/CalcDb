@@ -42,6 +42,10 @@ try {
     Assert ($LASTEXITCODE -ne 0 -and $errOut -match '-Finish requires -Land and -Compare') "CLI rejects -Finish without -Land -Compare"
     $errOut2 = & pwsh -NoProfile -File $scriptPath -Name t -Branch alta/x -Land -Finish 2>&1 | Out-String
     Assert ($LASTEXITCODE -ne 0 -and $errOut2 -match '-Finish requires -Land and -Compare') "CLI rejects -Finish -Land without -Compare"
+    $errOut3 = & pwsh -NoProfile -File $scriptPath -Name t -Branch alta/x -SkipNativePublish -Snapshot 2>&1 | Out-String
+    Assert ($LASTEXITCODE -ne 0 -and $errOut3 -match '-SkipNativePublish cannot be combined with -Snapshot or -Questions') "CLI rejects -SkipNativePublish with -Snapshot"
+    $errOut4 = & pwsh -NoProfile -File $scriptPath -Name t -Branch alta/x -SkipNativePublish -Questions probes/r-q1 2>&1 | Out-String
+    Assert ($LASTEXITCODE -ne 0 -and $errOut4 -match '-SkipNativePublish cannot be combined with -Snapshot or -Questions') "CLI rejects -SkipNativePublish with -Questions"
 
     # 2. Read-CompareResult unit cases
     $r = Read-CompareResult (Make-CompareLines 469 1360 471 1360 @("Gained (2):", "  r-a/q1: Mismatched -> Matched", "same stop, new file hash: 3"))
