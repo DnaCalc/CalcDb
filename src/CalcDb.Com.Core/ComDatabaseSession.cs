@@ -383,6 +383,10 @@ public sealed class ComDatabaseSession : IPublicationTarget
         return _fileCoordinator.HasPendingExternalPages(this, catalogPages);
     }
 
+    /// <summary>Whether another in-process session has dropped local table <paramref name="tableName"/> since this session last refreshed its catalog.</summary>
+    public bool IsTableExternallyDropped(string tableName) =>
+        _fileCoordinator is not null && _fileCoordinator.IsTableExternallyDropped(this, tableName);
+
     /// <summary>
     /// Reload the catalog snapshot from this session's current <see cref="Cache"/> (without forcing a disk refresh
     /// unless <see cref="RefreshExternallyModifiedPages"/> was called first, matching <c>vis-cross-ddl</c> where
@@ -395,6 +399,7 @@ public sealed class ComDatabaseSession : IPublicationTarget
             return "the catalog cannot be read after refresh: " + failure;
         }
         Catalog = catalog;
+        _fileCoordinator?.ClearExternallyDroppedTables(this);
         _queries = null;
         _queriesFailure = null;
         _relationships = null;
@@ -531,11 +536,13 @@ public sealed class ComDatabaseSession : IPublicationTarget
     public string? SchemaPublished(ulong extentPages, Func<string, bool> isTableHeld, Action? onCatalogReloaded = null)
     {
         _extentPages = Math.Max(_extentPages, extentPages);
+        CatalogSnapshot previous = Catalog;
         if (CatalogBootstrap.Open(Cache, Format, PageCount, out CatalogFailure? failure, readProperties: true) is not { } catalog)
         {
             return "the catalog cannot be read after the catalog change: " + failure;
         }
         Catalog = catalog;
+        _fileCoordinator?.RecordCatalogChange(this, previous, catalog, Format);
         _relationships = null;
         _checkConstraints = null;
         _relationshipContext = null;

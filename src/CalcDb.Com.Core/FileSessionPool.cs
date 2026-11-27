@@ -1,3 +1,4 @@
+using CalcDb.Catalog;
 using CalcDb.Format;
 using CalcDb.Isam.Transactions;
 using CalcDb.Storage;
@@ -133,6 +134,7 @@ public sealed class InProcessFileCoordinator
             _format ??= session.Profile.Format;
             _sessionVersions[session] = _diskVersion;
             _sessionPendingPages[session] = [];
+            _sessionExternallyDroppedTables[session] = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             if (session.PageCount > _diskExtentPages)
             {
                 _diskExtentPages = session.PageCount;
@@ -147,6 +149,7 @@ public sealed class InProcessFileCoordinator
             _sessions.Remove(session);
             _sessionVersions.Remove(session);
             _sessionPendingPages.Remove(session);
+            _sessionExternallyDroppedTables.Remove(session);
             return _sessions.Count == 0;
         }
     }
@@ -253,6 +256,99 @@ public sealed class InProcessFileCoordinator
                 }
             }
             return false;
+        }
+    }
+
+    private readonly Dictionary<ComDatabaseSession, HashSet<string>> _sessionExternallyDroppedTables = new(ReferenceEqualityComparer.Instance);
+
+    /// <summary>
+    /// Record local tables dropped or created by <paramref name="writer"/> so peer in-process sessions whose catalog
+    /// is still stale can detect externally dropped tables without mutating their cached catalog
+    /// (<c>evidence/r-q50-jk44-ddl-vis/vis-cross-ddl-accdb</c>, <c>vis-cross-ddl-mdb</c> calls 124-147).
+    /// </summary>
+    public void RecordCatalogChange(ComDatabaseSession writer, CatalogSnapshot previous, CatalogSnapshot current, FormatDescriptor format)
+    {
+        var prevNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (CatalogEntry e in previous.LocalTables(format))
+        {
+            prevNames.Add(e.Name);
+        }
+        var currNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (CatalogEntry e in current.LocalTables(format))
+        {
+            currNames.Add(e.Name);
+        }
+        List<string>? dropped = null;
+        foreach (string name in prevNames)
+        {
+            if (!currNames.Contains(name))
+            {
+                (dropped ??= []).Add(name);
+            }
+        }
+        List<string>? created = null;
+        foreach (string name in currNames)
+        {
+            if (!prevNames.Contains(name))
+            {
+                (created ??= []).Add(name);
+            }
+        }
+        if (dropped is null && created is null)
+        {
+            return;
+        }
+        lock (_gate)
+        {
+            foreach ((ComDatabaseSession peer, HashSet<string> peerDropped) in _sessionExternallyDroppedTables)
+            {
+                if (ReferenceEquals(peer, writer))
+                {
+                    if (created is not null)
+                    {
+                        foreach (string name in created)
+                        {
+                            peerDropped.Remove(name);
+                        }
+                    }
+                    continue;
+                }
+                if (dropped is not null)
+                {
+                    foreach (string name in dropped)
+                    {
+                        peerDropped.Add(name);
+                    }
+                }
+                if (created is not null)
+                {
+                    foreach (string name in created)
+                    {
+                        peerDropped.Remove(name);
+                    }
+                }
+            }
+        }
+    }
+
+    /// <summary>Clear externally dropped table tracking for <paramref name="reader"/> after it reloads its catalog.</summary>
+    public void ClearExternallyDroppedTables(ComDatabaseSession reader)
+    {
+        lock (_gate)
+        {
+            if (_sessionExternallyDroppedTables.TryGetValue(reader, out HashSet<string>? dropped))
+            {
+                dropped.Clear();
+            }
+        }
+    }
+
+    /// <summary>Whether another in-process session has dropped <paramref name="tableName"/> since <paramref name="reader"/> last refreshed its catalog.</summary>
+    public bool IsTableExternallyDropped(ComDatabaseSession reader, string tableName)
+    {
+        lock (_gate)
+        {
+            return _sessionExternallyDroppedTables.TryGetValue(reader, out HashSet<string>? dropped) && dropped.Contains(tableName);
         }
     }
 }

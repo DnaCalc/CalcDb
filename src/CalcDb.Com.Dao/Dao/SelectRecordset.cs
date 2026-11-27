@@ -157,6 +157,8 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
     private readonly bool _hasOrderBy;
     private readonly bool _dynamicOverlay;
     private readonly bool _isMaterializedSnapshot;
+    private readonly bool _isLazyUnorderedSnapshot;
+    private List<(NativeVariant Value, SqlFailure? Failure)[]>? _snapshotRows;
     private string? _resolvedOverlayAfterCommit;
     private string? _committedOpenLevel;
     private string? _forwardOnlyResolved;
@@ -241,6 +243,15 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         _isSingleTableRowSelect = singleTableRowSelect;
         _hasOrderBy = hasOrderBy;
         _isMaterializedSnapshot = recordsetType == 4 && IsMaterializedPlan(plan);
+        _isLazyUnorderedSnapshot = recordsetType == 4
+            && singleTableRowSelect
+            && !hasOrderBy
+            && !isDerived
+            && !IsMdb
+            && _openLevels.Length == 0
+            && _openOverlay is null
+            && !SelectRoute.ProjectsMemoOrOle(plan);
+        _snapshotRows = _isLazyUnorderedSnapshot ? [] : null;
         bool candidateJoin = !singleTableRowSelect
             && recordsetType == 2
             && joinKeys is not null
@@ -273,6 +284,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
             _openOverlaySnapshot = CaptureOverlayPages(openOverlay);
         }
         database.AddRef(); // a recordset keeps its Database object alive
+        CaptureNewlyPopulatedSnapshotRows(_selectOrdinal);
         CaptureSeeChangesRow();
     }
 
@@ -531,7 +543,11 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
             {
                 return CallResult.Fail(Failure.NotModelled("NotModelled.Edit.SnapshotOverlayMutated", $"{member}: a SELECT snapshot opened over an overlay that was modified after open (not recorded)"));
             }
-            if (!_isMaterializedSnapshot && _snapshotView is null && Database.Cache.PublishedSerial != _openPublishedSerial)
+            if (_isLazyUnorderedSnapshot && currentOverlay is not null)
+            {
+                return CallResult.Fail(Failure.NotModelled("NotModelled.Edit.SnapshotAfterPublish", $"{member}: an unordered SELECT snapshot while its Workspace has an active overlay (not recorded)"));
+            }
+            if (!_isMaterializedSnapshot && _snapshotView is null && !_isLazyUnorderedSnapshot && Database.Cache.PublishedSerial != _openPublishedSerial)
             {
                 return CallResult.Fail(Failure.NotModelled("NotModelled.Edit.SnapshotAfterPublish", $"{member}: a row-backed SELECT snapshot after a write was published to its Database (not recorded)"));
             }
@@ -750,6 +766,18 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
     protected override Failure? ArgumentCountFailure(MemberDecl member) => InvalidArgumentCount();
 
     /// <summary>
+    /// Unknown named parameter on an open Recordset member records DAO 3265 from DAO.Fields in DBEngine.Errors
+    /// (r-q2-cursor-dao/named-dao-refusals #50/#52).
+    /// </summary>
+    protected override void OnUnknownParameterName(MemberDecl member, ReadOnlySpan<char> parameterName)
+    {
+        if (!Closed)
+        {
+            Engine.Record(Failure.Dao(3265, "DAO.Fields", DaoErrors.ItemNotFound));
+        }
+    }
+
+    /// <summary>
     /// Refuse unrecorded Move(Rows) and AbsolutePosition put source VarTypes before IDispatch coercion, matching
     /// Dao.RecordsetObject (r-cursor-1b/move-argument-forms, r-q53-conv-abspos-subq-loc/abspos-get-put-read-accdb,
     /// abspos-get-put-read-mdb).
@@ -965,6 +993,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
             _selectOrdinal = clamped;
         }
         _movedSinceOpen = true;
+        CaptureNewlyPopulatedSnapshotRows(_selectOrdinal);
         CaptureSeeChangesRow();
         return CallResult.Nothing;
     }
@@ -1028,6 +1057,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
             _addedRowEof = false;
             _noMatch = false;
             _selectOrdinal = Cursor.Bof || Cursor.Eof ? -1 : 0;
+            CaptureNewlyPopulatedSnapshotRows(_selectOrdinal);
         }
         return result;
     }
@@ -1074,6 +1104,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
             _addedRowIndex = -1;
             _addedRowEof = false;
             _selectOrdinal = Cursor.Bof || Cursor.Eof ? -1 : (int)Math.Max(0, Cursor.RecordCount - 1);
+            CaptureNewlyPopulatedSnapshotRows(_selectOrdinal);
         }
         return result;
     }
@@ -1133,6 +1164,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
             _deletedCurrent = false;
             _noMatch = false;
             _selectOrdinal = Cursor.Bof || Cursor.Eof ? -1 : (wasBof ? 0 : prevOrdinal + 1);
+            CaptureNewlyPopulatedSnapshotRows(_selectOrdinal);
         }
         return result;
     }
@@ -1920,6 +1952,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
             {
                 _selectOrdinal = Math.Max(0, prevOrdinal + rows.Value);
             }
+            CaptureNewlyPopulatedSnapshotRows(_selectOrdinal);
         }
         return result;
     }
@@ -2142,6 +2175,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
                     return CallResult.Fail(Failure.NotModelled("NotModelled.GetRowsFetchFailure", "GetRows met a WHERE fetch failure while advancing (not recorded)"));
                 }
                 _selectOrdinal = Cursor.Bof || Cursor.Eof ? -1 : (_selectOrdinal < 0 ? 0 : _selectOrdinal + 1);
+                CaptureNewlyPopulatedSnapshotRows(_selectOrdinal);
                 if (move is not (MoveOutcome.Moved or MoveOutcome.ReachedBoundary))
                 {
                     break;
@@ -2253,7 +2287,8 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
             values: null,
             out ReadView? nextSnapshotView, out PrivateOverlay? nextSnapshotOverlay,
             out SqlFailure? failure, out CallResult? viewRefusal,
-            useReadOnlyFirstView: false);
+            useReadOnlyFirstView: false,
+            derived: _isDerived);
         if (next is null)
         {
             if (viewRefusal is { } refused)
@@ -2292,6 +2327,8 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         _addedRowEof = false;
         _noMatch = false;
         _selectOrdinal = next.Bof || next.Eof ? -1 : 0;
+        ClearSnapshotRows();
+        CaptureNewlyPopulatedSnapshotRows(_selectOrdinal);
         previousCursor.Dispose();
         previousSnapshotOverlay?.Dispose();
         previousSnapshotView?.Dispose();
@@ -3156,6 +3193,154 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         return result;
     }
 
+    /// <summary>
+    /// Materialize newly populated rows of an unordered ACCDB single-table SELECT snapshot into owned value buffers
+    /// as 500-row chunks are fetched (docs/work/qualified.md R-CURSOR-1 CUR-POP;
+    /// evidence/r-q2-cursor-dao/pop-snapshot-select-noorder-big): rows already materialized keep the values captured
+    /// when their chunk populated, while later chunks read committed pages after intervening UPDATEs.
+    /// </summary>
+    private void CaptureNewlyPopulatedSnapshotRows(int currentOrdinal)
+    {
+        if (!_isLazyUnorderedSnapshot || _snapshotRows is null)
+        {
+            return;
+        }
+        int populated = (int)Cursor.RecordCount;
+        int start = _snapshotRows.Count;
+        if (populated <= start)
+        {
+            return;
+        }
+        bool wasBof = Cursor.Bof;
+        bool wasEof = Cursor.Eof;
+        int colCount = Cursor.Columns.Count;
+        bool alreadyAtStart = start == 0 && currentOrdinal == 0 && !wasBof && !wasEof;
+        if (!alreadyAtStart)
+        {
+            if (Cursor.MoveFirst() is not (MoveOutcome.Moved or MoveOutcome.ReachedBoundary))
+            {
+                return;
+            }
+            if (start > 0 && Cursor.Move(start) != MoveOutcome.Moved)
+            {
+                return;
+            }
+        }
+        for (int i = start; i < populated; i++)
+        {
+            if (i > start && Cursor.MoveNext() != MoveOutcome.Moved)
+            {
+                break;
+            }
+            var cells = new (NativeVariant Value, SqlFailure? Failure)[colCount];
+            for (int c = 0; c < colCount; c++)
+            {
+                if (Cursor.Read(c, out NativeVariant v, out SqlFailure? f))
+                {
+                    cells[c] = (CopySnapshotVariant(v), null);
+                }
+                else
+                {
+                    cells[c] = (default, f);
+                }
+            }
+            _snapshotRows.Add(cells);
+        }
+        if (wasEof)
+        {
+            Cursor.MoveLast();
+            Cursor.MoveNext();
+        }
+        else if (wasBof)
+        {
+            Cursor.MoveFirst();
+            Cursor.MovePrevious();
+        }
+        else if (currentOrdinal >= 0 && currentOrdinal < _snapshotRows.Count)
+        {
+            if (Cursor.Bof || Cursor.Eof)
+            {
+                if (Cursor.MoveFirst() == MoveOutcome.Moved && currentOrdinal > 0)
+                {
+                    Cursor.Move(currentOrdinal);
+                }
+            }
+            else
+            {
+                int delta = currentOrdinal - (_snapshotRows.Count - 1);
+                if (delta != 0)
+                {
+                    Cursor.Move(delta);
+                }
+            }
+        }
+    }
+
+    internal bool TryReadLazySnapshotCell(int ordinal, out NativeVariant value, out SqlFailure? failure)
+    {
+        if (_isLazyUnorderedSnapshot
+            && _snapshotRows is not null
+            && !IsAtBof
+            && !IsAtEof
+            && _selectOrdinal >= 0
+            && _selectOrdinal < _snapshotRows.Count)
+        {
+            (NativeVariant v, SqlFailure? f) = _snapshotRows[_selectOrdinal][ordinal];
+            value = v;
+            failure = f;
+            return true;
+        }
+        value = default;
+        failure = null;
+        return false;
+    }
+
+    private static NativeVariant CopySnapshotVariant(in NativeVariant v)
+    {
+        if (v.Vt == (ushort)VarType.Bstr)
+        {
+            ReadOnlySpan<char> units = Bstrs.Chars(v.Pointer);
+            nint copy = Bstrs.FromUnits(units.Length, v.Pointer, static (dest, source) => Bstrs.Chars(source).CopyTo(dest));
+            return new NativeVariant { Vt = (ushort)VarType.Bstr, Pointer = copy };
+        }
+        if (v.Vt == (ushort)(VarType.Array | VarType.UI1) && v.Pointer != 0)
+        {
+            (int lower, int count) = SafeArrays.Shape(v.Pointer)[0];
+            nint copy = SafeArrays.Create(VarType.UI1, (lower, count));
+            if (count > 0)
+            {
+                new ReadOnlySpan<byte>(SafeArrays.ElementPointer(v.Pointer, lower), count)
+                    .CopyTo(new Span<byte>(SafeArrays.ElementPointer(copy, lower), count));
+            }
+            return new NativeVariant { Vt = (ushort)(VarType.Array | VarType.UI1), Pointer = copy };
+        }
+        return v;
+    }
+
+    private void ClearSnapshotRows()
+    {
+        if (_snapshotRows is null || _snapshotRows.Count == 0)
+        {
+            return;
+        }
+        foreach ((NativeVariant Value, SqlFailure? Failure)[] row in _snapshotRows)
+        {
+            for (int c = 0; c < row.Length; c++)
+            {
+                NativeVariant v = row[c].Value;
+                if (v.Vt == (ushort)VarType.Bstr && v.Pointer != 0)
+                {
+                    Bstrs.Free(v.Pointer);
+                }
+                else if (v.Vt == (ushort)(VarType.Array | VarType.UI1) && v.Pointer != 0)
+                {
+                    using OwnedVariant _ = OwnedVariant.TakeArray(v.Pointer, VarType.UI1);
+                }
+            }
+        }
+        _snapshotRows.Clear();
+    }
+
     private CallResult Close()
     {
         CloseCursor();
@@ -3178,6 +3363,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
             DisposeJoinFrames();
             _seeChangesRow = null;
             _seeChangesValues = null;
+            ClearSnapshotRows();
             Cursor.Dispose();
             _criteria?.Dispose();
             _criteria = null;
@@ -4382,7 +4568,12 @@ internal sealed unsafe class SelectFieldObject : DaoObject
         {
             return recordset.ReadAppendOnlyField(ordinal, fromCollect);
         }
-        if (!recordset.Cursor.Read(ordinal, out NativeVariant value, out SqlFailure? failure))
+        NativeVariant value;
+        SqlFailure? failure;
+        bool readOk = recordset.TryReadLazySnapshotCell(ordinal, out value, out failure)
+            ? failure is null
+            : recordset.Cursor.Read(ordinal, out value, out failure);
+        if (!readOk)
         {
             if (failure!.IsNotModelled)
             {

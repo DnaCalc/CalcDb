@@ -215,6 +215,19 @@ public abstract unsafe class DispatchObject : ComObject
     protected virtual ushort CoercionFlags(MemberDecl member, int parameter) => 0;
 
     /// <summary>
+    /// The failure an Invoke publishes when a named argument targets a parameter slot already filled by a positional
+    /// argument or an earlier named argument, or null to refuse by name. DAO Database.OpenRecordset fails 3001 with
+    /// IErrorInfo and records in DBEngine.Errors (r-q2-cursor-dao/named-dao-refusals #37, named-dao-order-variants #45).
+    /// </summary>
+    protected virtual Failure? RepeatedNamedArgumentFailure(MemberDecl member) => null;
+
+    /// <summary>
+    /// Called when GetIDsOfNames resolves the member name but does not find a named parameter on it.
+    /// DAO Recordset records 3265 from DAO.Fields in DBEngine.Errors (r-q2-cursor-dao/named-dao-refusals #50/#52).
+    /// </summary>
+    protected virtual void OnUnknownParameterName(MemberDecl member, ReadOnlySpan<char> parameterName) { }
+
+    /// <summary>
     /// The failure an Invoke publishes when <paramref name="dispId"/> names a declared member on this interface under a
     /// different <see cref="InvokeKind"/> than <paramref name="flags"/>, or null for the standard
     /// <c>DISP_E_MEMBERNOTFOUND</c>. ACE's DAO publishes DAO 3001 or 3251 with IErrorInfo for recorded wrong-kind calls
@@ -372,6 +385,10 @@ public abstract unsafe class DispatchObject : ComObject
             if (index < 0)
             {
                 hr = HResults.DISP_E_UNKNOWNNAME;
+                if (members.Length > 0)
+                {
+                    OnUnknownParameterName(members[0], p);
+                }
             }
         }
         return hr;
@@ -447,7 +464,13 @@ public abstract unsafe class DispatchObject : ComObject
             }
             if (args[target] != 0)
             {
-                // ACE fails a repeated named argument with DAO 3001 (R-ACT-1 ACT-ABI); its text is not yet bound here.
+                // ACE fails a repeated or positional+named argument collision with DAO 3001 (R-ACT-1 ACT-ABI;
+                // r-q2-cursor-dao/named-dao-refusals #37, r-q2-cursor-dao/named-dao-order-variants #45).
+                if (RepeatedNamedArgumentFailure(member) is { } repeated)
+                {
+                    OnFailure(repeated);
+                    return ErrorPublication.ToExcepInfo(repeated, info);
+                }
                 return ErrorPublication.ToExcepInfo(Failure.NotImplemented($"{Declaration.Name}.{member.Name} with a repeated named argument"), info);
             }
             args[target] = (nint)(rgvarg + j);
