@@ -180,8 +180,11 @@ internal static unsafe class SelectRoute
             {
                 database.Workspace.Transactions.EndLazyBurst(database.Cache);
             }
-            DerivedSourceSpec? derivedSpec = singleTableRowSelect ? BuildDerivedSpec(plan, baseWhere: null, baseOrderBy: null, hasOriginalWhere: syntax.Where is not null, hasOriginalOrderBy: hasOrderBy) : null;
-            var recordset = new SelectRecordsetObject(database, plan, cursor, recordsetType, singleTableRowSelect, hasOrderBy, snapshotView, snapshotOverlay, options, database.Engine.NextSequence(), joinKeys, hasGroupBy, derivedSpec, name: name);
+            DerivedSourceSpec? derivedSpec = singleTableRowSelect && syntax.Where is null && !hasOrderBy
+                ? BuildDerivedSpec(plan, baseWhere: null, baseOrderBy: null)
+                : BuildSubqueryDerivedSpec(plan, sql);
+            string? resolvedName = name ?? (sql.Length <= 256 ? sql : null);
+            var recordset = new SelectRecordsetObject(database, plan, cursor, recordsetType, singleTableRowSelect, hasOrderBy, snapshotView, snapshotOverlay, options, database.Engine.NextSequence(), joinKeys, hasGroupBy, derivedSpec, name: resolvedName);
             adopted = true;
             return database.Adopt(recordset);
         }
@@ -195,6 +198,20 @@ internal static unsafe class SelectRoute
                 snapshotView?.Dispose();
             }
         }
+    }
+
+    internal static DerivedSourceSpec? BuildSubqueryDerivedSpec(BoundSelect plan, string sql)
+    {
+        if (plan.Parameters.Count > 0 || plan.IsUnion || plan.Columns.Count == 0)
+        {
+            return null;
+        }
+        var cols = new List<string>(plan.Columns.Count);
+        foreach (ResultColumn col in plan.Columns)
+        {
+            cols.Add($"[{col.Name}]");
+        }
+        return new DerivedSourceSpec("", string.Join(", ", cols), BaseWhere: null, BaseOrderBy: null, ParentSql: sql);
     }
 
     internal static DerivedSourceSpec? BuildDerivedSpec(BoundSelect plan, string? baseWhere, string? baseOrderBy, bool hasOriginalWhere = false, bool hasOriginalOrderBy = false)
@@ -248,9 +265,9 @@ internal static unsafe class SelectRoute
         {
             return caller.Fail(3001, DaoErrors.InvalidArgument);
         }
-        if (recordsetType is not (2 or 4))
+        if (recordsetType is not (2 or 4 or 8))
         {
-            return CallResult.Fail(Failure.NotModelled("NotModelled.DerivedOpenRecordsetType", $"Recordset.OpenRecordset with Type {recordsetType} (only 2 dynaset and 4 snapshot are recorded)"));
+            return CallResult.Fail(Failure.NotModelled("NotModelled.DerivedOpenRecordsetType", $"Recordset.OpenRecordset with Type {recordsetType} (only 2 dynaset, 4 snapshot and 8 forward-only are recorded)"));
         }
         int? requestedOptions = Args.Int32(optionsArg, omitted: 0);
         if (requestedOptions is null)
@@ -281,7 +298,10 @@ internal static unsafe class SelectRoute
         };
         string? combinedOrderBy = trimmedSort.Length > 0 ? trimmedSort : source.BaseOrderBy;
 
-        string sql = $"SELECT {source.SelectList} FROM [{source.TableName}]"
+        string fromClause = source.ParentSql is not null
+            ? $"({source.ParentSql}) AS [__src]"
+            : $"[{source.TableName}] AS [__src]";
+        string sql = $"SELECT {source.SelectList} FROM {fromClause}"
             + (combinedWhere is not null ? $" WHERE {combinedWhere}" : "")
             + (combinedOrderBy is not null ? $" ORDER BY {combinedOrderBy}" : "");
 
@@ -337,14 +357,14 @@ internal static unsafe class SelectRoute
             {
                 database.Workspace.Transactions.EndLazyBurst(database.Cache);
             }
-            if (hasOrderBy && !cursor.Eof)
+            if (hasOrderBy && recordsetType != 8 && !cursor.Eof)
             {
                 // filter-sort-openrs-read-accdb, filter-sort-openrs-read-mdb calls 37, 77, 106, 129, 148:
                 // a derived recordset with Sort (ORDER BY) reports its full RecordCount immediately at open.
                 cursor.MoveLast();
                 cursor.MoveFirst();
             }
-            var childSpec = new DerivedSourceSpec(source.TableName, source.SelectList, combinedWhere, combinedOrderBy);
+            var childSpec = new DerivedSourceSpec(source.TableName, source.SelectList, combinedWhere, combinedOrderBy, source.ParentSql);
             var recordset = new SelectRecordsetObject(database, plan, cursor, recordsetType, singleTableRowSelect, hasOrderBy, snapshotView, snapshotOverlay, options, database.Engine.NextSequence(), joinKeys: null, hasGroupBy, childSpec, isDerived: true);
             adopted = true;
             return database.Adopt(recordset);

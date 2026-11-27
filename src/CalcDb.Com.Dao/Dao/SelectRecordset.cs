@@ -16,7 +16,7 @@ namespace CalcDb.Com.Dao;
 
 internal readonly record struct JoinKeys(JoinKind Kind, string LeftColumn, string RightColumn);
 
-internal sealed record DerivedSourceSpec(string TableName, string SelectList, string? BaseWhere, string? BaseOrderBy);
+internal sealed record DerivedSourceSpec(string TableName, string SelectList, string? BaseWhere, string? BaseOrderBy, string? ParentSql = null);
 
 /// <summary>
 /// A Recordset (Recordset2) over a SELECT's result (W-06/parser-binder-scan; II-11 §1 ExecutionInstance, II-12 §10): the
@@ -55,6 +55,8 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         .Get("NoMatch", (self, args) => Live(self, r => Bool(r._noMatch)))
         .Get("AbsolutePosition", (self, args) => Live(self, r => r.AbsolutePosition()))
         .Put("AbsolutePosition", (self, args) => { nint value = args[^1]; return Live(self, r => r.SetAbsolutePosition(value)); })
+        .Get("PercentPosition", (self, args) => Live(self, r => r.PercentPosition()))
+        .Put("PercentPosition", (self, args) => { nint value = args[^1]; return Live(self, r => r.SetPercentPosition(value)); })
         .Get("Filter", (self, args) => Live(self, r => Text(r._filter)))
         .Put("Filter", (self, args) => { nint value = args[^1]; return Live(self, r => r.SetText(ref r._filter, value)); })
         .Get("Sort", (self, args) => Live(self, r => Text(r._sort)))
@@ -652,6 +654,11 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
                 tmpView?.Dispose();
             }
         }
+        if (_isDerived && RecordsetType == 8 && Cursor.Eof)
+        {
+            // r-cursor-1b/filter-derived-types (calls 76, 151): forward-only derived recordset reports RecordCount = -1 at EOF.
+            return Int32(-1);
+        }
         if (IsMdb && !(_isSingleTableRowSelect && RecordsetType is 2 or 4))
         {
             return CallResult.Fail(Failure.NotModelled(
@@ -688,6 +695,8 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
 
     public bool IsMdb => Database.Profile.Format == FileFormat.Jet4;
 
+    public bool IsMaterializedSnapshot => _isMaterializedSnapshot;
+
     public bool Closed { get; private set; }
 
     public override bool Invalid => Closed;
@@ -717,10 +726,15 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
             Failure.NotModelled(
                 "NotModelled.AbsolutePositionArgumentType",
                 $"Recordset.AbsolutePosition put with {sourceType} argument (only I4, R8, BSTR, Empty and Null are recorded)"),
-        ("FindFirst", 0) when sourceType != VarType.Bstr =>
+        ("PercentPosition", 0) when member.Kind == InvokeKind.PropertyPut && sourceType is not (
+            VarType.I4 or VarType.R4 or VarType.R8 or VarType.Bstr or VarType.Empty or VarType.Null) =>
+            Failure.NotModelled(
+                "NotModelled.PercentPositionArgumentType",
+                $"Recordset.PercentPosition put with {sourceType} argument (only I4, R4, R8, BSTR, Empty and Null are recorded)"),
+        ("FindFirst" or "FindNext", 0) when sourceType != VarType.Bstr =>
             Failure.NotModelled(
                 "NotModelled.FindCriteriaType",
-                $"Recordset.FindFirst criteria with {sourceType} argument (only BSTR is recorded on derived SELECT recordsets)"),
+                $"Recordset.{member.Name} criteria with {sourceType} argument (only BSTR is recorded on derived SELECT recordsets)"),
         _ => null,
     };
 
@@ -736,6 +750,85 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
     private CallResult SetText(ref string kept, nint value)
     {
         kept = Args.Text(value) ?? "";
+        return CallResult.Nothing;
+    }
+
+    /// <summary>
+    /// PercentPosition on a single-table SELECT dynaset (2) or snapshot (4) (r-fix-cursor-dao/arg-percentposition-150-readback):
+    /// 100 * ordinal / populated RecordCount, matching PopulationCursor. Forward-only refuses 3219; BOF/EOF/empty 3021.
+    /// </summary>
+    private CallResult PercentPosition()
+    {
+        if (RecordsetType == 8 || (_options & 256) != 0)
+        {
+            return Fail(3219, DaoErrors.InvalidOperation);
+        }
+        if (!_isSingleTableRowSelect || _appendOnly || RecordsetType is not (2 or 4)
+            || _deletedRows is { Count: > 0 } || _addedRows is { Count: > 0 })
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.QueryRecordsetPercentPosition",
+                "Recordset.PercentPosition on this SELECT recordset shape or state (not recorded)"));
+        }
+        if (_deletedCurrent || IsAtBof || IsAtEof || _selectOrdinal < 0)
+        {
+            return Fail(3021, DaoErrors.NoCurrentRecord);
+        }
+        long count = Cursor.RecordCount;
+        if (count <= 0)
+        {
+            return Fail(3021, DaoErrors.NoCurrentRecord);
+        }
+        float pct = (float)(100.0 * _selectOrdinal / count);
+        return CallResult.OfScalar(VarType.R4, BitConverter.SingleToUInt32Bits(pct));
+    }
+
+    /// <summary>
+    /// PercentPosition put on a single-table SELECT dynaset (2) or snapshot (4) (r-fix-cursor-dao/arg-percentposition-150-readback):
+    /// trunc(percent * count / 100) over the populated RecordCount; values in 0..count clamp to count - 1, outside fail 3001
+    /// leaving the cursor unchanged. Forward-only refuses 3219; non-numeric fails 3421.
+    /// </summary>
+    private CallResult SetPercentPosition(nint value)
+    {
+        if (RecordsetType == 8 || (_options & 256) != 0)
+        {
+            return Fail(3219, DaoErrors.InvalidOperation);
+        }
+        if (!_isSingleTableRowSelect || _appendOnly || RecordsetType is not (2 or 4)
+            || _deletedRows is { Count: > 0 } || _addedRows is { Count: > 0 })
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.QueryRecordsetPercentPosition",
+                "Recordset.PercentPosition put on this SELECT recordset shape or state (not recorded)"));
+        }
+        if (!OwnedVariant.TryChangeScalar(Args.Cell(value), VarType.R4, SessionLocale.Lcid, out NativeVariant changed, out _))
+        {
+            return Fail(3421, DaoErrors.ConversionError);
+        }
+        if (_deletedCurrent || IsAtBof || IsAtEof || _selectOrdinal < 0)
+        {
+            return Fail(3021, DaoErrors.NoCurrentRecord);
+        }
+        long count = Cursor.RecordCount;
+        if (count <= 0)
+        {
+            return Fail(3021, DaoErrors.NoCurrentRecord);
+        }
+        float percent = BitConverter.Int32BitsToSingle((int)changed.Int64);
+        double target = Math.Truncate(percent * (double)count / 100.0);
+        if (target < 0 || target > count)
+        {
+            return Fail(3001, DaoErrors.InvalidArgument);
+        }
+        _frame?.Discard();
+        int clamped = (int)Math.Min((long)target, count - 1);
+        if (clamped != _selectOrdinal)
+        {
+            MoveCursorToOrdinal(clamped);
+            _selectOrdinal = clamped;
+            _movedSinceOpen = true;
+            CaptureSeeChangesRow();
+        }
         return CallResult.Nothing;
     }
 
@@ -1251,11 +1344,11 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
                 "NotModelled.QueryRecordsetFind",
                 $"Recordset.Find{direction} on a non-dynaset or complex SELECT recordset (only single-table and keyed 2-table join dynasets are recorded)"));
         }
-        if (direction != FindDirection.First)
+        if (direction is not (FindDirection.First or FindDirection.Next))
         {
             return CallResult.Fail(Failure.NotModelled(
                 "NotModelled.QueryRecordsetFindDirection",
-                $"Recordset.Find{direction} on a SELECT recordset (only FindFirst is recorded)"));
+                $"Recordset.Find{direction} on a SELECT recordset (only FindFirst and FindNext are recorded)"));
         }
         ReadOnlySpan<char> text = argument != 0 && Args.TypeOf(argument) == VarType.Bstr
             ? Bstrs.Chars(Args.Cell(argument)->Pointer)
@@ -1276,15 +1369,41 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
             _joinCurrentChildAbsent = false;
             _joinAddNew = false;
         }
-        // Scan Cursor rows from MoveFirst, then any _addedRows.
-        MoveOutcome firstOutcome = Cursor.MoveFirst();
+        int savedOrdinal = _selectOrdinal;
+        bool savedAtAddedRow = IsOnAddedRow;
+        int savedAddedIndex = _addedRowIndex;
+        int startOrd = direction == FindDirection.Next
+            ? (IsAtEof ? int.MaxValue : IsAtBof ? 0 : _selectOrdinal + 1)
+            : 0;
+        if (direction == FindDirection.Next && IsAtEof)
+        {
+            _noMatch = true;
+            return CallResult.Nothing;
+        }
+        // Scan Cursor rows from startOrd, then any _addedRows.
+        MoveOutcome startOutcome;
+        int ord;
+        if (startOrd == 0)
+        {
+            startOutcome = Cursor.MoveFirst();
+            ord = 0;
+        }
+        else if (!savedAtAddedRow)
+        {
+            startOutcome = Cursor.MoveNext();
+            ord = startOrd;
+        }
+        else
+        {
+            startOutcome = MoveOutcome.NoCurrentRecord;
+            ord = startOrd;
+        }
         if (Cursor.FetchFailure is { } fetchFirst)
         {
             return CallResult.Fail(fetchFirst.IsNotModelled ? Failure.NotModelled(fetchFirst.NotModelled!, fetchFirst.Message) : Failure.Dao(fetchFirst.Number, Source, fetchFirst.Message));
         }
-        if (firstOutcome is MoveOutcome.Moved or MoveOutcome.ReachedBoundary)
+        if (startOutcome is MoveOutcome.Moved or MoveOutcome.ReachedBoundary)
         {
-            int ord = 0;
             while (!Cursor.Eof)
             {
                 bool skip = false;
@@ -1348,7 +1467,8 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
             }
             try
             {
-                for (int i = 0; i < _addedRows.Count; i++)
+                int addedStart = direction == FindDirection.Next && savedAtAddedRow ? savedAddedIndex + 1 : 0;
+                for (int i = addedStart; i < _addedRows.Count; i++)
                 {
                     reader.Position(_addedRows[i]);
                     RowTest tested = criteria.Test(reader);
@@ -1376,14 +1496,21 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
                 reader.Dispose();
             }
         }
-        if (Cursor.Eof && (_addedRows is null || _addedRows.Count == 0) && firstOutcome == MoveOutcome.NoCurrentRecord)
+        if (Cursor.Eof && (_addedRows is null || _addedRows.Count == 0) && startOutcome == MoveOutcome.NoCurrentRecord)
         {
+            _noMatch = true;
+            return CallResult.Nothing;
+        }
+        if (direction == FindDirection.Next && savedOrdinal >= 0 && !savedAtAddedRow)
+        {
+            MoveCursorToOrdinal(savedOrdinal);
+            _selectOrdinal = savedOrdinal;
             _noMatch = true;
             return CallResult.Nothing;
         }
         return CallResult.Fail(Failure.NotModelled(
             "NotModelled.QueryRecordsetFindNoMatch",
-            "Recordset.FindFirst NoMatch position on a SELECT recordset (not recorded)"));
+            $"Recordset.Find{direction} NoMatch position on a SELECT recordset (not recorded)"));
     }
 
     private BoundExpression? BindSelectCriteria(ReadOnlySpan<char> text, out ExpressionFailure? failure)
@@ -2355,9 +2482,16 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         refused = default;
         if (RecordsetType != 2)
         {
+            if (RecordsetType == 4 && _isMaterializedSnapshot && member is "Edit" or "Update" or "CancelUpdate")
+            {
+                // r-fix-cursor-dao/assign-without-edit-own-transaction (calls 129, 131, 136):
+                // Edit, Update and CancelUpdate on a materialized SELECT snapshot (GROUP BY) fail 3251 without IErrorInfo.
+                refused = Fail(3251, DaoErrors.NotSupportedForType);
+                return null;
+            }
             refused = CallResult.Fail(Failure.NotModelled(
                 "NotModelled.QueryRecordsetEditType",
-                $"{member} on a type {RecordsetType} SELECT recordset (only single-table and keyed join dynasets are recorded)"));
+                $"{member} on a type {RecordsetType} SELECT recordset (only single-table and keyed join dynasets, and materialized snapshot 3251, are recorded)"));
             return null;
         }
         if (IsKnownNonUpdatable)
@@ -2471,6 +2605,11 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
 
     private CallResult EditModeValue()
     {
+        if (RecordsetType == 4 && _isMaterializedSnapshot)
+        {
+            // r-fix-cursor-dao/assign-without-edit-own-transaction (call 133): EditMode on a SELECT snapshot is 0.
+            return Int16(0);
+        }
         if (RecordsetType != 2
             || (!_isSingleTableRowSelect && !_isUpdatableJoin)
             || Cursor.Updatable != true
@@ -3140,6 +3279,15 @@ internal sealed unsafe class SelectFieldObject : DaoObject
         .Get("DataUpdatable", (self, args) => Live(self, f => f.DataUpdatable()))
         .Get("Required", (self, args) => Live(self, f => f.Required()))
         .Get("OrdinalPosition", (self, args) => Live(self, f => Int16(f._ordinal)))
+        .Get("CollatingOrder", (self, args) => Live(self, f => f.DirectCollatingOrder()))
+        .Get("AllowZeroLength", (self, args) => Live(self, f => Bool(false)))
+        .Get("ValidationRule", (self, args) => Live(self, f => Text("")))
+        .Get("ValidationText", (self, args) => Live(self, f => Text("")))
+        .Get("DefaultValue", (self, args) => Live(self, f => Text("")))
+        .Get("CollectionIndex", (self, args) => Live(self, f => Int16(f._ordinal)))
+        .Get("ForeignName", (self, args) => Live(self, f => f.Fail(3219, DaoErrors.InvalidOperation)))
+        .Get("Expression", (self, args) => Live(self, f => Text("")))
+        .Get("ValidateOnSet", (self, args) => Live(self, f => Bool(false)))
         .Get("Precision", (self, args) => Live(self, f => f.DirectPrecision()))
         .Get("Scale", (self, args) => Live(self, f => f.DirectScale()))
         .Get("Value", (self, args) => ((SelectFieldObject)self).Value())
@@ -3919,6 +4067,21 @@ internal sealed unsafe class SelectFieldObject : DaoObject
     /// <c>groupby-expr-decagg-dao-mdb</c> calls 108[0], 122[0]; <c>r-def-cursor-dao/recordset-field-properties</c>).</item>
     /// </list>
     /// </summary>
+    private CallResult DirectCollatingOrder()
+    {
+        if (Column.SourceColumn is { } sc)
+        {
+            return Int32(ColumnFacts.CollatingOrder(sc.Column));
+        }
+        if (Recordset.Database.Header.SortOrder.Reserved == 0)
+        {
+            return Int32(Recordset.Database.Header.SortOrder.Identifier);
+        }
+        return CallResult.Fail(Failure.NotModelled(
+            "NotModelled.FieldProperties.CollatingOrder",
+            $"Field.CollatingOrder of {Column.Name} (not recorded)"));
+    }
+
     private CallResult DirectPrecision()
     {
         if (Column.SourceColumn?.Column.CalculatedResultType is not null)
@@ -4023,10 +4186,11 @@ internal sealed unsafe class SelectFieldObject : DaoObject
         {
             return txRefused;
         }
-        if (Recordset.RecordsetType == 2 && Recordset.IsKnownNonUpdatable)
+        if ((Recordset.RecordsetType == 2 && Recordset.IsKnownNonUpdatable)
+            || (Recordset.RecordsetType == 4 && Recordset.IsMaterializedSnapshot))
         {
-            // option-join-updatability calls 153, 173, 409, 429: Field.Value put on a read-only/dbReadOnly/dbForwardOnly
-            // SELECT dynaset fails 3027 from DAO.Field with IErrorInfo.
+            // option-join-updatability calls 153, 173, 409, 429; r-fix-cursor-dao/assign-without-edit-own-transaction call 123:
+            // Field.Value put on a non-updatable SELECT dynaset or materialized snapshot (4) fails 3027 from DAO.Field with IErrorInfo.
             return Fail(MutationError.ReadOnly, "Cannot update. Database or object is read-only.", publishesErrorInfo: true);
         }
         if (Column.Origin == ColumnOrigin.Expression && Recordset.HasPendingEditMode)

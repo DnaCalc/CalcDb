@@ -42,8 +42,8 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         .Put("PercentPosition", (self, args) => { nint value = args[^1]; return Moving(self, "PercentPosition", r => r.SetPercentPosition(value)); })
         .Get("Bookmark", (self, args) => Read(self, "Bookmark", r => r.GetBookmark()))
         .Put("Bookmark", (self, args) => { nint value = args[^1]; return Moving(self, "Bookmark", r => r.SetBookmark(value)); })
-        // Index of a dynaset, snapshot or forward-only recordset is 3251 without an IErrorInfo (r-dao-1b/recordset-members-dynaset, -snapshot, -forward-only, -at-eof).
-        .Get("Index", (self, args) => Live(self, r => r.Cursor is TableCursor t ? Text(t.Index?.Name ?? "") : r.Fail(3251, DaoErrors.NotSupportedForType)))
+        // Index of a dynaset, snapshot or forward-only recordset is 3251 without an IErrorInfo (r-dao-1b/recordset-members-dynaset, -snapshot, -forward-only, -at-eof; r-cursor-1b/index-property-forms).
+        .Get("Index", (self, args) => Live(self, r => r.Cursor is TableCursor ? Text(r._indexName) : r.Fail(3251, DaoErrors.NotSupportedForType)))
         .Put("Index", (self, args) => { nint value = args[^1]; return Read(self, "Index", r => r.EditPending("Index") ?? r.SetIndex(value)); })
         .Method("Requery", (self, args) => { nint queryDef = args.Length > 0 ? args[0] : 0; return Live(self, r => r.Requery(queryDef)); })
         .Method("Clone", (self, args) => Live(self, r => r.Clone()))
@@ -191,6 +191,7 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
     private readonly RecordsetFamily _family;
     private readonly CatalogEntry _entry;
     private readonly int _options;
+    private readonly bool _readOnlyByLockEdit;
     private bool _pessimistic;
     private readonly ExplicitFrame[] _openLevels;
     private EditFrame? _frame;
@@ -201,6 +202,7 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
     private string? _notRecorded;
     private LastModifiedMark _lastModified;
     private byte[]? _lastModifiedRow;
+    private string _indexName = "";
     private string _filter = "", _sort = "";
     private int _cacheSize;
     private byte[]? _cacheStart;
@@ -209,7 +211,8 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
     /// <param name="pessimistic">LockEdits: True unless LockEdit dbOptimistic (3) was given (r-fix-cursor-dao/updatable-members-rw).</param>
     /// <param name="tempSlot">Slot in <see cref="EngineState"/>'s temp-page allocator for table-opened dynasets and snapshots.</param>
     /// <param name="bookmarkBaseRefusal">Named refusal when a snapshot opened without a recorded bookmark base.</param>
-    public RecordsetObject(DatabaseObject database, CatalogEntry entry, IRecordCursor cursor, int recordsetType, int options, bool pessimistic, int? tempSlot = null, (string Name, string Detail)? bookmarkBaseRefusal = null) : base(Decl, Vtable, database.Engine, "DAO.Recordset")
+    /// <param name="readOnlyByLockEdit">True when opened with LockEdit = dbReadOnly (4) (r-cursor-1b/open-lockedits-values).</param>
+    public RecordsetObject(DatabaseObject database, CatalogEntry entry, IRecordCursor cursor, int recordsetType, int options, bool pessimistic, int? tempSlot = null, (string Name, string Detail)? bookmarkBaseRefusal = null, bool readOnlyByLockEdit = false) : base(Decl, Vtable, database.Engine, "DAO.Recordset")
     {
         _family = new RecordsetFamily(this, tempSlot, bookmarkBaseRefusal);
         Database = database;
@@ -218,6 +221,7 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         Cursor = cursor;
         RecordsetType = recordsetType;
         _options = options;
+        _readOnlyByLockEdit = readOnlyByLockEdit;
         _pessimistic = pessimistic;
         _openLevels = [.. database.Workspace.Transactions.Frames];
         database.AddRef(); // a recordset keeps its Database object alive
@@ -233,6 +237,7 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         Cursor = cursor;
         RecordsetType = parent.RecordsetType;
         _options = parent._options;
+        _readOnlyByLockEdit = parent._readOnlyByLockEdit;
         _pessimistic = parent._pessimistic;
         _openLevels = [.. Database.Workspace.Transactions.Frames];
         _family.AddClone(this);
@@ -273,15 +278,15 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         : (short)EditMode.None;
 
     /// <summary>Updatable (R-CURSOR-1 CUR-PROV with the option matrix of r-fix-cursor-dao/option-flags-rw): <see cref="RecordsetOptions.Updatable"/>.</summary>
-    public bool Updatable => RecordsetOptions.Updatable(RecordsetType, _options, Database.ReadOnly);
+    public bool Updatable => !_readOnlyByLockEdit && RecordsetOptions.Updatable(RecordsetType, _options, Database.ReadOnly);
 
     /// <summary>
     /// A table-type or dynaset recordset that dbReadOnly alone makes not updatable, on a writable open
-    /// (r-cursor-1b/option-readonly-write: Edit, AddNew and Delete 3027 from DAO.Recordset without an IErrorInfo, a Value
-    /// put from DAO.Field with one, 3027 on a dynaset and 3020 on table-type, Update and CancelUpdate 3020, no edit being
-    /// pending).
+    /// (r-cursor-1b/option-readonly-write, r-cursor-1b/open-lockedits-values: Edit, AddNew and Delete 3027 from
+    /// DAO.Recordset without an IErrorInfo, a Value put from DAO.Field with one, 3027 on a dynaset and 3020 on
+    /// table-type, Update and CancelUpdate 3020, no edit being pending).
     /// </summary>
-    public bool ReadOnlyByOption => RecordsetType is 1 or 2 && !Database.ReadOnly && RecordsetOptions.ReadOnlyOnly(_options);
+    public bool ReadOnlyByOption => RecordsetType is 1 or 2 && !Database.ReadOnly && (_readOnlyByLockEdit || RecordsetOptions.ReadOnlyOnly(_options));
 
     public bool DeniesWrite(string table) => !Closed && (_options & 1) != 0 && string.Equals(TableName, table, StringComparison.OrdinalIgnoreCase);
 
@@ -511,18 +516,32 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
 
     private FieldsObject FieldsCollection => _fields ??= new FieldsObject(this);
 
-    /// <summary>Index put on a table-type recordset: the first row of the new order becomes current; an unknown name is 3800 (r-cursor-1/id-index-switch).</summary>
+    /// <summary>
+    /// Index put on a table-type recordset: the first row of the new order becomes current; trailing ASCII spaces are
+    /// ignored when matching the index name while the assigned text is echoed verbatim by Index get; an unknown name is
+    /// 3800 (r-cursor-1/id-index-switch, r-cursor-1b/index-property-forms). Non-table-type recordsets fail 3251 without IErrorInfo.
+    /// </summary>
     private CallResult SetIndex(nint value)
     {
         if (Cursor is not TableCursor table)
         {
-            return CallResult.Fail(Failure.NotImplemented("Index on a recordset that is not table-type"));
+            return Fail(3251, DaoErrors.NotSupportedForType);
         }
-        string name = Args.Text(value) ?? "";
-        return table.SetIndex(name) switch
+        string raw = Args.Text(value) ?? "";
+        string lookup = raw.TrimEnd(' ');
+        if (raw.Length > 0 && lookup.Length == 0)
         {
-            IndexRefusal.None => CallResult.Nothing,
-            IndexRefusal.UnknownIndex => Fail(3800, DaoErrors.NotAnIndex(name)),
+            return CallResult.Fail(Failure.NotModelled("NotModelled.IndexWhitespaceOnly", "Index put of a whitespace-only string (not recorded)"));
+        }
+        IndexRefusal refusal = table.SetIndex(lookup);
+        if (refusal == IndexRefusal.None)
+        {
+            _indexName = raw;
+            return CallResult.Nothing;
+        }
+        return refusal switch
+        {
+            IndexRefusal.UnknownIndex => Fail(3800, DaoErrors.NotAnIndex(raw)),
             var other => CallResult.Fail(Failure.NotImplemented("Index put: " + other + " " + table.LastTraversalFailure?.Predicate)),
         };
     }
@@ -1234,18 +1253,40 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
             int rows = 0;
             while (rows < count && !Cursor.Eof)
             {
+                int rowStart = cells.Count;
+                bool rowFailed = false;
                 foreach (ColumnDescriptor column in columns)
                 {
                     // With an edit pending the first row is its buffer (getrows-edit-buffer: an Edit's assigned 99.5 and
-                    // "edited memo"; an AddNew's 7, 7.5, "added" and Nulls in place of the current row 1, then rows 2 and 3).
+                    // "edited memo"; an AddNew's 7, False, 7.5, "added" and Nulls in place of the current row 1, then rows 2 and 3).
                     CallResult cell = rows == 0 && _frame is { Mode: not EditMode.None } ? FieldObject.ReadValue(this, column) : FieldObject.StoredValue(this, column);
                     if (cell.Failure is { } failure)
                     {
+                        bool isDecimal38 = column.TypeCode == NativeTypes.Numeric
+                            && column.CalculatedResultType is null
+                            && column.NumericPrecision == 38
+                            && failure.Number == 3000;
+                        if (isDecimal38)
+                        {
+                            // r-cursor-1b/getrows-shape-types (calls 83, 94, 105 on table WD types 1, 2, 4):
+                            // non-Null Decimal(38) 3000 stops before the failing row without advancing, returning [0+0, 0+colCount] on row 0.
+                            for (int i = rowStart; i < cells.Count; i++)
+                            {
+                                cells[i].Dispose();
+                            }
+                            cells.RemoveRange(rowStart, cells.Count - rowStart);
+                            rowFailed = true;
+                            break;
+                        }
                         return failure.Number == 3167
                             ? CallResult.Fail(Failure.NotModelled("NotModelled.GetRowsDeletedRow", "GetRows on a row another call deleted: ACE's degenerate array (CUR-BULK) is not identified"))
                             : CallResult.Fail(Failure.NotModelled("NotModelled.GetRowsCell", "GetRows of a cell Field.Value refuses: " + failure.Description));
                     }
                     cells.Add(Owned(cell));
+                }
+                if (rowFailed)
+                {
+                    break;
                 }
                 _frame?.Discard(); // the move discards the edit (EditMode 0 after, CancelUpdate 3020)
                 rows++;
@@ -1254,7 +1295,9 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
                     break;
                 }
             }
-            nint array = SafeArrays.Create(VarType.Variant, (0, columns.Count), (0, rows));
+            nint array = rows == 0
+                ? SafeArrays.Create(VarType.Variant, (0, 0), (0, columns.Count))
+                : SafeArrays.Create(VarType.Variant, (0, columns.Count), (0, rows));
             NativeVariant* data = rows == 0 || columns.Count == 0 ? null : (NativeVariant*)SafeArrays.ElementPointer(array, 0, 0);
             for (int i = 0; i < cells.Count; i++)
             {
@@ -2180,14 +2223,89 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         return CallResult.Nothing;
     }
 
+    /// <summary>
+    /// Move(Rows, [StartBookmark]) (R-CURSOR-1 CUR-POS):
+    /// <list type="bullet">
+    /// <item>Extreme sentinels (r-cursor-1b/move-argument-forms calls 148, 160, 352, 364, 556, 568, 757, 769):
+    /// <see cref="int.MaxValue"/> lands on the last row and <see cref="int.MinValue"/> lands on the first row on non-empty
+    /// table-type (1), dynaset (2) and snapshot (4) cursors; forward-only (8) refuses both with 3219 leaving position unchanged.</item>
+    /// <item>StartBookmark (r-cursor-1b/move-start-bookmark): Missing, Empty, Null, empty BSTR "" and empty Byte array [0+0]
+    /// are treated as omitted (move relative to current); VT_I4 fails 3159 leaving position unchanged; a non-empty 1D Byte
+    /// array on dynaset (2) or snapshot (4) seeks to that bookmark (failing 3159 into BookmarkInvalid if invalid) and then
+    /// applies Rows. Other StartBookmark types or cursor types are refused by name.</item>
+    /// </list>
+    /// </summary>
     private CallResult Move(nint rowsArg, nint startBookmark)
     {
+        int? rows = Args.Int32(rowsArg, omitted: null);
+        if (rows is null)
+        {
+            return CallResult.Fail(Failure.NotImplemented("Move with a Rows argument that is not a number"));
+        }
         if (startBookmark != 0)
         {
-            return CallResult.Fail(Failure.NotImplemented("Move with a StartBookmark"));
+            NativeVariant* sb = Args.Cell(startBookmark);
+            VarType sbVt = (VarType)sb->Vt;
+            if (TypedCall.IsMissing(sb) || sbVt is VarType.Empty or VarType.Null)
+            {
+                // Treated as omitted: move relative to current position (r-cursor-1b/move-start-bookmark calls 100, 107, 114, 193, 200, 207).
+            }
+            else if (sbVt == VarType.Bstr)
+            {
+                if (!Bstrs.Chars(sb->Pointer).IsEmpty)
+                {
+                    return CallResult.Fail(Failure.NotModelled("NotModelled.MoveStartBookmarkNonEmptyBstr", "Move with a non-empty BSTR StartBookmark (not recorded)"));
+                }
+                // Empty BSTR "" is treated as omitted (r-cursor-1b/move-start-bookmark calls 86, 179).
+            }
+            else if (sbVt == VarType.I4)
+            {
+                if (Cursor is not PopulationCursor { ForwardOnly: false })
+                {
+                    return CallResult.Fail(Failure.NotModelled("NotModelled.MoveStartBookmarkCursorType", $"Move with VT_I4 StartBookmark on type {RecordsetType} recordset (only dynaset and snapshot are recorded)"));
+                }
+                // r-cursor-1b/move-start-bookmark calls 93, 186: VT_I4 fails 3159 without invalidating the current record.
+                return Fail(3159, "Not a valid bookmark.");
+            }
+            else if (sbVt == (VarType.Array | VarType.UI1) && sb->Pointer != 0 && SafeArrays.ElementType(sb->Pointer) == VarType.UI1)
+            {
+                (int Lower, int Count)[] shape = SafeArrays.Shape(sb->Pointer);
+                if (shape.Length != 1)
+                {
+                    return CallResult.Fail(Failure.NotModelled("NotModelled.MoveStartBookmarkShape", $"Move with a {shape.Length}D Byte array StartBookmark (not recorded)"));
+                }
+                if (shape[0].Count > 0)
+                {
+                    if (Cursor is not PopulationCursor { ForwardOnly: false })
+                    {
+                        return CallResult.Fail(Failure.NotModelled("NotModelled.MoveStartBookmarkCursorType", $"Move with Byte array StartBookmark on type {RecordsetType} recordset (only dynaset and snapshot are recorded)"));
+                    }
+                    CallResult positioned = SetBookmark(startBookmark);
+                    if (positioned.Failure is not null)
+                    {
+                        return positioned;
+                    }
+                }
+                // Empty [0+0] Byte array is treated as omitted (r-cursor-1b/move-start-bookmark calls 72, 165).
+            }
+            else
+            {
+                return CallResult.Fail(Failure.NotModelled("NotModelled.MoveStartBookmarkType", $"Move with StartBookmark of type {sbVt} (not recorded)"));
+            }
         }
-        int? rows = Args.Int32(rowsArg, omitted: null);
-        return rows is null ? CallResult.Fail(Failure.NotImplemented("Move with a Rows argument that is not a number")) : Moved(Cursor.Move(rows.Value));
+        if (rows.Value is int.MaxValue or int.MinValue)
+        {
+            if (RecordsetType == 8 || Cursor is PopulationCursor { ForwardOnly: true })
+            {
+                return Fail(3219, DaoErrors.InvalidOperation);
+            }
+            if (Cursor.Bof && Cursor.Eof)
+            {
+                return CallResult.Fail(Failure.NotModelled("NotModelled.MoveExtremeOnEmpty", $"Move({rows.Value}) on an empty recordset (not recorded)"));
+            }
+            return Moved(rows.Value == int.MaxValue ? Cursor.MoveLast() : Cursor.MoveFirst());
+        }
+        return Moved(Cursor.Move(rows.Value));
     }
 
     private CallResult GetBookmark()
@@ -2763,7 +2881,13 @@ internal sealed unsafe class FieldObject : DaoObject
         if (recordset.FrameIfMade is { Mode: not EditMode.None } frame)
         {
             // During an edit the field reads its buffer cell: the accepted value, the stored original, or Null when unset (CUR-EDIT).
-            return Published(frame.Read(column), column);
+            // r-cursor-1b/getrows-edit-buffer (call 33): an unset Yes/No column in an AddNew buffer reads VT_BOOL 0 (False), not Null.
+            FieldResult buffered = frame.Read(column);
+            if (frame.Mode == EditMode.AddNew && column.TypeCode == NativeTypes.Boolean && buffered.Succeeded && buffered.Value.Kind == NativeKind.Null)
+            {
+                return CallResult.OfScalar(VarType.Bool, 0);
+            }
+            return Published(buffered, column);
         }
         return recordset.UnpublishedRead("Field.Value") ?? StoredValue(recordset, column);
     }
@@ -3157,7 +3281,7 @@ internal static class RecordsetOptions
 
     private const int Known = DenyWrite | DenyRead | ReadOnly | AppendOnlyOption | Inconsistent | Consistent | SqlPassThrough | FailOnError | ForwardOnly | SeeChanges | RunAsync | ExecDirect;
 
-    public static OptionAdmission Admit(int type, int options)
+    public static OptionAdmission Admit(int type, int options, bool readOnlyDatabase = false)
     {
         if ((options & ~Known) != 0)
         {
@@ -3170,7 +3294,8 @@ internal static class RecordsetOptions
         }
         if (type == 1 && (options & SqlPassThrough) != 0)
         {
-            return OptionAdmission.NotModelled; // accepted read-only; not asked on a writable open
+            // r-cursor-1b/option-flags-by-type (call 69): dbSQLPassThrough (64) on table-type is accepted on a read-only open; not asked on a writable open.
+            return readOnlyDatabase ? OptionAdmission.Admitted : OptionAdmission.NotModelled;
         }
         return OptionAdmission.Admitted;
     }

@@ -810,7 +810,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
             return CallResult.Fail(Failure.NotImplemented("OpenRecordset with a null source"));
         }
         int? type = null;
-        if (args.Length > 1 && args[1] != 0)
+        if (args.Length > 1 && args[1] != 0 && !TypedCall.IsMissing(Args.Cell(args[1])))
         {
             type = Args.Int32(args[1], omitted: null);
             if (type is null)
@@ -834,19 +834,39 @@ internal sealed unsafe class DatabaseObject : DaoObject
                 return Fail(3001, DaoErrors.InvalidArgument);
             }
         }
+        bool optionsMissing = args.Length > 2 && (args[2] == 0 || TypedCall.IsMissing(Args.Cell(args[2])));
+        bool lockEditPresent = args.Length > 3 && args[3] != 0 && !TypedCall.IsMissing(Args.Cell(args[3]));
+        if (optionsMissing && lockEditPresent)
+        {
+            // r-cursor-1b/open-argument-shapes, r-fix-cursor-dao/open-argument-shapes-rw (call 140):
+            // OpenRecordset("F", 2, Missing, 3) fails 3001 ("Invalid argument.", no IErrorInfo) when Options is Missing and LockEdit is supplied.
+            return Fail(3001, DaoErrors.InvalidArgument);
+        }
         int? options = Args.Int32(args.Length > 2 ? args[2] : 0, omitted: 0);
-        int? lockEdit = Args.Int32(args.Length > 3 ? args[3] : 0, omitted: null);
+        int? lockEdit = null;
+        if (lockEditPresent)
+        {
+            CalcDb.Values.NativeVariant* lockCell = Args.Cell(args[3]);
+            if (!CalcDb.Values.OwnedVariant.TryChangeScalar(lockCell, CalcDb.Foundation.VarType.I4, SessionLocale.Lcid, out CalcDb.Values.NativeVariant lockConverted, out _))
+            {
+                // r-cursor-1b/open-lockedits-values: VT_NULL or non-numeric BSTR LockEdit fails 3421 without IErrorInfo.
+                return Fail(3421, DaoErrors.ConversionError);
+            }
+            lockEdit = (int)lockConverted.Int64;
+        }
         if (options is null)
         {
             return CallResult.Fail(Failure.NotImplemented("OpenRecordset with an Options argument that is not numeric"));
         }
-        if (lockEdit is not (null or 2 or 3))
+        if (lockEdit is not (null or 2 or 3 or 4))
         {
-            return CallResult.Fail(Failure.NotImplemented($"OpenRecordset with LockEdit {lockEdit?.ToString() ?? "not numeric"}"));
+            // r-cursor-1b/open-argument-shapes (call 149), r-cursor-1b/open-lockedits-values:
+            // LockEdit outside {2 dbPessimistic, 3 dbOptimistic, 4 dbReadOnly} fails 3001 without IErrorInfo.
+            return Fail(3001, DaoErrors.InvalidArgument);
         }
-        if (type is null && options != 0)
+        if (type is null && options != 0 && options != 4)
         {
-            // CUR-PROV: with the Type cell omitted, option 4 opens a writable table-type recordset (an ACE quirk, open).
+            // CUR-PROV: with the Type cell omitted, option 4 is recorded (open-argument-shapes, open-argument-shapes-rw call 131); other options are not.
             return CallResult.Fail(Failure.NotImplemented("OpenRecordset with Options and no Type (CUR-PROV's omitted-Type rule)"));
         }
         CatalogEntry? entry = Catalog.LocalTables(Format).FirstOrDefault(e => string.Equals(e.Name, name, StringComparison.OrdinalIgnoreCase));
@@ -911,18 +931,21 @@ internal sealed unsafe class DatabaseObject : DaoObject
         }
         // A local table opens table-type when no type is given (dbOpenTable 1); dynaset 2, snapshot 4 and forward-only 8
         // populate through the occurrence store (CUR-POP).
+        // r-cursor-1b/open-argument-shapes, r-fix-cursor-dao/open-argument-shapes-rw (call 131):
+        // when Type is omitted and Options is 4, ACE opens a table-type recordset without applying dbReadOnly (Updatable = !ReadOnly).
+        int effectiveOptions = type is null && options == 4 ? 0 : options;
         int recordsetType = type ?? 1;
         if (recordsetType == 1 && lockEdit == 3)
         {
             // r-dao-1-err-1/err-bind-optional-cells call 5: db.OpenRecordset("T", Missing, 0, 3) -> 3001 (table-type rejects dbOptimistic).
             return Fail(3001, DaoErrors.InvalidArgument);
         }
-        switch (RecordsetOptions.Admit(recordsetType, options))
+        switch (RecordsetOptions.Admit(recordsetType, effectiveOptions, readOnlyDatabase: ReadOnly))
         {
             case OptionAdmission.InvalidArgument:
                 return Fail(3001, DaoErrors.InvalidArgument);
             case OptionAdmission.NotModelled:
-                return CallResult.Fail(Failure.NotImplemented($"OpenRecordset type {recordsetType} with Options {options} (an accepted option whose effect is not modelled: RecordsetOptions)"));
+                return CallResult.Fail(Failure.NotImplemented($"OpenRecordset type {recordsetType} with Options {effectiveOptions} (an accepted option whose effect is not modelled: RecordsetOptions)"));
         }
         if (DenyReadTable(entry.Name) is { } denyReadTable)
         {
@@ -963,7 +986,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
             _workspace.Transactions.EndLazyBurst(Cache);
         }
         EnsureReadOnlyFirstView();
-        var recordset = new RecordsetObject(this, entry, cursor, recordsetType, options, lockEdit != 3, tempSlot, bookmarkBaseRefusal);
+        var recordset = new RecordsetObject(this, entry, cursor, recordsetType, effectiveOptions, lockEdit != 3, tempSlot, bookmarkBaseRefusal, readOnlyByLockEdit: lockEdit == 4);
         if (tempSlot is int claimedSlot)
         {
             Engine.OccupyTempSlot(claimedSlot, recordset);
