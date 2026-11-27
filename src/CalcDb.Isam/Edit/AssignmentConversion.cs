@@ -209,8 +209,11 @@ public static unsafe class AssignmentConversion
     {
         // Unrecorded precision/scale or non-decimal direct COM puts (BSTR/R8/Currency) on non-DAO routes stay
         // ColumnType so ADO immediate edit preserves 0x80040E21 (AdoImmediateEditTests); SQL INSERT converts literals
-        // to VT_DECIMAL first.
-        if (column.NumericPrecision is 0 or > 28
+        // to VT_DECIMAL first. Draft DAO CreateField(dbDecimal) persists Decimal(38, 0) (evidence/r-q53-conv-abspos-subq-loc/
+        // dao-draft-decimal-accdb, dao-draft-decimal-mdb), which SQL INSERT populates via !allowDaoConversions while
+        // DAO/ADO direct puts remain refused.
+        bool isSqlDraftDecimal38 = !allowDaoConversions && column.NumericPrecision == 38 && column.NumericScale == 0;
+        if ((!isSqlDraftDecimal38 && column.NumericPrecision is 0 or > 28)
             || column.NumericScale > column.NumericPrecision
             || incoming.Type == VarType.Currency
             || (!allowDaoConversions && incoming.Type is VarType.Bstr or VarType.R8))
@@ -240,28 +243,31 @@ public static unsafe class AssignmentConversion
                 ? new ConversionResult(default, new MutationError(MutationError.DecimalScaleTruncation, MutationErrorSource.Field))
                 : Open(MutationOpen.ConversionNotRecorded);
         }
-        UInt128 limit = UInt128.One;
-        for (int i = 0; i < column.NumericPrecision; i++)
+        if (!isSqlDraftDecimal38)
         {
-            limit *= 10;
-        }
-        UInt128 maxBeforeScale = (limit - UInt128.One) / 10;
-        while (scale < column.NumericScale)
-        {
-            if (magnitude > maxBeforeScale)
+            UInt128 limit = UInt128.One;
+            for (int i = 0; i < column.NumericPrecision; i++)
+            {
+                limit *= 10;
+            }
+            UInt128 maxBeforeScale = (limit - UInt128.One) / 10;
+            while (scale < column.NumericScale)
+            {
+                if (magnitude > maxBeforeScale)
+                {
+                    return allowDaoConversions
+                        ? new ConversionResult(default, new MutationError(MutationError.DecimalPrecisionTooSmall, MutationErrorSource.Field))
+                        : Open(MutationOpen.ConversionNotRecorded);
+                }
+                magnitude *= 10;
+                scale++;
+            }
+            if (magnitude >= limit)
             {
                 return allowDaoConversions
                     ? new ConversionResult(default, new MutationError(MutationError.DecimalPrecisionTooSmall, MutationErrorSource.Field))
                     : Open(MutationOpen.ConversionNotRecorded);
             }
-            magnitude *= 10;
-            scale++;
-        }
-        if (magnitude >= limit)
-        {
-            return allowDaoConversions
-                ? new ConversionResult(default, new MutationError(MutationError.DecimalPrecisionTooSmall, MutationErrorSource.Field))
-                : Open(MutationOpen.ConversionNotRecorded);
         }
         bool negative = magnitude != 0 && dv.Negative;
         return new ConversionResult(NativeValue.Of(new NativeDecimal(negative, magnitude, column.NumericScale)));

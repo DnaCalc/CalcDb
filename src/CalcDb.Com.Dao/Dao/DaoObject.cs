@@ -139,6 +139,36 @@ internal static class DaoErrors
 
     /// <summary>3164 (r-q50-jk44-ddl-vis/dao-opt-join-seechanges-*: join key field put under dbConsistent).</summary>
     public const string FieldCannotBeUpdated = "Field cannot be updated.";
+
+    /// <summary>3022 (r-q52-ddl-make-domain/dao-idx-errors-*, r-q54-excl-ddl-ix-cmd/ix-unique-dup-3022-bytes-*).</summary>
+    public const string DuplicateKey = "The changes you requested to the table were not successful because they would create duplicate values in the index, primary key, or relationship. Change the data in the field or fields that contain duplicate data, remove the index, or redefine the index to permit duplicate entries and try again.";
+
+    /// <summary>3027 (r-q52-ddl-make-domain/dao-idx-errors-*: Indexes.Append / Indexes.Delete on read-only Database).</summary>
+    public const string ReadOnly = "Cannot update. Database or object is read-only.";
+
+    /// <summary>3058 (r-q52-ddl-make-domain/dao-idx-errors-*: Indexes.Append Required/Primary over Null row).</summary>
+    public const string NullInIndex = "Index or primary key cannot contain a Null value.";
+
+    /// <summary>3268 (r-q52-ddl-make-domain/dao-idx-errors-*: Primary/Unique/Required/IgnoreNulls put on appended Index).</summary>
+    public const string CannotSetOnceInCollection = "Cannot set this property once the object is part of a collection.";
+
+    /// <summary>3280 (r-q52-ddl-make-domain/dao-idx-errors-*: TableDef.Fields.Delete of an indexed field).</summary>
+    public const string CannotDeleteIndexedField = "Cannot delete a field that is part of an index or is needed by the system.";
+
+    /// <summary>3281 (r-q52-ddl-make-domain/dao-idx-errors-*: Indexes.Delete of a PK or FK index used in a relationship).</summary>
+    public const string CannotDeleteIndexInUse = "Cannot delete this index or table. It is either the current index or is used in a relationship.";
+
+    /// <summary>3283 (r-q52-ddl-make-domain/dao-idx-errors-*: Indexes.Append of a second Primary key).</summary>
+    public const string PrimaryKeyExists = "Primary key already exists.";
+
+    /// <summary>3284 (r-q52-ddl-make-domain/dao-idx-errors-*: Indexes.Append with a duplicate index name).</summary>
+    public const string IndexExists = "Index already exists.";
+
+    /// <summary>3285 (r-q52-ddl-make-domain/dao-idx-errors-*: Indexes.Append with duplicate column in index).</summary>
+    public const string InvalidIndexDefinition = "Invalid index definition.";
+
+    /// <summary>3409 (r-q52-ddl-make-domain/dao-idx-errors-*: Indexes.Append naming a missing column).</summary>
+    public static string InvalidIndexField(string fieldName) => $"Invalid field definition '{fieldName}' in definition of index or relationship.";
 }
 
 /// <summary>

@@ -2077,7 +2077,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     /// native effect leaves the set as it was; one that stops after an effect keeps the attempt as resolution owner
     /// (the cache restricts admission) and is named.
     /// </summary>
-    private (MutationOpen Open, string? Detail) Publish(bool forceFlush, CommitMode mode, bool keepBurstWindow = false)
+    private (MutationOpen Open, string? Detail) Publish(bool forceFlush, CommitMode mode, bool keepBurstWindow = false, bool skipCommitCounter = false)
     {
         if (_unwrittenPendingCount > 0 && _pending.Find(c => c.Physical is null) is { } unwritten)
         {
@@ -2095,10 +2095,15 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         if (written.Length == 1 && Publisher is { } publisher)
         {
             FileParticipant p = written[0];
-            (MutationOpen counterOpen, string? counterDetail) = DecideCommitCounter(p.Cache, mode, out bool incrementPage0, out bool trackLazyBurst);
-            if (counterOpen != MutationOpen.None)
+            bool incrementPage0 = false;
+            bool trackLazyBurst = false;
+            if (!skipCommitCounter)
             {
-                return (counterOpen, counterDetail);
+                (MutationOpen counterOpen, string? counterDetail) = DecideCommitCounter(p.Cache, mode, out incrementPage0, out trackLazyBurst);
+                if (counterOpen != MutationOpen.None)
+                {
+                    return (counterOpen, counterDetail);
+                }
             }
             FormatDescriptor d = FormatDescriptor.Jet4Family;
             IReadOnlyCollection<ulong> pages = incrementPage0 && !p.Overlay.ChangedPages.Contains(0UL)
@@ -3872,7 +3877,8 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         PageCache file,
         MutationSemantics catalogTable,
         Func<FileParticipant, CompiledChange> compile,
-        DeferredCatalogCommitKind? allowPendingDeferredKind = null)
+        DeferredCatalogCommitKind? allowPendingDeferredKind = null,
+        bool skipCommitCounter = false)
     {
         if (_unresolved.Contains(file))
         {
@@ -3947,7 +3953,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         {
             return new AcceptOutcome(true);
         }
-        (MutationOpen open, string? detail) = Publish(forceFlush: false, CommitMode.Immediate);
+        (MutationOpen open, string? detail) = Publish(forceFlush: false, CommitMode.Immediate, skipCommitCounter: skipCommitCounter);
         return new AcceptOutcome(true, null, open, detail);
     }
 

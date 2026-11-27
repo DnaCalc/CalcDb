@@ -23,7 +23,9 @@ internal sealed unsafe class NewTableDefObject : DaoObject
         // A draft's Name put is kept and read back (draft-tabledef-field: Name = "D1x", then "D1x"); a name is checked at Append.
         .Put("Name", (self, args) => { nint value = args[^1]; return Live(self, t => { t.Name = Args.Text(value) ?? ""; return CallResult.Nothing; }); })
         .Method("CreateField", (self, args) => { nint name = args.Length > 0 ? args[0] : 0, type = args.Length > 1 ? args[1] : 0, size = args.Length > 2 ? args[2] : 0; return Live(self, t => t.CreateField(name, type, size)); })
+        .Method("CreateIndex", (self, args) => { nint name = args.Length > 0 ? args[0] : 0; return Live(self, t => NewIndexObject.Create(t.Engine, name)); })
         .Get("Fields", (self, args) => Live(self, t => Object(t.Fields)))
+        .Get("Indexes", (self, args) => Live(self, t => Object(t.Indexes)))
         .Method("OpenRecordset", static (self, args) => CallResult.Fail(Failure.NotModelled("NotModelled.DraftTableDefOpenRecordset", "TableDef.OpenRecordset on a draft (unappended) TableDef is not recorded")));
 
     private readonly DatabaseObject _database;
@@ -34,6 +36,7 @@ internal sealed unsafe class NewTableDefObject : DaoObject
         Name = name;
         Created = DateTime.Now;
         Fields = new NewFieldsObject(this);
+        Indexes = new NewIndexesObject(this);
     }
 
     public string Name { get; private set; }
@@ -42,6 +45,9 @@ internal sealed unsafe class NewTableDefObject : DaoObject
 
     /// <summary>The draft's Fields: one collection object for the draft's life (the collection keeps the draft alive while held).</summary>
     public NewFieldsObject Fields { get; }
+
+    /// <summary>The draft's Indexes: one collection object for the draft's life (<c>r-q52-ddl-make-domain/dao-idx-empty-*</c>).</summary>
+    public NewIndexesObject Indexes { get; }
 
     public override bool Invalid => _database.Closed;
 
@@ -76,7 +82,10 @@ internal sealed unsafe class NewTableDefObject : DaoObject
             }
             fields.Add(field);
         }
-        return new CreateTableRequest(Name, fields, SchemaRoute.Dao);
+        List<NewIndex>? indexes = Indexes.Members.Count > 0
+            ? [.. Indexes.Members.Select(ix => ix.ToNewIndex())]
+            : null;
+        return new CreateTableRequest(Name, fields, SchemaRoute.Dao, Indexes: indexes);
     }
 }
 
@@ -184,8 +193,8 @@ internal sealed unsafe class NewFieldObject : DaoObject
         .Get("Attributes", (self, args) => ForwardOrDraft(self, "Attributes", InvokeKind.PropertyGet, args, f => Int32(f._attributes)))
         .Get("OrdinalPosition", (self, args) => ForwardOrDraft(self, "OrdinalPosition", InvokeKind.PropertyGet, args, _ => CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldOrdinalPosition", "Field.OrdinalPosition on an unappended draft Field is not recorded"))))
         .Get("CollectionIndex", (self, args) => ForwardOrDraft(self, "CollectionIndex", InvokeKind.PropertyGet, args, _ => CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldCollectionIndex", "Field.CollectionIndex on an unappended draft Field is not recorded"))))
-        .Get("Required", (self, args) => ForwardOrDraft(self, "Required", InvokeKind.PropertyGet, args, _ => CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldRequiredGet", "Field.Required get on an unappended draft Field is not recorded"))))
-        .Get("AllowZeroLength", (self, args) => ForwardOrDraft(self, "AllowZeroLength", InvokeKind.PropertyGet, args, _ => CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldAllowZeroLengthGet", "Field.AllowZeroLength get on an unappended draft Field is not recorded"))))
+        .Get("Required", (self, args) => ForwardOrDraft(self, "Required", InvokeKind.PropertyGet, args, f => Bool(f.RequiredPut ?? false)))
+        .Get("AllowZeroLength", (self, args) => ForwardOrDraft(self, "AllowZeroLength", InvokeKind.PropertyGet, args, f => Bool(f.AllowZeroLengthPut ?? false)))
         .Get("CollatingOrder", (self, args) => ForwardOrDraft(self, "CollatingOrder", InvokeKind.PropertyGet, args, _ => CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldCollatingOrder", "Field.CollatingOrder on an unappended draft Field is not recorded"))))
         .Get("SourceTable", (self, args) => ForwardOrDraft(self, "SourceTable", InvokeKind.PropertyGet, args, _ => CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldSourceTable", "Field.SourceTable on an unappended draft Field is not recorded"))))
         .Get("SourceField", (self, args) => ForwardOrDraft(self, "SourceField", InvokeKind.PropertyGet, args, _ => CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldSourceField", "Field.SourceField on an unappended draft Field is not recorded"))))
@@ -331,12 +340,9 @@ internal sealed unsafe class NewFieldObject : DaoObject
         }
         if (t == DbDecimal)
         {
-            if (!forAttachedTable)
-            {
-                return CallResult.Fail(Failure.NotModelled("NotModelled.DaoCreateFieldDraftDecimal", "draft TableDef.CreateField of dbDecimal (20) is not recorded (only attached TableDef.CreateField(..., 20) is recorded in evidence/r-q46-dao-ddl-multi/cf-attached-decimal-*)"));
-            }
-            // evidence/r-q46-dao-ddl-multi/cf-attached-decimal-accdb, cf-attached-decimal-mdb:
-            // attached CreateField("FDec", 20) returns a draft Field with Type=16, Size=8, Attributes=0 before Append.
+            // evidence/r-q46-dao-ddl-multi/cf-attached-decimal-accdb, cf-attached-decimal-mdb,
+            // evidence/r-q53-conv-abspos-subq-loc/dao-draft-decimal-accdb, dao-draft-decimal-mdb:
+            // both draft and attached CreateField(name, 20[, 16]) return a draft Field with Type=16, Size=8, Attributes=0.
             var decField = new NewFieldObject(engine, fieldName, type: DbBigInt, size: 8, isAttachedDecimal: true);
             CallResult decResult = Object(decField);
             decField.Release();
@@ -396,12 +402,21 @@ internal sealed unsafe class NewFieldObject : DaoObject
             notWritten = $"{(forAttachedTable ? "Fields.Append" : "TableDefs.Append")} of a field with {string.Join(", ", PropertiesPut.Keys)} put (not written yet: W-07/native-metadata-write)";
             return null;
         }
+        if (IsAttachedDecimal)
+        {
+            if (AllowZeroLengthPut == true)
+            {
+                notWritten = $"{(forAttachedTable ? "attached TableDef.Fields.Append" : "TableDefs.Append")} of dbDecimal with AllowZeroLength=True is not recorded";
+                return null;
+            }
+            return new NewField(Name, NewFieldType.Decimal, Precision: 38, Scale: 0, Required: RequiredPut ?? false);
+        }
         bool isAutoIncr = (_attributes & 16) != 0;
         if (!forAttachedTable)
         {
             if (RequiredPut == true || AllowZeroLengthPut == true)
             {
-                notWritten = "TableDefs.Append of a draft field with Required=True or AllowZeroLength=True is not recorded (only attached Fields.Append records Required=True and AllowZeroLength=True in cf-attached-scalar-*)";
+                notWritten = "TableDefs.Append of a draft field with Required=True or AllowZeroLength=True is not recorded (only attached Fields.Append records Required=True and AllowZeroLength=True in cf-attached-scalar-*, and draft dbDecimal records Required=True in dao-draft-decimal-*)";
                 return null;
             }
             if (isAutoIncr && Type != DbLong)
@@ -416,15 +431,6 @@ internal sealed unsafe class NewFieldObject : DaoObject
             {
                 notWritten = "attached TableDef.Fields.Append of an AutoNumber (dbAutoIncrField) field is not recorded";
                 return null;
-            }
-            if (IsAttachedDecimal)
-            {
-                if (AllowZeroLengthPut == true)
-                {
-                    notWritten = "attached TableDef.Fields.Append of dbDecimal with AllowZeroLength=True is not recorded";
-                    return null;
-                }
-                return new NewField(Name, NewFieldType.Decimal, Precision: 38, Scale: 0, Required: RequiredPut ?? false);
             }
         }
 
@@ -541,7 +547,14 @@ internal sealed unsafe class NewFieldObject : DaoObject
         {
             return CallResult.Fail(Failure.NotModelled("NotModelled.DraftFieldProperty", $"a draft field's AllowZeroLength put of a {Args.TypeOf(value)} value is not recorded"));
         }
-        AllowZeroLengthPut = Args.Bool(value, omitted: false)!.Value;
+        bool azl = Args.Bool(value, omitted: false)!.Value;
+        if (IsAttachedDecimal && azl)
+        {
+            // evidence/r-q53-conv-abspos-subq-loc/dao-draft-decimal-accdb, dao-draft-decimal-mdb call 99:
+            // AllowZeroLength = True on a dbDecimal (20) field fails 3219 from DAO.Field and stays False.
+            return Fail(3219, DaoErrors.InvalidOperation);
+        }
+        AllowZeroLengthPut = azl;
         return CallResult.Nothing;
     }
 

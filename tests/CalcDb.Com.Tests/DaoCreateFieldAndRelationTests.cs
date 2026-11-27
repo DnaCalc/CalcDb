@@ -134,13 +134,17 @@ public sealed unsafe class DaoCreateFieldAndRelationTests : IDisposable
         NewTableDefObject td = Recover<NewTableDefObject>(Method(db, "CreateTableDef", "AllTypes"));
         NewFieldsObject tfs = Recover<NewFieldsObject>(Get(td, "Fields"));
 
-        // Refusals: 9999 -> 3259, complex 101 -> NotModelled, draft Decimal 20 -> NotModelled;
+        // Refusals: 9999 -> 3259, complex 101 -> NotModelled; draft Decimal 20 reads Type=16, Size=8, Attributes=0
+        // on both ACCDB and MDB (r-q53-conv-abspos-subq-loc/dao-draft-decimal-accdb, dao-draft-decimal-mdb);
         // draft BigInt (16) and DateTime2 (26) succeed on ACCDB (r-q47/bi-dao-createfield-addnew-accdb,
         // r-q49/dt2-dao-createfield-addnew-accdb) and stay refused by name on Jet 4 MDB.
         Failure? f9999 = Method(td, "CreateField", "Bad", 9999).Failure;
         Assert.Equal(3259, f9999?.Number);
         Assert.StartsWith("NotModelled.DaoCreateFieldComplexType", Method(td, "CreateField", "Cplx", 101).Failure?.Description);
-        Assert.StartsWith("NotModelled.DaoCreateFieldDraftDecimal", Method(td, "CreateField", "Dec", 20).Failure?.Description);
+        NewFieldObject fDecDraft = Recover<NewFieldObject>(Method(td, "CreateField", "Dec", 20));
+        Assert.Equal(16, IntOf(Get(fDecDraft, "Type")));
+        Assert.Equal(8, IntOf(Get(fDecDraft, "Size")));
+        Assert.Equal(0, IntOf(Get(fDecDraft, "Attributes")));
         if (version == DbVersion120)
         {
             NewFieldObject fBiDraft = Recover<NewFieldObject>(Method(td, "CreateField", "BI", 16));

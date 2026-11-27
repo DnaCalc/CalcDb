@@ -1273,6 +1273,189 @@ internal sealed unsafe class DatabaseObject : DaoObject
     }
 
     /// <summary>
+    /// Attached <c>TableDef.Fields.Delete(Name)</c> (<c>evidence/r-q52-ddl-make-domain/dao-idx-errors-*</c> call 377):
+    /// refuses deleting a field that participates in any index with 3280 from <c>DAO.Fields</c>.
+    /// </summary>
+    internal CallResult DeleteField(TableDefObject tableDef, DefinitionCollection fields, nint nameArg)
+    {
+        if (Args.Text(nameArg) is not { } fieldName)
+        {
+            return CallResult.Fail(Failure.NotImplemented("TableDef.Fields.Delete of a non-string name"));
+        }
+        if (ReadOnly)
+        {
+            return fields.Fail(3027, DaoErrors.ReadOnly);
+        }
+        if (tableDef.Definition is { } def)
+        {
+            ColumnDescriptor? col = def.Columns.FirstOrDefault(c => string.Equals(c.Name, fieldName, StringComparison.OrdinalIgnoreCase));
+            if (col is not null && def.PhysicalIndexes.Any(p => p.Columns.Any(ic => ic.PhysicalNumber == col.PhysicalNumber)))
+            {
+                return fields.Fail(3280, DaoErrors.CannotDeleteIndexedField);
+            }
+        }
+        return CallResult.Fail(Failure.NotModelled("NotModelled.DaoFieldsDelete", $"TableDef.Fields.Delete('{fieldName}') on a non-indexed or missing column is not recorded"));
+    }
+
+    /// <summary>
+    /// Attached <c>TableDef.Indexes.Append</c> (W-07, W-08 / R-CAT-1, R-DAO-1;
+    /// <c>evidence/r-q52-ddl-make-domain/dao-idx-empty-accdb</c>, <c>dao-idx-populated-accdb</c>,
+    /// <c>dao-idx-delete-accdb</c>, <c>dao-idx-errors-accdb</c>,
+    /// <c>evidence/r-q54-excl-ddl-ix-cmd/ix-unique-dup-3022-bytes-accdb</c>).
+    /// </summary>
+    internal CallResult AppendIndex(TableDefObject tableDef, DefinitionCollection indexes, nint arg)
+    {
+        if (Args.ObjectOf<IndexObject>(arg) is not null)
+        {
+            return indexes.Fail(3367, DaoErrors.AlreadyInCollection);
+        }
+        if (Args.ObjectOf<NewIndexObject>(arg) is not { } index)
+        {
+            return CallResult.Fail(Failure.NotImplemented("TableDef.Indexes.Append of an argument that is not a CalcDb Index"));
+        }
+        if (index.IsAttached || index.AppendedTo is not null)
+        {
+            return indexes.Fail(3367, DaoErrors.AlreadyInCollection);
+        }
+        if (ReadOnly)
+        {
+            return indexes.Fail(3027, DaoErrors.ReadOnly);
+        }
+        if (InheritedWritable)
+        {
+            return InheritedWriteRefusal("TableDef.Indexes.Append");
+        }
+        if (tableDef.IsSystem)
+        {
+            return CallResult.Fail(Failure.NotImplemented("TableDef.Indexes.Append on a system table (not recorded)"));
+        }
+        TransactionCoordinator workspace = _workspace.Transactions;
+        if (workspace.Depth > 0)
+        {
+            return CallResult.Fail(Failure.NotImplemented("TableDef.Indexes.Append inside BeginTrans is not recorded"));
+        }
+        if (SharedHold(tableDef.Name) != TableHold.None)
+        {
+            return CallResult.Fail(Failure.NotImplemented($"TableDef.Indexes.Append on '{tableDef.Name}' while a recordset of it is open is not recorded"));
+        }
+        if (OpenSchemaWriter(out string? writerFailure) is not { } writer)
+        {
+            return CallResult.Fail(Failure.NotImplemented("Indexes.Append: " + writerFailure));
+        }
+        NewIndex newIndex = index.ToNewIndex();
+        SchemaOutcome outcome = writer.CreateIndex(workspace, new CreateIndexRequest(tableDef.Name, newIndex, SchemaRoute.Dao), SchemaWriter.DateBits(DateTime.Now));
+        if (outcome.Refused is { } refused)
+        {
+            if (outcome.PublishedAny && SchemaPublished(outcome.ExtentPages) is { } staleRefused)
+            {
+                return CallResult.Fail(Failure.NotImplemented(staleRefused));
+            }
+            return refused.Error switch
+            {
+                3022 => indexes.Fail(3022, DaoErrors.DuplicateKey),
+                3058 => indexes.Fail(3058, DaoErrors.NullInIndex),
+                3125 => indexes.Fail(3125, DaoErrors.InvalidName(newIndex.Name)),
+                3264 => indexes.Fail(3264, DaoErrors.NoFieldDefined),
+                3283 => indexes.Fail(3283, DaoErrors.PrimaryKeyExists),
+                3284 => indexes.Fail(3284, DaoErrors.IndexExists),
+                3285 => indexes.Fail(3285, DaoErrors.InvalidIndexDefinition),
+                3409 => indexes.Fail(3409, DaoErrors.InvalidIndexField(refused.NotWritten ?? "")),
+                _ => CallResult.Fail(Failure.NotImplemented("Indexes.Append: " + refused.NotWritten)),
+            };
+        }
+        AcceptOutcome accepted = outcome.Accepted;
+        if (outcome.PublishedAny)
+        {
+            if (SchemaPublished(outcome.ExtentPages) is { } stale)
+            {
+                return CallResult.Fail(Failure.NotImplemented(stale));
+            }
+            indexes.Relist();
+            if (tableDef.Definition is { } updatedDef
+                && updatedDef.LogicalIndexes.FirstOrDefault(li => string.Equals(li.Name, newIndex.Name, StringComparison.OrdinalIgnoreCase)) is { } addedLogical)
+            {
+                index.Attach(indexes, updatedDef, addedLogical);
+                indexes.RegisterHeld(addedLogical.Name, index);
+            }
+        }
+        return accepted.Error is { } error ? EditPublication.Published(error)
+            : accepted.Open != MutationOpen.None ? EditPublication.Open(accepted.Open, accepted.Detail)
+            : CallResult.Nothing;
+    }
+
+    /// <summary>
+    /// Attached <c>TableDef.Indexes.Delete(Name)</c> (W-07, W-08 / R-CAT-1, R-DAO-1;
+    /// <c>evidence/r-q52-ddl-make-domain/dao-idx-delete-*</c>, <c>dao-idx-errors-*</c>).
+    /// </summary>
+    internal CallResult DeleteIndex(TableDefObject tableDef, DefinitionCollection indexes, nint nameArg)
+    {
+        if (Args.Text(nameArg) is not { } indexName)
+        {
+            return CallResult.Fail(Failure.NotImplemented("TableDef.Indexes.Delete of a non-string name"));
+        }
+        if (ReadOnly)
+        {
+            return indexes.Fail(3027, DaoErrors.ReadOnly);
+        }
+        if (InheritedWritable)
+        {
+            return InheritedWriteRefusal("TableDef.Indexes.Delete");
+        }
+        if (tableDef.IsSystem)
+        {
+            return CallResult.Fail(Failure.NotImplemented("TableDef.Indexes.Delete on a system table (not recorded)"));
+        }
+        TransactionCoordinator workspace = _workspace.Transactions;
+        if (workspace.Depth > 0)
+        {
+            return CallResult.Fail(Failure.NotImplemented("TableDef.Indexes.Delete inside BeginTrans is not recorded"));
+        }
+        if (SharedHold(tableDef.Name) != TableHold.None)
+        {
+            return CallResult.Fail(Failure.NotImplemented($"TableDef.Indexes.Delete on '{tableDef.Name}' while a recordset of it is open is not recorded"));
+        }
+        if (OpenSchemaWriter(out string? writerFailure) is not { } writer)
+        {
+            return CallResult.Fail(Failure.NotImplemented("Indexes.Delete: " + writerFailure));
+        }
+        SchemaOutcome outcome = writer.DropIndex(workspace, new DropIndexRequest(tableDef.Name, indexName, SchemaRoute.Dao), SchemaWriter.DateBits(DateTime.Now));
+        if (outcome.Refused is { } refused)
+        {
+            if (outcome.PublishedAny && SchemaPublished(outcome.ExtentPages) is { } staleRefused)
+            {
+                return CallResult.Fail(Failure.NotImplemented(staleRefused));
+            }
+            return refused.Error switch
+            {
+                3265 => indexes.Fail(3265, DaoErrors.ItemNotFound),
+                3281 => indexes.Fail(3281, DaoErrors.CannotDeleteIndexInUse),
+                _ => CallResult.Fail(Failure.NotImplemented("Indexes.Delete: " + refused.NotWritten)),
+            };
+        }
+        AcceptOutcome accepted = outcome.Accepted;
+        if (outcome.PublishedAny)
+        {
+            DaoObject? held = indexes.FindHeld(indexName);
+            if (held is IndexObject heldIndex)
+            {
+                heldIndex.InvalidateDeleted();
+            }
+            else if (held is NewIndexObject heldNewIndex)
+            {
+                heldNewIndex.InvalidateDeleted();
+            }
+            if (SchemaPublished(outcome.ExtentPages) is { } stale)
+            {
+                return CallResult.Fail(Failure.NotImplemented(stale));
+            }
+            indexes.Relist();
+        }
+        return accepted.Error is { } error ? EditPublication.Published(error)
+            : accepted.Open != MutationOpen.None ? EditPublication.Open(accepted.Open, accepted.Detail)
+            : CallResult.Nothing;
+    }
+
+    /// <summary>
     /// DAO <c>Field.ValidationRule</c> or <c>Field.ValidationText</c> put on a stored table's field (W-08, tasks 9dvt
     /// and nk97; qualified.md <c>r-q37</c>, <c>evidence/r-q42-field-rule-and/</c>): validates <c>ValidationRule</c>
     /// before touching the catalog, publishes the rewritten <c>LvProp</c> through

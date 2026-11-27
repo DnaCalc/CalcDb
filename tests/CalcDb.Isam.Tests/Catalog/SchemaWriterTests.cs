@@ -593,8 +593,7 @@ public sealed class SchemaWriterTests
         Assert.NotNull(w2.CreateIndex(session.Workspace, new("T", new("IX_DI", ["a"], PrimaryKey: false, DisallowNull: true, IgnoreNull: true), SchemaRoute.Sql), 2).Refused?.NotWritten);
         // Unrecorded key column type (Single; Double is now recorded in evidence/r-q44-ddl-alter-types/ixtype-double-*).
         Assert.NotNull(w2.CreateIndex(session.Workspace, new("T", new("IX_D", ["d"], PrimaryKey: false), SchemaRoute.Sql), 2).Refused?.NotWritten);
-        // DAO route CREATE INDEX.
-        Assert.NotNull(w2.CreateIndex(session.Workspace, new("T", new("IX_DAO", ["a"], PrimaryKey: false), SchemaRoute.Dao), 2).Refused?.NotWritten);
+        // DAO route CREATE INDEX is now admitted (r-q52-ddl-make-domain/dao-idx-empty-accdb, dao-idx-populated-accdb).
         // Second index on a table that already has one is now admitted (ddl2, evidence/r-q34-ddl-sweep/ix-cat1b-*, uqix-*).
         session.CreateIndex(new("T", new("IX_1", ["a"], PrimaryKey: false), SchemaRoute.Sql), 2);
         session.CreateIndex(new("T", new("IX_2", ["b"], PrimaryKey: false), SchemaRoute.Sql), 3);
@@ -1444,7 +1443,7 @@ public sealed class SchemaWriterTests
             Assert.False(ixInTx.PublishedAny);
             Assert.Contains("BeginTrans", ixInTx.Refused?.NotWritten);
             Assert.Null(session.Workspace.Rollback().Error);
-            Assert.NotNull(session.Writer().CreateIndex(session.Workspace, new("T", new("IX_DAO", ["n"], PrimaryKey: false), SchemaRoute.Dao), 2).Refused?.NotWritten);
+            // DAO CreateIndex on MDB is now admitted (r-q52-ddl-make-domain/dao-idx-empty-mdb, dao-idx-populated-mdb); ADO stays refused.
             SchemaOutcome ixAdo = session.Writer().CreateIndex(session.Workspace, new("T", new("IX_ADO", ["n"], PrimaryKey: false), SchemaRoute.Ado), 2);
             Assert.False(ixAdo.Succeeded);
             Assert.False(ixAdo.PublishedAny);

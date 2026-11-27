@@ -281,7 +281,7 @@ internal sealed unsafe class DefinitionCollection : DaoObject
     /// the owner's (a dropped TableDef's Fields.Count from DAO.TableDef, r-q47-bigint-expr-edges/mh-held-tdf-after-drop-*
     /// call 125); null for <see cref="ClosedSource"/> or the collection's own.
     /// </summary>
-    public string? OwnerInvalidSource { get; init; }
+    public string? OwnerInvalidSource { get; set; }
 
     private CallResult Item(nint index)
     {
@@ -363,6 +363,7 @@ internal sealed unsafe class TableDefObject : DaoObject
         .Get("Fields", (self, args) => Live(self, t => t.FieldsCollection()))
         .Get("Indexes", (self, args) => Live(self, t => t.IndexesCollection()))
         .Method("CreateField", (self, args) => { nint name = args.Length > 0 ? args[0] : 0, type = args.Length > 1 ? args[1] : 0, size = args.Length > 2 ? args[2] : 0; return Live(self, t => t.CreateField(name, type, size)); })
+        .Method("CreateIndex", (self, args) => { nint name = args.Length > 0 ? args[0] : 0; return Live(self, t => NewIndexObject.Create(t.Engine, name)); })
         .Method("OpenRecordset", (self, args) => { nint type = args.Length > 0 ? args[0] : 0, options = args.Length > 1 ? args[1] : 0; return Live(self, t => t.OpenRecordset(type, options)); });
 
     private readonly DefinitionCollection _owner;
@@ -524,6 +525,7 @@ internal sealed unsafe class TableDefObject : DaoObject
                 Membership = () => FieldsMembership(reload: true),
                 PreserveHeldByName = true,
                 Appender = (c, arg) => c.Database.AppendField(this, c, arg),
+                Deleter = (c, nameArg) => c.Database.DeleteField(this, c, nameArg),
                 IsOwnerInvalid = () => _dropped,
                 OwnerInvalidSource = "DAO.TableDef", // r-q47-bigint-expr-edges/mh-held-tdf-after-drop-* call 125
             };
@@ -563,6 +565,9 @@ internal sealed unsafe class TableDefObject : DaoObject
                 Denied = IsSystem ? (3110, DaoErrors.NoReadDefinitions(_entry.Name)) : null,
                 ClosedSource = "DAO.TableDef", // 3420 after Close from the owner (r-dao-1-err-1/life-database-workspace-close)
                 Membership = () => IndexesMembership(reload: true),
+                PreserveHeldByName = true,
+                Appender = (c, arg) => c.Database.AppendIndex(this, c, arg),
+                Deleter = (c, nameArg) => c.Database.DeleteIndex(this, c, nameArg),
                 IsOwnerInvalid = () => _dropped, // r-q47-bigint-expr-edges/mh-held-tdf-after-drop-* call 137: 3420 from DAO.TableDef
             };
         }
@@ -720,14 +725,19 @@ internal sealed unsafe class IndexObject : DaoObject
     private static readonly OperationTable Operations = new OperationTable(Decl)
         .Get("Name", (self, args) => Live(self, x => Text(x._logical.Name)))
         .Get("Primary", (self, args) => Live(self, x => Bool(x._logical.IndexType == x.Rules.PrimaryKeyType)))
+        .Put("Primary", (self, args) => Live(self, x => x.Fail(3268, DaoErrors.CannotSetOnceInCollection)))
         .Get("Foreign", (self, args) => Live(self, x => Bool(x._logical.IndexType == x.Rules.ForeignKeyType)))
         .Get("Unique", (self, args) => Live(self, x => Bool(x._physical.Unique(x.Rules))))
+        .Put("Unique", (self, args) => Live(self, x => x.Fail(3268, DaoErrors.CannotSetOnceInCollection)))
         .Get("IgnoreNulls", (self, args) => Live(self, x => Bool(x._physical.IgnoreNulls(x.Rules))))
+        .Put("IgnoreNulls", (self, args) => Live(self, x => x.Fail(3268, DaoErrors.CannotSetOnceInCollection)))
         .Get("Required", (self, args) => Live(self, x => Bool(x._physical.Required(x.Rules))))
+        .Put("Required", (self, args) => Live(self, x => x.Fail(3268, DaoErrors.CannotSetOnceInCollection)))
         .Get("Clustered", (self, args) => Live(self, x => Bool(false)))
         .Get("DistinctCount", (self, args) => Live(self, x => x.DistinctCount()))
         .Get("Fields", (self, args) => Live(self, x => x.FieldsCollection()))
-        .Get("Properties", (self, args) => Live(self, x => Object(x._properties ??= new PropertiesObject(x, BuiltInProperties.Index))));
+        .Get("Properties", (self, args) => Live(self, x => Object(x._properties ??= new PropertiesObject(x, BuiltInProperties.Index))))
+        .Method("CreateField", (self, args) => { nint name = args.Length > 0 ? args[0] : 0; return Live(self, x => NewIndexFieldObject.Create(x.Engine, name)); });
 
     private readonly DefinitionCollection _owner;
     private readonly TableDefinition _table;
@@ -735,8 +745,18 @@ internal sealed unsafe class IndexObject : DaoObject
     private readonly PhysicalIndex _physical;
     private DefinitionCollection? _fields;
     private PropertiesObject? _properties;
+    private bool _deleted;
 
-    public override bool Invalid => _owner.Invalid;
+    public override bool Invalid => _deleted || _owner.Invalid;
+
+    internal void InvalidateDeleted()
+    {
+        _deleted = true;
+        if (_fields is not null)
+        {
+            _fields.OwnerInvalidSource = "DAO.Index"; // r-q52-ddl-make-domain/dao-idx-errors-accdb, dao-idx-errors-mdb call 469
+        }
+    }
 
     public IndexObject(DefinitionCollection owner, TableDefinition table, LogicalIndex logical) : base(Decl, Vtable, owner.Engine, "DAO.Index")
     {
@@ -774,6 +794,7 @@ internal sealed unsafe class IndexObject : DaoObject
              _owner.Database, [.. columns.Select(c => c.Name)],
             (c, i) => new DefinitionFieldObject(c, null, columns[i], _physical.Columns[i], i))
         {
+            Appender = static (c, _) => c.Fail(3219, DaoErrors.InvalidOperation), // r-q52-ddl-make-domain/dao-idx-errors-accdb, dao-idx-errors-mdb call 369
             IsOwnerInvalid = () => Invalid,
         };
         return Object(_fields);
@@ -830,15 +851,19 @@ internal sealed unsafe class DefinitionFieldObject : DaoObject
         .Put("AllowZeroLength", (self, args) => { nint value = args[^1]; return Live(self, f => f.PutAllowZeroLength(value)); })
         .Get("AppendOnly", (self, args) => Live(self, f => f.OfTable(t => Bool(false))))
         .Get("Expression", (self, args) => Live(self, f => f.OfTable(t => Text(""))))
-        // Field.Precision (evidence/r-q54-excl-ddl-ix-cmd/field-meta-and-lockwait-accdb, -mdb):
-        // VT_I2 declared precision on Decimal (e.g. 18 on DECIMAL(18,4)), VT_I2 1033 on all other types (Byte..GUID) with General (1033) collating order.
+        // Field.Precision (evidence/r-q54-excl-ddl-ix-cmd/field-meta-and-lockwait-accdb, field-meta-and-lockwait-mdb,
+        // evidence/r-q53-conv-abspos-subq-loc/dao-draft-decimal-accdb, dao-draft-decimal-mdb):
+        // VT_I2 declared precision on Decimal (e.g. 18 on DECIMAL(18,4), 38 on DAO dbDecimal), VT_I2 1033 on other types
+        // with General (1033) collating order, VT_I2 0 on DAO-created non-Text columns with Neutral (1024) collating order.
         .Get("Precision", (self, args) => Live(self, f => f.OfTable(t => f._column.CalculatedResultType == NativeTypes.Numeric
             ? CallResult.Fail(Failure.NotImplemented("Field.Precision of a calculated Decimal field"))
             : f._column.TypeCode == NativeTypes.Numeric
                 ? Int16(f._column.NumericPrecision)
                 : ColumnFacts.CollatingOrder(f._column) == 1033
                     ? Int16(1033)
-                    : CallResult.Fail(Failure.NotModelled("NotModelled.FieldPrecisionCollatingOrder", $"Field.Precision with CollatingOrder {ColumnFacts.CollatingOrder(f._column)} (only 1033 is recorded)")))))
+                    : ColumnFacts.CollatingOrder(f._column) == 1024
+                        ? Int16(0)
+                        : CallResult.Fail(Failure.NotModelled("NotModelled.FieldPrecisionCollatingOrder", $"Field.Precision with CollatingOrder {ColumnFacts.CollatingOrder(f._column)} (only 1024 and 1033 are recorded)")))))
         .Get("Scale", (self, args) => Live(self, f => f.OfTable(t => f._column.CalculatedResultType == NativeTypes.Numeric ? CallResult.Fail(Failure.NotImplemented("Field.Scale of a calculated Decimal field")) : f._column.TypeCode == NativeTypes.Numeric ? Int16(f._column.NumericScale) : Int16(0))))
         .Get("DataUpdatable", (self, args) => Live(self, f => f.OfTable(t => f._owner.Database.ReadOnly ? Bool(false) : CallResult.Fail(Failure.NotImplemented("TableDef Field.DataUpdatable on a writable open (not observed)")))))
         .Get("Value", (self, args) => Live(self, f => f.Fail(3219, DaoErrors.InvalidOperation, publishesErrorInfo: true)))
