@@ -592,10 +592,12 @@ internal sealed unsafe class AdoFieldsObject : AdoObject
     private static readonly OperationTable Operations = new OperationTable(Decl)
         .Get("Count", (self, args) => ((AdoFieldsObject)self).Count())
         .Get("Item", (self, args) => ((AdoFieldsObject)self).Item(args[0]))
+        .Method("Append", (self, args) => ((AdoFieldsObject)self).Append(args))
         .Method("Refresh", (self, args) => CallResult.Nothing)
         .Method("_NewEnum", (self, args) => ((AdoFieldsObject)self).NewEnum());
 
     private readonly RecordsetObject _recordset;
+    private readonly List<AdoFieldDescriptor> _fabricatedColumns = [];
     private AdoFieldDescriptor[] _columns = [];
     private AdoFieldObject?[] _wrappers = [];
     private int _fieldGeneration;
@@ -609,6 +611,10 @@ internal sealed unsafe class AdoFieldsObject : AdoObject
     protected override OperationTable Table => Operations;
 
     public RecordsetObject Recordset => _recordset;
+
+    public bool HasFabricatedColumns => _fabricatedColumns.Count > 0;
+
+    public AdoFieldDescriptor[] GetFabricatedColumns() => [.. _fabricatedColumns];
 
     public int ColumnCount
     {
@@ -757,6 +763,82 @@ internal sealed unsafe class AdoFieldsObject : AdoObject
             return Fail(AdoErrors.ItemNotFound);
         }
         return Object(GetOrCreateField(ordinal));
+    }
+
+    private CallResult Append(ReadOnlySpan<nint> args)
+    {
+        if (_recordset.IsOpen)
+        {
+            return NotImplemented("Fields.Append on an open Recordset (not recorded)");
+        }
+        string? name = args.Length > 0 && args[0] != 0 ? Args.Text(args[0]) : null;
+        if (string.IsNullOrEmpty(name))
+        {
+            return NotImplemented("Fields.Append with missing or empty Name (not recorded)");
+        }
+        foreach (AdoFieldDescriptor existing in _fabricatedColumns)
+        {
+            if (string.Equals(existing.Name, name, StringComparison.OrdinalIgnoreCase))
+            {
+                return NotImplemented($"Fields.Append with duplicate field name '{name}' (not recorded)");
+            }
+        }
+        if (args.Length < 2 || args[1] == 0 || AdoArgs.Int32(args[1]) is not int adoType)
+        {
+            return NotImplemented("Fields.Append with missing or non-numeric Type (not recorded)");
+        }
+        int definedSize = 0;
+        if (args.Length > 2 && args[2] != 0 && !TypedCall.IsMissing(Args.Cell(args[2])))
+        {
+            if (AdoArgs.Int32(args[2]) is not int parsedSize)
+            {
+                return NotImplemented("Fields.Append with non-numeric DefinedSize (not recorded)");
+            }
+            definedSize = parsedSize;
+        }
+        int attrib = -1;
+        if (args.Length > 3 && args[3] != 0 && !TypedCall.IsMissing(Args.Cell(args[3])))
+        {
+            if (AdoArgs.Int32(args[3]) is not int parsedAttrib)
+            {
+                return NotImplemented("Fields.Append with non-numeric Attrib (not recorded)");
+            }
+            attrib = parsedAttrib;
+        }
+        if (attrib != -1)
+        {
+            return NotImplemented($"Fields.Append with Attrib={attrib} (only omitted/-1 is recorded in r-q-wire/ado-connectionless-recordset)");
+        }
+        if (args.Length > 4 && args[4] != 0 && !TypedCall.IsMissing(Args.Cell(args[4])) && Args.TypeOf(args[4]) != VarType.Empty)
+        {
+            return NotImplemented("Fields.Append with FieldValue argument (not recorded)");
+        }
+
+        // r-q-wire/ado-connectionless-recordset #4-#5: Append("A", adInteger=3) and Append("B", adVarWChar=202, 50).
+        AdoFieldDescriptor descriptor;
+        if (adoType == 3) // adInteger
+        {
+            if (definedSize is not (0 or 4))
+            {
+                return NotImplemented($"Fields.Append(adInteger) with DefinedSize={definedSize} (only omitted/0 or 4 is recorded)");
+            }
+            descriptor = new AdoFieldDescriptor(name, 3, 4, 10, 255, 16, false, null, -1);
+        }
+        else if (adoType == 202) // adVarWChar
+        {
+            if (definedSize <= 0)
+            {
+                return NotImplemented($"Fields.Append(adVarWChar) with DefinedSize={definedSize} (positive DefinedSize required)");
+            }
+            descriptor = new AdoFieldDescriptor(name, 202, definedSize, 255, 255, 0, false, null, -1);
+        }
+        else
+        {
+            return NotImplemented($"Fields.Append with Type={adoType} (only adInteger=3 and adVarWChar=202 are recorded in r-q-wire/ado-connectionless-recordset)");
+        }
+
+        _fabricatedColumns.Add(descriptor);
+        return CallResult.Nothing;
     }
 
     private CallResult NewEnum()

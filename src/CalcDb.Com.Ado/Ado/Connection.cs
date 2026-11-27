@@ -1489,8 +1489,19 @@ internal sealed unsafe class ConnectionObject : AdoObject
 
             if (csDataSource is not null && propsDataSource is not null)
             {
-                DisposeValues(initValues);
-                return NotImplemented("Connection.Open with Data Source set in both ConnectionString and Properties(\"Data Source\") (not asked)");
+                if (openText is null && _connectionStringFromFailedOpen)
+                {
+                    // r-q-wire/obs-ado-errors-clear #12-#22: after a failed Open(openText) populated
+                    // _connectionString, assigning Properties("Data Source") and calling Open() uses
+                    // the updated Data Source property rather than the failed Open's path.
+                    csDataSource = null;
+                    SetInitValue(initValues, "Data Source", OwnedVariant.FromText(propsDataSource));
+                }
+                else
+                {
+                    DisposeValues(initValues);
+                    return NotImplemented("Connection.Open with Data Source set in both ConnectionString and Properties(\"Data Source\") (not asked)");
+                }
             }
 
             string dataSource = csDataSource ?? propsDataSource ?? ReadText(initValues["Data Source"]);

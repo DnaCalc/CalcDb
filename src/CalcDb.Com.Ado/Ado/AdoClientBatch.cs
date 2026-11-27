@@ -195,6 +195,7 @@ internal sealed unsafe class ClientRowBuffer
     private int[] _pkSelectedOrdinals;
     private readonly string[] _baseColumnNames;
     private readonly bool _liveBinaryGuard;
+    private readonly bool _isFabricated;
     private readonly List<ClientRow> _rows;
     private readonly List<ClientRow> _purgedRows = [];
     private long _nextBookmarkId;
@@ -214,7 +215,8 @@ internal sealed unsafe class ClientRowBuffer
         List<ClientRow> rows,
         string[]? baseColumnNames = null,
         bool liveBinaryGuard = false,
-        long initialStagingOrder = 0)
+        long initialStagingOrder = 0,
+        bool isFabricated = false)
     {
         _session = session;
         _tableName = tableName;
@@ -225,10 +227,13 @@ internal sealed unsafe class ClientRowBuffer
         _pkSelectedOrdinals = pkSelectedOrdinals;
         _baseColumnNames = baseColumnNames ?? [.. columns.Select((c, i) => columnMap is not null ? columnMap[i].Name : c.Name)];
         _liveBinaryGuard = liveBinaryGuard;
+        _isFabricated = isFabricated;
         _rows = rows;
         _nextBookmarkId = rows.Count;
         _nextStagingOrder = initialStagingOrder;
     }
+
+    public bool IsFabricated => _isFabricated;
 
     public AdoFieldDescriptor[] Columns => _columns;
 
@@ -580,6 +585,25 @@ internal sealed unsafe class ClientRowBuffer
     }
 
     /// <summary>
+    /// Construct an empty in-memory <see cref="ClientRowBuffer"/> for a fabricated connectionless Recordset
+    /// built via <c>Fields.Append</c> + <c>Recordset.Open()</c> (r-q-wire/ado-connectionless-recordset #4-#23).
+    /// </summary>
+    public static ClientRowBuffer FromFabricated(AdoFieldDescriptor[] columns) =>
+        new(
+            session: null,
+            tableName: "",
+            table: null,
+            editContext: null,
+            columns,
+            columnMap: null,
+            pkSelectedOrdinals: [],
+            rows: [],
+            baseColumnNames: [.. columns.Select(static c => c.Name)],
+            liveBinaryGuard: false,
+            initialStagingOrder: 0,
+            isFabricated: true);
+
+    /// <summary>
     /// Bind a disconnected persisted <see cref="ClientRowBuffer"/> to an open ACE session before <c>UpdateBatch</c>
     /// (r-ado-1b/persist-reconnect-adtg #41-57, r-ado-1b/persist-reconnect-xml #41-57).
     /// </summary>
@@ -706,6 +730,25 @@ internal sealed unsafe class ClientRowBuffer
                 "NotModelled.AdoSqlBinaryCursor",
                 $"Assigning Binary/OLE field '{_columns[ordinal].Name}' on live client batch SELECT is not recorded");
             return false;
+        }
+        if (_isFabricated)
+        {
+            NativeVariant incomingFab = ByRefValues.Dereference((NativeVariant*)rawArg);
+            OwnedVariant? coercedFab = CoerceForFabricatedColumn(in incomingFab, _columns[ordinal], errorIid, out providerError, out refusal);
+            if (coercedFab is null)
+            {
+                return false;
+            }
+            row.SetCurrent(ordinal, coercedFab);
+            row.ModifiedColumns[ordinal] = true;
+            row.HasUnpostedPut = true;
+            row.ImmediateOk = false;
+            if (row.State == ClientRowState.Clean)
+            {
+                row.State = ClientRowState.Modified;
+                row.StagingOrder = ++_nextStagingOrder;
+            }
+            return true;
         }
         if (_columnMap is null)
         {
@@ -1519,6 +1562,68 @@ internal sealed unsafe class ClientRowBuffer
             DisposePartial(current, original, underlying, filled);
             throw;
         }
+    }
+
+    private static OwnedVariant? CoerceForFabricatedColumn(
+        in NativeVariant incoming,
+        AdoFieldDescriptor desc,
+        in Guid errorIid,
+        out MappedProviderError? providerError,
+        out Failure? refusal)
+    {
+        providerError = null;
+        refusal = null;
+        if (incoming.Type == VarType.Null)
+        {
+            return OwnedVariant.Null();
+        }
+        if (desc.AdoType == 3) // adInteger
+        {
+            NativeVariant copy = incoming;
+            OwnedVariant? converted = OwnedVariant.ChangeType(&copy, VarType.I4, SessionLocale.Lcid, out int hr);
+            if (converted is not null)
+            {
+                return converted;
+            }
+            providerError = hr == AdoObject.HResultOutOfRange
+                ? AdoSqlErrors.OutOfRangeOn(errorIid)
+                : hr == AdoObject.HResultTypeMismatch
+                    ? AdoSqlErrors.TypeMismatchOn(errorIid)
+                    : AdoSqlErrors.MultipleStepOn(errorIid);
+            return null;
+        }
+        if (desc.AdoType == 202) // adVarWChar
+        {
+            OwnedVariant? textVal;
+            if (incoming.Type == VarType.Bstr)
+            {
+                textVal = OwnedVariant.FromText(Args.Text((nint)System.Runtime.CompilerServices.Unsafe.AsPointer(ref System.Runtime.CompilerServices.Unsafe.AsRef(in incoming))) ?? "");
+            }
+            else
+            {
+                NativeVariant copy = incoming;
+                textVal = OwnedVariant.ChangeType(&copy, VarType.Bstr, SessionLocale.Lcid, out int hr);
+                if (textVal is null)
+                {
+                    providerError = hr == AdoObject.HResultTypeMismatch
+                        ? AdoSqlErrors.TypeMismatchOn(errorIid)
+                        : AdoSqlErrors.MultipleStepOn(errorIid);
+                    return null;
+                }
+            }
+            string s = Args.Text((nint)textVal.Pointer) ?? "";
+            if (desc.DefinedSize > 0 && s.Length > desc.DefinedSize)
+            {
+                textVal.Dispose();
+                providerError = AdoSqlErrors.MultipleStepOn(errorIid);
+                return null;
+            }
+            return textVal;
+        }
+        refusal = Failure.NotModelled(
+            "NotModelled.AdoFabricatedAssign",
+            $"Field.Value assignment into fabricated ADO type {desc.AdoType} ('{desc.Name}') is not recorded");
+        return null;
     }
 
     private static OwnedVariant? CoerceForClientColumn(
