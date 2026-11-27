@@ -2193,6 +2193,7 @@ is summarised in [qualification-report.md](qualification-report.md).
 - **Conditions.** ACCDB and MDB (permissions); ACCDB (Document lifecycle).
 - **Records.** q2/meta-permissions-put-then-read (discriminating with q/meta-document-permissions-repeat: reads before the put fail, after it return 0; reproduces d1e/sec-default-admin-*); q/meta-document-permissions-repeat, meta-held-document-recreate; d1e/meta-containers-documents; d1b/containers-*, documents-*, documents-lookup-by-live-names; r-cat-1b/containers-membership-after-ddl.
 - **Open.** (T) Forms, reports, macros, modules (Access).
+- **Built (`w16-dao-enum-named-meta`, `32baebfe`, 2026-11-27):** Container & Document `Permissions`/`AllPermissions` keep `3358` until a failed `Permissions` put flips the per-open gate to `0`, and `Documents` tracks held dropped/recreated table identities across `Refresh` (`r-q2-cursor-dao/meta-permissions-put-then-read`).
 
 ### R-DAO-1 DAO-SEC: the default-Admin context in ACE
 
