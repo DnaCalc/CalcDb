@@ -2085,7 +2085,15 @@ internal sealed unsafe class ConnectionObject : AdoObject
             || (cmdType is AdoSqlText.AdCmdText or AdoSqlText.AdCmdUnknown or AdoSqlText.AdCmdUnspecified
                 && AdoSqlText.TryParseExec(effectiveText, out procArg)))
         {
-            if (!AdoSqlText.TryParseExecCall(procArg, out string queryName, out List<AdoCommandParam>? execLiteralArgs, out string? unmodelledExecArg))
+            // evidence/r-ado-1b/rs-source-kinds call 190: adCmdStoredProc expects a simple query name and returns
+            // ACE 3732 ("Expected query name after EXECUTE.") for non-identifier text.
+            string queryName;
+            List<AdoCommandParam>? execLiteralArgs = null;
+            string? unmodelledExecArg = null;
+            bool parsed = cmdType == AdoSqlText.AdCmdStoredProc
+                ? AdoSqlText.IsSimpleQueryName(procArg, out queryName)
+                : AdoSqlText.TryParseExecCall(procArg, out queryName, out execLiteralArgs, out unmodelledExecArg);
+            if (!parsed)
             {
                 EmitWillExec();
                 MappedProviderError err = AdoSqlErrors.ExpectedQueryNameAfterExecute();
