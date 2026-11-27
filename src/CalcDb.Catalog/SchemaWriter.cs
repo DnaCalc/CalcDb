@@ -1868,7 +1868,7 @@ public sealed class SchemaWriter
         AcceptOutcome accepted = workspace.AcceptSchemaChange(
             _cache,
             ObjectSemantics,
-            p => CompileCreateTable(p, compileRequest, preparedFk, dateCreateBits, dateUpdateBits, initialLvProp: null, firstDaoStep: daoSteps.Count > 0 ? daoSteps[0] : null, out tdefPage, out _, out objectRow, out _, out extent, absorbedDeferred, sessionReserved, useSessionExtentReservation, deferCatalogCounts: deferCatalogCountsAfterQueryDef),
+            p => CompileCreateTable(p, compileRequest, preparedFk, dateCreateBits, dateUpdateBits, initialLvProp: null, firstDaoStep: daoSteps.Count > 0 ? daoSteps[0] : null, out tdefPage, out _, out objectRow, out _, out extent, absorbedDeferred, sessionReserved, useSessionExtentReservation, deferCatalogCounts: deferCatalogCountsAfterQueryDef, allowNonContiguousReserved: workspace.AllowNonContiguousReserved(_cache)),
             allowPendingDeferredKind: absorbedDeferred?.Kind,
             baseExtentPages: _pageCount);
         if (!accepted.Accepted)
@@ -7157,7 +7157,8 @@ public sealed class SchemaWriter
         DeferredCatalogCommit? absorbedDeferred = null,
         IReadOnlyList<uint>? sessionReserved = null,
         bool useSessionExtentReservation = false,
-        bool deferCatalogCounts = false)
+        bool deferCatalogCounts = false,
+        bool allowNonContiguousReserved = false)
     {
         tdefPage = 0;
         mapPage = 0;
@@ -7176,7 +7177,7 @@ public sealed class SchemaWriter
             }
         }
         bool hasDefault = request.Route == SchemaRoute.Ado && request.Fields.Any(f => f.DefaultValue is not null);
-        var allocator = new PageAllocator(_cache, _d, _pageCount, sessionReserved, allowNonContiguousReserved: hasDefault || preparedFk is not null);
+        var allocator = new PageAllocator(_cache, _d, _pageCount, sessionReserved, allowNonContiguousReserved: hasDefault || preparedFk is not null || allowNonContiguousReserved);
         uint firstFreeBefore = 0;
         byte[] globalMapBefore = [];
         bool captureForExtent = useSessionExtentReservation && !allocator.HasSessionReservedPages;

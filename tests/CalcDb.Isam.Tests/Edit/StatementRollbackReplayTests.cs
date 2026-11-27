@@ -229,70 +229,12 @@ public sealed partial class StatementRollbackReplayTests
             Assert.Equal(start, session.Image.Snapshot());
         }
 
-        // 1b. Explicit AutoNumber taking a new ACCDB page — above counter (refused at Rollback with CounterWrite).
+        // 1b. Explicit AutoNumber taking a new ACCDB page inside BeginTrans — above counter (still Open per qualified.md R-TXN-1 TXN-STMT r-q45: refused at Rollback with CounterWrite).
         {
             RecordPlan plan = LoadPlan("exp-sel-above-dup2-existing", FirstRecord("exp-sel-above-dup2-existing"));
             byte[] image = (byte[])plan.SetupImage.Clone();
             ShrinkTableFirstDataPage(image, tableDefPage: 42, freeBytes: 4);
             using var session = new KeptSetupSession(image, "exp-sel-above-dup2-existing");
-            byte[] start = session.Image.Snapshot();
-            (TableDefinition an, TableEditContext ctx) = session.Table("An");
-            using TableCursor cursor = session.OpenCursor(an);
-            using var frame = new EditFrame(ctx, cursor, session.Workspace) { ConflictSource = MutationErrorSource.Database };
-
-            using StatementScope stmt = session.Workspace.BeginStatement(isInsertSelect: true);
-            Assert.Null(session.Workspace.BeginTrans());
-            Assert.True(frame.AddNew().Succeeded);
-            Assert.True(frame.Assign(Col(an, "ID"), I4(20)).Succeeded);
-            Assert.True(frame.Assign(Col(an, "K"), I4(20)).Succeeded);
-            AssignText(frame, Col(an, "S"), "above-newpage");
-            Assert.True(frame.Update().Succeeded);
-
-            // Row 2 fails 3022 by PK (ID 1 already exists).
-            Assert.True(frame.AddNew().Succeeded);
-            Assert.True(frame.Assign(Col(an, "ID"), I4(1)).Succeeded);
-            Assert.True(frame.Assign(Col(an, "K"), I4(21)).Succeeded);
-            AssignText(frame, Col(an, "S"), "pkdup");
-            Assert.Equal(MutationError.Duplicate, frame.Update().Error?.Number);
-            Assert.True(frame.CancelUpdate().Succeeded);
-
-            Assert.True(session.Workspace.Rollback().Succeeded);
-            ResolutionOutcome end = stmt.Complete();
-            Assert.Equal(MutationOpen.CounterWrite, end.Open);
-            Assert.Contains("explicit AutoNumber taking a new data page", end.Detail, StringComparison.Ordinal);
-            Assert.Equal(start, session.Image.Snapshot());
-        }
-
-        // 1c. Explicit AutoNumber inside BeginTrans — below counter (refused at Update with AutoNumberReseed)
-        //     and above counter (refused at Rollback with CounterWrite).
-        {
-            RecordPlan plan = LoadPlan("exp-sel-below-dup2-existing", FirstRecord("exp-sel-below-dup2-existing"));
-            using var session = new KeptSetupSession(plan.SetupImage, "exp-sel-below-dup2-existing");
-            byte[] start = session.Image.Snapshot();
-            (TableDefinition an, TableEditContext ctx) = session.Table("An");
-            using TableCursor cursor = session.OpenCursor(an);
-            using var frame = new EditFrame(ctx, cursor, session.Workspace) { ConflictSource = MutationErrorSource.Database };
-
-            Assert.Null(session.Workspace.BeginTrans());
-            using (StatementScope stmt = session.Workspace.BeginStatement(isInsertSelect: true))
-            {
-                Assert.Null(session.Workspace.BeginTrans());
-                Assert.True(frame.AddNew().Succeeded);
-                Assert.True(frame.Assign(Col(an, "ID"), I4(4)).Succeeded);
-                Assert.True(frame.Assign(Col(an, "K"), I4(4)).Succeeded);
-                AssignText(frame, Col(an, "S"), "below-txn");
-                UpdateOutcome r1 = frame.Update();
-                Assert.Equal(MutationOpen.AutoNumberReseed, r1.Open);
-                Assert.True(frame.CancelUpdate().Succeeded);
-                Assert.True(session.Workspace.Rollback().Succeeded);
-                Assert.True(stmt.Complete().Succeeded);
-            }
-            Assert.True(session.Workspace.Rollback().Succeeded);
-            Assert.Equal(start, session.Image.Snapshot());
-        }
-        {
-            RecordPlan plan = LoadPlan("exp-sel-above-dup2-existing", FirstRecord("exp-sel-above-dup2-existing"));
-            using var session = new KeptSetupSession(plan.SetupImage, "exp-sel-above-dup2-existing");
             byte[] start = session.Image.Snapshot();
             (TableDefinition an, TableEditContext ctx) = session.Table("An");
             using TableCursor cursor = session.OpenCursor(an);
@@ -305,7 +247,72 @@ public sealed partial class StatementRollbackReplayTests
                 Assert.True(frame.AddNew().Succeeded);
                 Assert.True(frame.Assign(Col(an, "ID"), I4(20)).Succeeded);
                 Assert.True(frame.Assign(Col(an, "K"), I4(20)).Succeeded);
-                AssignText(frame, Col(an, "S"), "above-txn");
+                AssignText(frame, Col(an, "S"), "above-newpage");
+                Assert.True(frame.Update().Succeeded);
+
+                // Row 2 fails 3022 by PK (ID 1 already exists).
+                Assert.True(frame.AddNew().Succeeded);
+                Assert.True(frame.Assign(Col(an, "ID"), I4(1)).Succeeded);
+                Assert.True(frame.Assign(Col(an, "K"), I4(21)).Succeeded);
+                AssignText(frame, Col(an, "S"), "pkdup");
+                Assert.Equal(MutationError.Duplicate, frame.Update().Error?.Number);
+                Assert.True(frame.CancelUpdate().Succeeded);
+
+                Assert.True(session.Workspace.Rollback().Succeeded);
+                ResolutionOutcome end = stmt.Complete();
+                Assert.Equal(MutationOpen.CounterWrite, end.Open);
+                Assert.Contains("explicit AutoNumber taking a new data page inside BeginTrans", end.Detail, StringComparison.Ordinal);
+            }
+            Assert.True(session.Workspace.Rollback().Succeeded);
+            Assert.Equal(start, session.Image.Snapshot());
+        }
+
+        // 1c. Explicit AutoNumber inside nested depth-2 BeginTrans — below counter (refused at Update with AutoNumberReseed)
+        //     and above counter (refused at Rollback with CounterWrite). Depth-1 ACCDB existing page is now recorded by r-q45 cxb6.
+        {
+            RecordPlan plan = LoadPlan("exp-sel-below-dup2-existing", FirstRecord("exp-sel-below-dup2-existing"));
+            using var session = new KeptSetupSession(plan.SetupImage, "exp-sel-below-dup2-existing");
+            byte[] start = session.Image.Snapshot();
+            (TableDefinition an, TableEditContext ctx) = session.Table("An");
+            using TableCursor cursor = session.OpenCursor(an);
+            using var frame = new EditFrame(ctx, cursor, session.Workspace) { ConflictSource = MutationErrorSource.Database };
+
+            Assert.Null(session.Workspace.BeginTrans());
+            Assert.Null(session.Workspace.BeginTrans());
+            using (StatementScope stmt = session.Workspace.BeginStatement(isInsertSelect: true))
+            {
+                Assert.Null(session.Workspace.BeginTrans());
+                Assert.True(frame.AddNew().Succeeded);
+                Assert.True(frame.Assign(Col(an, "ID"), I4(4)).Succeeded);
+                Assert.True(frame.Assign(Col(an, "K"), I4(4)).Succeeded);
+                AssignText(frame, Col(an, "S"), "below-txn-d2");
+                UpdateOutcome r1 = frame.Update();
+                Assert.Equal(MutationOpen.AutoNumberReseed, r1.Open);
+                Assert.True(frame.CancelUpdate().Succeeded);
+                Assert.True(session.Workspace.Rollback().Succeeded);
+                Assert.True(stmt.Complete().Succeeded);
+            }
+            Assert.True(session.Workspace.Rollback().Succeeded);
+            Assert.True(session.Workspace.Rollback().Succeeded);
+            Assert.Equal(start, session.Image.Snapshot());
+        }
+        {
+            RecordPlan plan = LoadPlan("exp-sel-above-dup2-existing", FirstRecord("exp-sel-above-dup2-existing"));
+            using var session = new KeptSetupSession(plan.SetupImage, "exp-sel-above-dup2-existing");
+            byte[] start = session.Image.Snapshot();
+            (TableDefinition an, TableEditContext ctx) = session.Table("An");
+            using TableCursor cursor = session.OpenCursor(an);
+            using var frame = new EditFrame(ctx, cursor, session.Workspace) { ConflictSource = MutationErrorSource.Database };
+
+            Assert.Null(session.Workspace.BeginTrans());
+            Assert.Null(session.Workspace.BeginTrans());
+            using (StatementScope stmt = session.Workspace.BeginStatement(isInsertSelect: true))
+            {
+                Assert.Null(session.Workspace.BeginTrans());
+                Assert.True(frame.AddNew().Succeeded);
+                Assert.True(frame.Assign(Col(an, "ID"), I4(20)).Succeeded);
+                Assert.True(frame.Assign(Col(an, "K"), I4(20)).Succeeded);
+                AssignText(frame, Col(an, "S"), "above-txn-d2");
                 Assert.True(frame.Update().Succeeded);
 
                 Assert.True(frame.AddNew().Succeeded);
@@ -320,6 +327,7 @@ public sealed partial class StatementRollbackReplayTests
                 Assert.Equal(MutationOpen.CounterWrite, end.Open);
                 Assert.Contains("explicit AutoNumber inside BeginTrans", end.Detail, StringComparison.Ordinal);
             }
+            Assert.True(session.Workspace.Rollback().Succeeded);
             Assert.True(session.Workspace.Rollback().Succeeded);
             Assert.Equal(start, session.Image.Snapshot());
         }
@@ -345,7 +353,7 @@ public sealed partial class StatementRollbackReplayTests
             Assert.Equal(start, session.Image.Snapshot());
         }
 
-        // 1e. Explicit AutoNumber in Jet 4 MDB (refused with CounterWrite / AutoNumberReseed, writes nothing).
+        // 1e. Explicit AutoNumber inside BeginTrans in Jet 4 MDB (still Open; autocommit MDB explicit AutoNumber is now recorded by r-q45 cxb6).
         {
             RecordPlan mdbAutoPlan = LoadPlanFromRound("r-q27-autonumber-txn", "ins-dup-fail-mdb");
             using var session = new KeptSetupSession(mdbAutoPlan.SetupImage, "ins-dup-fail-mdb");
@@ -354,25 +362,29 @@ public sealed partial class StatementRollbackReplayTests
             using TableCursor cursor = session.OpenCursor(an);
             using var frame = new EditFrame(ctx, cursor, session.Workspace) { ConflictSource = MutationErrorSource.Database };
 
-            using StatementScope stmt = session.Workspace.BeginStatement(isInsertSelect: true);
             Assert.Null(session.Workspace.BeginTrans());
-            Assert.True(frame.AddNew().Succeeded);
-            Assert.True(frame.Assign(Col(an, "ID"), I4(20)).Succeeded);
-            Assert.True(frame.Assign(Col(an, "K"), I4(20)).Succeeded);
-            AssignText(frame, Col(an, "S"), "mdb-exp-1");
-            Assert.True(frame.Update().Succeeded);
+            using (StatementScope stmt = session.Workspace.BeginStatement(isInsertSelect: true))
+            {
+                Assert.Null(session.Workspace.BeginTrans());
+                Assert.True(frame.AddNew().Succeeded);
+                Assert.True(frame.Assign(Col(an, "ID"), I4(20)).Succeeded);
+                Assert.True(frame.Assign(Col(an, "K"), I4(20)).Succeeded);
+                AssignText(frame, Col(an, "S"), "mdb-exp-1");
+                Assert.True(frame.Update().Succeeded);
 
-            Assert.True(frame.AddNew().Succeeded);
-            Assert.True(frame.Assign(Col(an, "ID"), I4(20)).Succeeded);
-            Assert.True(frame.Assign(Col(an, "K"), I4(21)).Succeeded);
-            AssignText(frame, Col(an, "S"), "mdb-exp-2");
-            UpdateOutcome r2 = frame.Update();
-            Assert.Equal(MutationOpen.CounterWrite, r2.Open);
-            Assert.True(frame.CancelUpdate().Succeeded);
-            Assert.True(session.Workspace.Rollback().Succeeded);
-            ResolutionOutcome end = stmt.Complete();
-            Assert.Equal(MutationOpen.CounterWrite, end.Open);
-            Assert.Contains("MDB", end.Detail, StringComparison.Ordinal);
+                Assert.True(frame.AddNew().Succeeded);
+                Assert.True(frame.Assign(Col(an, "ID"), I4(20)).Succeeded);
+                Assert.True(frame.Assign(Col(an, "K"), I4(21)).Succeeded);
+                AssignText(frame, Col(an, "S"), "mdb-exp-2");
+                UpdateOutcome r2 = frame.Update();
+                Assert.Equal(MutationOpen.CounterWrite, r2.Open);
+                Assert.True(frame.CancelUpdate().Succeeded);
+                Assert.True(session.Workspace.Rollback().Succeeded);
+                ResolutionOutcome end = stmt.Complete();
+                Assert.Equal(MutationOpen.CounterWrite, end.Open);
+                Assert.Contains("MDB", end.Detail, StringComparison.Ordinal);
+            }
+            Assert.Equal(MutationOpen.CounterWrite, session.Workspace.Rollback().Open);
             Assert.Equal(start, session.Image.Snapshot());
         }
 
@@ -550,9 +562,10 @@ public sealed partial class StatementRollbackReplayTests
             Assert.Equal(start, session.Image.Snapshot());
         }
 
-        // 5. First-row 3314 and first-row 3316 (both without and with an AutoNumber column, regardless of table row count).
+        // 5. First-row 3314 and first-row 3316: non-AutoNumber ACCDB tables return 3314/3316 and write 0 bytes
+        //    (cxb6: rb-row1-3314-empty-accdb, rb-row1-3316-empty-accdb); AutoNumber tables remain refused by name.
         {
-            // 5a. Empty non-AutoNumber table, first-row 3314.
+            // 5a. Empty non-AutoNumber table, first-row 3314 (admitted, 0 bytes).
             RecordPlan reqPlan = LoadPlan("noan-req-3314-newpage", FirstRecord("noan-req-3314-newpage"));
             using (var session = new KeptSetupSession(reqPlan.SetupImage, "noan-req-3314-newpage"))
             {
@@ -567,15 +580,15 @@ public sealed partial class StatementRollbackReplayTests
                 Assert.True(frame.Assign(Col(t, "ID"), I4(10)).Succeeded);
                 Assert.True(frame.Assign(Col(t, "K"), I4(11)).Succeeded);
                 UpdateOutcome r1 = frame.Update();
-                Assert.Equal(MutationOpen.CounterWrite, r1.Open);
-                Assert.Contains("first-row refusal 3314 on ", r1.Detail, StringComparison.Ordinal);
+                Assert.Equal(MutationOpen.None, r1.Open);
+                Assert.Equal(MutationError.Required, r1.Error?.Number);
                 Assert.True(frame.CancelUpdate().Succeeded);
                 Assert.True(session.Workspace.Rollback().Succeeded);
                 Assert.True(stmt.Complete().Succeeded);
                 Assert.Equal(start, session.Image.Snapshot());
             }
 
-            // 5b. Empty non-AutoNumber table, first-row 3316.
+            // 5b. Empty non-AutoNumber table, first-row 3316 (admitted, 0 bytes).
             RecordPlan valPlan = LoadPlan("noan-val-3316-newpage", FirstRecord("noan-val-3316-newpage"));
             using (var session = new KeptSetupSession(valPlan.SetupImage, "noan-val-3316-newpage"))
             {
@@ -591,8 +604,8 @@ public sealed partial class StatementRollbackReplayTests
                 Assert.True(frame.Assign(Col(t, "K"), I4(150)).Succeeded);
                 AssignText(frame, Col(t, "S"), "bad");
                 UpdateOutcome r1 = frame.Update();
-                Assert.Equal(MutationOpen.CounterWrite, r1.Open);
-                Assert.Contains("first-row refusal 3316 on ", r1.Detail, StringComparison.Ordinal);
+                Assert.Equal(MutationOpen.None, r1.Open);
+                Assert.Equal(MutationError.RuleWithText, r1.Error?.Number);
                 Assert.True(frame.CancelUpdate().Succeeded);
                 Assert.True(session.Workspace.Rollback().Succeeded);
                 Assert.True(stmt.Complete().Succeeded);
@@ -1277,7 +1290,7 @@ public sealed partial class StatementRollbackReplayTests
         // Finding 6: first-row 3314 and 3316 inside a multi-row statement refuse with MutationOpen.CounterWrite
         // whatever the table's row count (both without and with an AutoNumber column on non-empty tables).
 
-        // 6a. Non-empty non-AutoNumber table, first-row 3314.
+        // 6a. Non-empty non-AutoNumber table, first-row 3314 (admitted per cxb6 rb-row1-3314-existing-accdb, writes 0 bytes).
         {
             RecordPlan reqPlan = LoadPlan("noan-req-3314-existing", FirstRecord("noan-req-3314-existing"));
             using var session = new KeptSetupSession(reqPlan.SetupImage, "noan-req-3314-existing");
@@ -1293,15 +1306,15 @@ public sealed partial class StatementRollbackReplayTests
             Assert.True(frame.Assign(Col(t, "ID"), I4(10)).Succeeded);
             Assert.True(frame.Assign(Col(t, "K"), I4(11)).Succeeded);
             UpdateOutcome r1 = frame.Update();
-            Assert.Equal(MutationOpen.CounterWrite, r1.Open);
-            Assert.Contains("first-row refusal 3314 on ", r1.Detail, StringComparison.Ordinal);
+            Assert.Equal(MutationOpen.None, r1.Open);
+            Assert.Equal(MutationError.Required, r1.Error?.Number);
             Assert.True(frame.CancelUpdate().Succeeded);
             Assert.True(session.Workspace.Rollback().Succeeded);
             Assert.True(stmt.Complete().Succeeded);
             Assert.Equal(start, session.Image.Snapshot());
         }
 
-        // 6b. Non-empty non-AutoNumber table, first-row 3316.
+        // 6b. Non-empty non-AutoNumber table, first-row 3316 (admitted per cxb6 rb-row1-3316-existing-accdb, writes 0 bytes).
         {
             RecordPlan valPlan = LoadPlan("noan-val-3316-existing", FirstRecord("noan-val-3316-existing"));
             using var session = new KeptSetupSession(valPlan.SetupImage, "noan-val-3316-existing");
@@ -1318,8 +1331,8 @@ public sealed partial class StatementRollbackReplayTests
             Assert.True(frame.Assign(Col(t, "K"), I4(150)).Succeeded);
             AssignText(frame, Col(t, "S"), "bad");
             UpdateOutcome r1 = frame.Update();
-            Assert.Equal(MutationOpen.CounterWrite, r1.Open);
-            Assert.Contains("first-row refusal 3316 on ", r1.Detail, StringComparison.Ordinal);
+            Assert.Equal(MutationOpen.None, r1.Open);
+            Assert.Equal(MutationError.RuleWithText, r1.Error?.Number);
             Assert.True(frame.CancelUpdate().Succeeded);
             Assert.True(session.Workspace.Rollback().Succeeded);
             Assert.True(stmt.Complete().Succeeded);
@@ -1440,8 +1453,8 @@ public sealed partial class StatementRollbackReplayTests
             Assert.True(frame.CancelUpdate().Succeeded);
         }
 
-        // 9b. Refused explicit above counter + new page + PK dup ID=1 -> Open-list refusal writes nothing and restores
-        //     counter to 10 (neither row 1's Observe 20 nor row 2's Reseed 1 leaks); next AddNew yields 11.
+        // 9b. Refused explicit above counter + new page inside BeginTrans + PK dup ID=1 -> Open-list refusal writes
+        //     nothing and restores counter to 10 (neither row 1's Observe 20 nor row 2's Reseed 1 leaks); next AddNew yields 11.
         {
             RecordPlan plan = LoadPlan("exp-sel-above-dup2-existing", FirstRecord("exp-sel-above-dup2-existing"));
             byte[] image = (byte[])plan.SetupImage.Clone();
@@ -1453,6 +1466,7 @@ public sealed partial class StatementRollbackReplayTests
             using TableCursor cursor = session.OpenCursor(an);
             using var frame = new EditFrame(ctx, cursor, session.Workspace) { ConflictSource = MutationErrorSource.Database };
 
+            Assert.Null(session.Workspace.BeginTrans());
             using (StatementScope stmt = session.Workspace.BeginStatement(isInsertSelect: true))
             {
                 Assert.Null(session.Workspace.BeginTrans());
@@ -1472,6 +1486,7 @@ public sealed partial class StatementRollbackReplayTests
                 Assert.True(session.Workspace.Rollback().Succeeded);
                 Assert.Equal(MutationOpen.CounterWrite, stmt.Complete().Open);
             }
+            Assert.True(session.Workspace.Rollback().Succeeded);
 
             Assert.Equal(start, session.Image.Snapshot());
             Assert.Equal(10L, ctx.Counter.Last);
@@ -1480,8 +1495,8 @@ public sealed partial class StatementRollbackReplayTests
             Assert.True(frame.CancelUpdate().Succeeded);
         }
 
-        // 9c. Refused explicit inside BeginTrans + PK dup ID=1 -> Open-list refusal writes nothing and restores
-        //     counter to 10; next AddNew yields 11.
+        // 9c. Refused explicit inside nested depth-2 BeginTrans + PK dup ID=1 -> Open-list refusal writes nothing and
+        //     restores counter to 10; next AddNew yields 11.
         {
             RecordPlan plan = LoadPlan("exp-sel-above-dup2-existing", FirstRecord("exp-sel-above-dup2-existing"));
             using var session = new KeptSetupSession(plan.SetupImage, "exp-sel-above-dup2-existing");
@@ -1492,13 +1507,14 @@ public sealed partial class StatementRollbackReplayTests
             using var frame = new EditFrame(ctx, cursor, session.Workspace) { ConflictSource = MutationErrorSource.Database };
 
             Assert.Null(session.Workspace.BeginTrans());
+            Assert.Null(session.Workspace.BeginTrans());
             using (StatementScope stmt = session.Workspace.BeginStatement(isInsertSelect: true))
             {
                 Assert.Null(session.Workspace.BeginTrans());
                 Assert.True(frame.AddNew().Succeeded);
                 Assert.True(frame.Assign(Col(an, "ID"), I4(20)).Succeeded);
                 Assert.True(frame.Assign(Col(an, "K"), I4(20)).Succeeded);
-                AssignText(frame, Col(an, "S"), "above-txn");
+                AssignText(frame, Col(an, "S"), "above-txn-d2");
                 Assert.True(frame.Update().Succeeded);
 
                 Assert.True(frame.AddNew().Succeeded);
@@ -1511,6 +1527,7 @@ public sealed partial class StatementRollbackReplayTests
                 Assert.True(session.Workspace.Rollback().Succeeded);
                 Assert.Equal(MutationOpen.CounterWrite, stmt.Complete().Open);
             }
+            Assert.True(session.Workspace.Rollback().Succeeded);
             Assert.True(session.Workspace.Rollback().Succeeded);
 
             Assert.Equal(start, session.Image.Snapshot());

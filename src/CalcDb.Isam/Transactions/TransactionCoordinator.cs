@@ -731,6 +731,12 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     /// </summary>
     internal bool InAutocommitFailOnErrorStatementLevel => _statement is not null && _statementExternalDepth == 0 && _statementHasOwnLevel && _frames.Count == 1;
 
+    /// <summary>
+    /// Whether the active SQL action statement started inside a depth-1 explicit transaction (<c>Depth == 1</c>) and
+    /// opened its own <c>dbFailOnError</c> statement level (<c>Depth == 2</c>).
+    /// </summary>
+    internal bool InExplicitTxnFailOnErrorStatementLevel => _statement is not null && _statementExternalDepth == 1 && _statementHasOwnLevel && _frames.Count == 2;
+
     /// <summary>Whether the active statement's current transaction level already allocated a GlobalMap page on <paramref name="cache"/>.</summary>
     internal bool HasStatementGlobalMapAllocation(PageCache cache) => _frames.Count > 0 && TookGlobalMapPage(_frames[^1], cache);
 
@@ -1150,9 +1156,26 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     /// (evidence/r-q37-valrule-put/long-rule-spill-lval-*, evidence/r-q42-field-rule-and/rule-*, multirow-*).
     /// Excludes pages already consumed by unpublished changes of the current statement.
     /// </summary>
+    /// <summary>
+    /// Whether <paramref name="cache"/> has an active file-level shared pending rollback extent whose unused pages may
+    /// be consumed non-contiguously past the freed rolled-back page bit(s)
+    /// (<c>cxb6</c>: <c>evidence/r-q45-querydef-stream-rollback/rb-pending-extent-*</c>).
+    /// </summary>
+    public bool AllowNonContiguousReserved(PageCache cache) =>
+        !_sessionReservedExtent.ContainsKey(cache) && SharedRollbackExtent.IsActiveShared(cache);
+
     public IReadOnlyList<uint> SessionReservedPages(PageCache cache)
     {
-        if (!_sessionReservedExtent.TryGetValue(cache, out List<uint>? pages) || pages.Count == 0)
+        IReadOnlyList<uint>? pages = null;
+        if (_sessionReservedExtent.TryGetValue(cache, out List<uint>? sessionPages) && sessionPages.Count > 0)
+        {
+            pages = sessionPages;
+        }
+        else if (SharedRollbackExtent.IsActiveShared(cache))
+        {
+            pages = SharedRollbackExtent.SnapshotRemaining(cache);
+        }
+        if (pages is null || pages.Count == 0)
         {
             return [];
         }
@@ -1191,8 +1214,16 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     private string? ValidateConsumedReservedPages(PageCache file, IReadOnlyList<uint> consumed, int priorInBatch = 0)
     {
         int offset = PendingConsumedReservedCount(file) + priorInBatch;
-        if (!_sessionReservedExtent.TryGetValue(file, out List<uint>? available)
-            || offset + consumed.Count > available.Count)
+        IReadOnlyList<uint>? available = null;
+        if (_sessionReservedExtent.TryGetValue(file, out List<uint>? sessionAvailable) && sessionAvailable.Count > 0)
+        {
+            available = sessionAvailable;
+        }
+        else if (SharedRollbackExtent.IsActiveShared(file))
+        {
+            available = SharedRollbackExtent.SnapshotRemaining(file);
+        }
+        if (available is null || offset + consumed.Count > available.Count)
         {
             return "consuming pages from a session page-1 extent reservation that is not active or has fewer pages remaining is not recorded (r-q37-valrule-put, r-q42-field-rule-and)";
         }
@@ -2421,6 +2452,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             }
             if (physical.ConsumedReservedPages.Count > 0)
             {
+                SharedRollbackExtent.Consume(physical.File, physical.ConsumedReservedPages);
                 if (_sessionReservedExtent.TryGetValue(physical.File, out List<uint>? reservedPool))
                 {
                     for (int ci2 = 0; ci2 < physical.ConsumedReservedPages.Count; ci2++)
@@ -2489,6 +2521,10 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                     {
                         _releaseAtClose.Remove(g2Cache);
                     }
+                }
+                if (_rollbackExtentPending.Contains(g2Cache))
+                {
+                    SharedRollbackExtent.ActivateAfterGroup2(g2Cache);
                 }
             }
             _pendingGroup2AllocatedPages.Clear();
@@ -2791,8 +2827,8 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         return new ResolutionOutcome(ResolvedChanges: top.Changes.Count);
     }
 
-    /// <summary>The AutoNumber words a Rollback writes: one file, each table's TableDef page and value, and whether a new page was taken.</summary>
-    private sealed record RolledBackAutoNumbers(PageCache File, List<(uint TableDefPage, uint Value)> Words, bool TookPage);
+    /// <summary>The AutoNumber words a Rollback writes: one file, each table's TableDef page, value, and reseed flag, and whether a new page was taken.</summary>
+    private sealed record RolledBackAutoNumbers(PageCache File, List<(uint TableDefPage, uint Value, bool Reseed)> Words, bool TookPage);
 
     /// <summary>
     /// Capture level 2's reached TableDef counters before an inner Rollback from depth 2 to depth 1
@@ -2989,7 +3025,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         }
         PageCache? file = null;
         bool tookPage = false;
-        List<(uint TableDefPage, uint Value)> words = [];
+        List<(uint TableDefPage, uint Value, bool Reseed)> words = [];
         foreach (((PageCache cache, uint tdefPage), AutoNumberMark mark) in marks)
         {
             uint stored;
@@ -3028,8 +3064,17 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                         $"Rollback after an AutoNumber consumed on TableDef page {tdefPage} in a Jet 4 MDB file is recorded only for a single clean SQL INSERT ... SELECT taking a new page (evidence/r-q27-autonumber-txn/ins-txn-rb-mdb)");
                 }
             }
+            // cxb6 (evidence/r-q45-querydef-stream-rollback/rb-exp-an-begintrans-rollback-accdb):
+            // an explicit unit-increment AutoNumber reseed from a rolled-back 3022 statement on an existing ACCDB
+            // page inside depth-1 BeginTrans writes AutoNumber word only (+1 on page 0) on outer Rollback.
+            bool admittedReseed = mark.Reseed
+                && top.Level == 1
+                && isAccdb
+                && mark.Increment == 1
+                && mark.Unrecorded is null
+                && !cacheTookPage;
             if (mark.Unrecorded is not null
-                || mark.Reseed
+                || (mark.Reseed && !admittedReseed)
                 || (file is not null && !ReferenceEquals(file, cache))
                 || (!isAccdb && !isJet4Mdb))
             {
@@ -3037,7 +3082,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             }
             file = cache;
             tookPage |= cacheTookPage;
-            words.Add((tdefPage, mark.Value));
+            words.Add((tdefPage, mark.Value, admittedReseed));
         }
         if (file is not null)
         {
@@ -3077,9 +3122,9 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             edits.Add(new PageEdit(d.Map.GlobalMapPage, NoOpPageDelta.Instance, PageRole.Map));
             footprint.Add(new LockResource(d.Map.GlobalMapPage, LockPurpose.Map));
         }
-        foreach ((uint tdefPage, uint value) in write.Words)
+        foreach ((uint tdefPage, uint value, bool reseed) in write.Words)
         {
-            edits.Add(new PageEdit(tdefPage, new TableDefCountsDelta(0, value, [], d), PageRole.Catalog));
+            edits.Add(new PageEdit(tdefPage, new TableDefCountsDelta(0, value, [], [], d, reseedAutoNumber: reseed), PageRole.Catalog));
             footprint.Add(new LockResource(tdefPage, LockPurpose.TableDef));
         }
         (MutationOpen open, string? detail) = PublishNonTransactional(write.File, edits, footprint, CommitMode.Immediate, MutationErrorSource.Workspace, out MutationError? pubError);
@@ -3124,8 +3169,17 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         UnindexChanges(top.Changes);
         if (_frames.Count > 0)
         {
-            // The statement's AutoNumbers stay consumed in the enclosing level, which no record shows rolled back after this.
-            _frames[^1].MergeAutoNumbersFrom(top, "a SQL statement whose own level was rolled back");
+            // The statement's AutoNumbers stay consumed in the enclosing level. For an admitted depth-1 ACCDB
+            // existing-page explicit AutoNumber 3022 statement (cxb6: rb-exp-an-begintrans-rollback-accdb), preserve
+            // the mark as recorded so an outer Rollback writes TableDef offset 20 only (+1 on page 0).
+            bool preserveExplicitReseed = limitation is null
+                && counters is not null
+                && counters.HasAutoNumberTarget
+                && !counters.TookPage
+                && _frames.Count == 1
+                && AccdbHeader(counters.File) is true
+                && top.ConsumedAutoNumbers?.Values.Any(m => m.Explicit && m.Reseed && m.Increment == 1 && m.Unrecorded is null) == true;
+            _frames[^1].MergeAutoNumbersFrom(top, preserveExplicitReseed ? null : "a SQL statement whose own level was rolled back");
             foreach (FileParticipant p in _participants.Values)
             {
                 p.Overlay.RollbackScope();
@@ -3268,8 +3322,12 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                 }
                 if (counters.ExtentPlan is { } ext)
                 {
-                    _rollbackExtentPending.Add(counters.File);
-                    counters.File.RegisterRollbackExtentOwner(Locker);
+                    if (!isJet4Mdb)
+                    {
+                        _rollbackExtentPending.Add(counters.File);
+                        counters.File.RegisterRollbackExtentOwner(Locker);
+                        SharedRollbackExtent.StageGroup1(counters.File, ext.UnusedExtentPages);
+                    }
                     _reservedExtent.Add(counters.File);
                     if (!_releaseAtClose.TryGetValue(counters.File, out List<uint>? closePages))
                     {
@@ -3425,16 +3483,22 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
 
         if (unrecorded is null && !isAccdbOrHeaderless)
         {
-            // Jet 4 MDB statement Rollback counters are recorded only at external depth 0 after 3022 with no explicit
-            // AutoNumber, either on a table with no AutoNumber column (existing or new page: noan-dup-row2-mdb-existing,
-            // noan-dup-row2-mdb-newpage) or with a consumed generated AutoNumber taking a new page (ins-dup-fail-mdb).
+            // Jet 4 MDB statement Rollback counters are recorded only at external depth 0 after 3022:
+            // - no AutoNumber column (existing or new page: noan-dup-row2-mdb-existing, noan-dup-row2-mdb-newpage),
+            // - consumed generated unit-increment AutoNumber taking a new page (ins-dup-fail-mdb), or
+            // - all-explicit unit-increment AutoNumbers after earlier accepted row(s) on existing or new page
+            //   (cxb6: rb-exp-an-existing-mdb, rb-exp-an-newpage-mdb).
             // Open: MDB 3314, 3201 and 3316 without an AutoNumber column; MDB with a generated AutoNumber on an existing
-            // page; explicit values in MDB.
+            // page; explicit values inside BeginTrans on MDB.
+            bool admittedMdbExplicit = hasExplicitAutoNumber
+                && !hasGeneratedAutoNumber
+                && top.Changes.Count > 0;
             bool admittedMdb = isJet4Mdb
                 && !inExplicitTxn
-                && !hasExplicitAutoNumber
                 && _statementRefusal == MutationError.Duplicate
-                && (!hasAutoNumberTarget || (hasConsumedAutoNumber && tookPage));
+                && (!hasAutoNumberTarget
+                    || (!hasExplicitAutoNumber && hasConsumedAutoNumber && tookPage)
+                    || admittedMdbExplicit);
             if (!admittedMdb)
             {
                 if (isJet4Mdb && hasExplicitAutoNumber)
@@ -3453,19 +3517,18 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         }
         if (unrecorded is null && hasExplicitAutoNumber)
         {
-            // Explicit AutoNumber values in a statement Rollback are recorded only at external depth 0 on an existing
-            // ACCDB page with unit increment, all-explicit rows after earlier accepted row(s), and 3022
-            // (evidence/r-q29-stmt-rollback-counters/exp-sel-below-dup2-existing, exp-sel-below-pk-dup2-existing,
-            // exp-sel-eq-dup2-existing, exp-sel-eq-dup2-live, exp-sel-above-dup2-existing).
-            // Open: explicit values on a new page, in MDB, inside BeginTrans, under another increment, mixed with
-            // generated values, on the first row, or after a non-3022 refusal.
-            if (inExplicitTxn)
+            // Explicit AutoNumber values in a statement Rollback are recorded for unit increment, all-explicit rows
+            // after earlier accepted row(s), and 3022:
+            // - external depth 0 on ACCDB (existing or new page: exp-sel-*, cxb6 rb-exp-an-newpage-accdb)
+            // - external depth 0 on Jet 4 MDB (existing or new page: cxb6 rb-exp-an-existing-mdb, rb-exp-an-newpage-mdb)
+            // - depth-1 BeginTrans on ACCDB existing page (cxb6 rb-exp-an-begintrans-commit-accdb, rb-exp-an-begintrans-rollback-accdb).
+            // Open: BeginTrans + new-page explicit AutoNumber 3022; depth >= 2 BeginTrans; non-1 increment; mixed with
+            // generated values; first row; non-3022 refusal.
+            if (inExplicitTxn && (!isAccdbOrHeaderless || _frames.Count > 1 || tookPage))
             {
-                unrecorded = "an explicit AutoNumber inside BeginTrans";
-            }
-            else if (tookPage)
-            {
-                unrecorded = "an explicit AutoNumber taking a new data page";
+                unrecorded = tookPage
+                    ? "an explicit AutoNumber taking a new data page inside BeginTrans"
+                    : "an explicit AutoNumber inside BeginTrans";
             }
             else if (hasGeneratedAutoNumber)
             {
@@ -3522,7 +3585,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         }
         FormatDescriptor d = FormatDescriptor.Jet4Family;
         PageAllocator.RollbackExtentPlan? extentPlan = null;
-        if (!inExplicitTxn && tookPage && AccdbHeader(file!) is true)
+        if (!inExplicitTxn && tookPage && (AccdbHeader(file!) is true || (isJet4Mdb && hasExplicitAutoNumber)))
         {
             ulong extentBase = Math.Max(baseExtentPages, file!.KnownExtentPages);
             var allocator = new PageAllocator(file!, d, extentBase);
@@ -3589,6 +3652,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         foreach (PageCache extentCache in _rollbackExtentPending)
         {
             extentCache.AbandonRollbackExtentOwner(Locker);
+            SharedRollbackExtent.MarkBlocked(extentCache);
         }
         if (rolledBack is not null)
         {
@@ -4025,7 +4089,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                 }
                 if (physical.ConsumedReservedPages.Count > 0)
                 {
-                    if (InExplicitTransaction)
+                    if (InExplicitTransaction && !(_frames.Count == 1 && InStatement && SharedRollbackExtent.IsActiveShared(physical.File)))
                     {
                         return new AcceptOutcome(false, null, MutationOpen.Publication, "consuming pages from a session page-1 extent reservation inside BeginTrans is not recorded (r-q42-field-rule-and)");
                     }
@@ -4474,7 +4538,18 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         List<PageEdit> frees = [];
         List<LockResource> footprint = [];
         List<uint> releasedPages = [];
-        if (_releaseAtClose.TryGetValue(cache, out List<uint>? released))
+        if (_rollbackExtentPending.Contains(cache)
+            && SharedRollbackExtent.TryGetRemainingForClose(cache, out List<uint> sharedRemaining))
+        {
+            foreach (uint page in sharedRemaining)
+            {
+                if (!releasedPages.Contains(page))
+                {
+                    releasedPages.Add(page);
+                }
+            }
+        }
+        else if (_releaseAtClose.TryGetValue(cache, out List<uint>? released))
         {
             foreach (uint page in released)
             {
@@ -4577,6 +4652,11 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             }
             _pendingRolledBackPages.Remove(cache);
             cache.UnregisterRollbackExtentOwner(Locker);
+            SharedRollbackExtent.Clear(cache);
+        }
+        else if (_unresolved.Contains(cache))
+        {
+            SharedRollbackExtent.MarkBlocked(cache);
         }
         return error is { } refused ? (MutationOpen.Publication, $"the closing commit: {refused.Describe()}") : (open, detail);
     }
