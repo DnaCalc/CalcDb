@@ -17,7 +17,7 @@ namespace CalcDb.Com.Dao;
 /// (user-defined) one decodes its MR2 record (CAT-P). <see cref="Member"/> is the getter's declared name when it differs
 /// from the property's spelling (a Recordset lists "BookMark" for its Bookmark getter).
 /// </summary>
-internal sealed record PropertySpec(string Name, short Type, StoredProperty? Stored = null, string? Member = null, bool WriteOnly = false, Func<DaoObject, CallResult>? Read = null)
+internal sealed record PropertySpec(string Name, short Type, StoredProperty? Stored = null, string? Member = null, bool WriteOnly = false, Func<DaoObject, CallResult>? Read = null, bool Inherited = false)
 {
     public static PropertySpec BuiltIn(string name, short type, string? member = null) => new(name, type, null, member);
 
@@ -28,6 +28,9 @@ internal sealed record PropertySpec(string Name, short Type, StoredProperty? Sto
     public static PropertySpec PutOnly(string name, short type) => new(name, type, WriteOnly: true);
 
     public static PropertySpec User(StoredProperty stored) => new(stored.Name, stored.NativeType, stored);
+
+    /// <summary>A stored property inherited from a query's source table (R-PRESERVE-1 PRES-QUERY-PROPS; r-dao-1b/querydef-properties-enumerated).</summary>
+    public static PropertySpec InheritedUser(StoredProperty stored) => new(stored.Name, stored.NativeType, stored, Inherited: true);
 }
 
 /// <summary>
@@ -147,19 +150,42 @@ internal static class BuiltInProperties
         PropertySpec.BuiltIn("RecordStatus", Integer), PropertySpec.BuiltIn("UpdateOptions", Long),
     ];
 
+    /// <summary>r-dao-1b/parameter-properties-enumerated: Value (parameter's own DAO type), Name, Type, Direction.</summary>
+    public static PropertySpec[] Parameter(short paramType) =>
+    [
+        PropertySpec.BuiltIn("Value", paramType), PropertySpec.BuiltIn("Name", Memo),
+        PropertySpec.BuiltIn("Type", Integer), PropertySpec.BuiltIn("Direction", Integer),
+    ];
+
     /// <summary>The built-ins, then the object map's stored properties that are not built-in names, in stored order.</summary>
-    public static PropertySpec[] With(PropertySpec[] builtIns, PropertyMap? stored)
+    public static PropertySpec[] With(PropertySpec[] builtIns, PropertyMap? stored) => WithInherited(builtIns, stored, inherited: null);
+
+    /// <summary>The built-ins, then the object's own stored properties, then any inherited source-table properties not already listed.</summary>
+    public static PropertySpec[] WithInherited(PropertySpec[] builtIns, PropertyMap? stored, PropertyMap? inherited)
     {
-        if (stored is null)
+        if (stored is null && inherited is null)
         {
             return builtIns;
         }
         var specs = new List<PropertySpec>(builtIns);
-        foreach (StoredProperty p in stored.Properties)
+        if (stored is not null)
         {
-            if (!builtIns.Any(b => string.Equals(b.Name, p.Name, StringComparison.OrdinalIgnoreCase)))
+            foreach (StoredProperty p in stored.Properties)
             {
-                specs.Add(PropertySpec.User(p));
+                if (!specs.Any(b => string.Equals(b.Name, p.Name, StringComparison.OrdinalIgnoreCase)))
+                {
+                    specs.Add(PropertySpec.User(p));
+                }
+            }
+        }
+        if (inherited is not null)
+        {
+            foreach (StoredProperty p in inherited.Properties)
+            {
+                if (!specs.Any(b => string.Equals(b.Name, p.Name, StringComparison.OrdinalIgnoreCase)))
+                {
+                    specs.Add(PropertySpec.InheritedUser(p));
+                }
             }
         }
         return [.. specs];
@@ -242,7 +268,12 @@ internal sealed unsafe class PropertiesObject : DaoObject
         }
         if (ordinal is not int i)
         {
-            return Fail(3270, DaoErrors.PropertyNotFound);
+            // r-dao-1b/coll-item-query-family #51, #53: out-of-range integer ordinal on Properties returns 3265
+            // ("Item not found in this collection."), while a missing BSTR name returns 3270 ("Property not found.").
+            VarType indexVt = index == 0 ? VarType.Empty : (VarType)Args.Cell(index)->Vt & ~VarType.ByRef;
+            return indexVt is VarType.I2 or VarType.I4
+                ? Fail(3265, DaoErrors.ItemNotFound)
+                : Fail(3270, DaoErrors.PropertyNotFound);
         }
         if (_held.TryGetValue(i, out PropertyObject? held))
         {
@@ -414,7 +445,7 @@ internal sealed unsafe class PropertyObject : DaoObject
         .Get("Type", (self, args) => Live(self, p => Int16(p.PropertyType)))
         .Put("Type", (self, args) => { nint v = args[^1]; return Live(self, p => p.PutType(v)); })
         // evidence/r-dao-1b/property-append-all-types calls 6, 17, 28, ...: Inherited on an unappended draft Property fails 3219 from DAO.Property.
-        .Get("Inherited", (self, args) => Live(self, p => p.IsAttached ? Bool(false) : p.Fail(3219, DaoErrors.InvalidOperation)))
+        .Get("Inherited", (self, args) => Live(self, p => p.IsAttached ? Bool(p._spec!.Inherited) : p.Fail(3219, DaoErrors.InvalidOperation)))
         .Get("Value", (self, args) => Live(self, p => p.GetValue()))
         .Put("Value", (self, args) => { nint v = args[^1]; return Live(self, p => p.PutValue(v)); });
 

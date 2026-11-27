@@ -192,7 +192,10 @@ internal sealed unsafe class RelationObject : DaoObject
 
     private DefinitionCollection FieldsCollection() =>
         _fields ??= new DefinitionCollection(DaoTypes.Fields, "DAO.Fields", _owner.Database, [.. _relationship.Columns.Select(c => c.Referenced)],
-            (c, i) => new RelationFieldObject(c, _relationship.Columns[i], i));
+            (c, i) => new RelationFieldObject(c, _relationship.Columns[i], i))
+        {
+            Deleter = static (c, _) => c.Fail(3219, DaoErrors.InvalidOperation), // r-dao-1b/coll-append-delete-unsupported call 37
+        };
 
     protected override void OnFinalRelease()
     {

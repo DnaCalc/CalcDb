@@ -37,6 +37,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
         .Get("QueryDefs", (self, args) => Live(self, d => d.QueryDefsCollection()))
         .Method("CreateQueryDef", (self, args) => { nint name = args.Length > 0 ? args[0] : 0, sql = args.Length > 1 ? args[1] : 0; return Live(self, d => d.CreateQueryDef(name, sql)); })
         .Get("Containers", (self, args) => Live(self, d => Object(d.ContainersCollection())))
+        .Get("Recordsets", (self, args) => Live(self, d => Object(d.RecordsetsCollection())))
         .Get("Relations", (self, args) => Live(self, d => d.RelationsCollection()))
         .Method("CreateRelation", (self, args) =>
         {
@@ -81,6 +82,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
     private DefinitionCollection? _queryDefs;
     private DefinitionCollection? _containers;
     private DefinitionCollection? _relations;
+    private RecordsetsObject? _recordsetsCollection;
     private PropertiesObject? _properties;
     private DatabaseSql? _sql;
     private QueryCatalog? _queries;
@@ -912,7 +914,9 @@ internal sealed unsafe class DatabaseObject : DaoObject
 
     /// <summary>
     /// A saved query opened as a recordset (Database.OpenRecordset by name, QueryDef.OpenRecordset): a select query runs its
-    /// SQL as ACE renders it (QuerySql, CAT-Q); the other families are not this slice's.
+    /// SQL as ACE renders it (QuerySql, CAT-Q); action and DDL queries fail 3219 from DAO.Database
+    /// (r-cat-1b/qd-openrecordset-on-action); a saved ODBC pass-through query fails 3151 from DAO.Database
+    /// (r-cat-1b/qd-passthrough-saved-run); the other families are not this slice's.
     /// </summary>
     public CallResult OpenSaved(SavedQuery query, int? type, int options)
     {
@@ -920,14 +924,46 @@ internal sealed unsafe class DatabaseObject : DaoObject
         {
             return deferredRefusal;
         }
+        if (query.Family is QueryFamily.Update or QueryFamily.Delete or QueryFamily.Append or QueryFamily.MakeTable or QueryFamily.DataDefinition)
+        {
+            return Fail(3219, DaoErrors.InvalidOperation);
+        }
+        if (query.Family == QueryFamily.PassThrough)
+        {
+            string connect = query.TypeRow?.Name1 ?? "";
+            if (TryExtractOdbcDsn(connect, out string dsn))
+            {
+                return Fail(3151, DaoErrors.OdbcConnectionFailed(dsn));
+            }
+            return CallResult.Fail(Failure.NotModelled("NotModelled.OpenPassThroughConnect", $"OpenRecordset of PassThrough query '{query.Name}' with Connect '{connect}' (only ODBC;DSN=... is recorded in r-cat-1b/qd-passthrough-saved-run)"));
+        }
         if (query.Family != QueryFamily.Select)
         {
             return CallResult.Fail(Failure.NotImplemented($"OpenRecordset of a saved {query.Family?.ToString() ?? "unclassified"} query (W-06/relational-spill, W-07)"));
         }
         RenderedSql sql = QuerySql.Render(query);
         return sql.Text is { } text
-            ? SelectRoute.Open(this, text, type, options)
+            ? SelectRoute.Open(this, text, type, options, name: query.Name)
             : CallResult.Fail(Failure.NotModelled("NotModelled.QuerySqlShape", $"the SQL of '{query.Name}': {sql.NotModelled}"));
+    }
+
+    private static bool TryExtractOdbcDsn(string connect, out string dsn)
+    {
+        dsn = "";
+        if (!connect.StartsWith("ODBC;", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+        foreach (string part in connect.Split(';', StringSplitOptions.RemoveEmptyEntries))
+        {
+            int eq = part.IndexOf('=');
+            if (eq > 0 && part[..eq].Trim().Equals("DSN", StringComparison.OrdinalIgnoreCase))
+            {
+                dsn = part[(eq + 1)..].Trim();
+                return dsn.Length > 0;
+            }
+        }
+        return false;
     }
 
     /// <summary>
@@ -1485,12 +1521,24 @@ internal sealed unsafe class DatabaseObject : DaoObject
         if (tableDef.Definition is { } def)
         {
             ColumnDescriptor? col = def.Columns.FirstOrDefault(c => string.Equals(c.Name, fieldName, StringComparison.OrdinalIgnoreCase));
-            if (col is not null && def.PhysicalIndexes.Any(p => p.Columns.Any(ic => ic.PhysicalNumber == col.PhysicalNumber)))
+            if (col is null)
+            {
+                // r-dao-1b/coll-delete-field-indexed call 27: missing field -> 3265 from DAO.Fields.
+                return fields.Fail(3265, DaoErrors.ItemNotFound);
+            }
+            // r-dao-1b/coll-delete-field-indexed calls 43, 51: relationship check precedes index check -> 3303 from DAO.Fields.
+            if (Relationships(out _) is { } rels && rels.Any(r =>
+                (string.Equals(r.Table, tableDef.Name, StringComparison.OrdinalIgnoreCase) && r.Columns.Any(c => string.Equals(c.Referenced, col.Name, StringComparison.OrdinalIgnoreCase)))
+                || (string.Equals(r.ForeignTable, tableDef.Name, StringComparison.OrdinalIgnoreCase) && r.Columns.Any(c => string.Equals(c.Foreign, col.Name, StringComparison.OrdinalIgnoreCase)))))
+            {
+                return fields.Fail(3303, DaoErrors.CannotDeleteFieldInRelation);
+            }
+            if (def.PhysicalIndexes.Any(p => p.Columns.Any(ic => ic.PhysicalNumber == col.PhysicalNumber)))
             {
                 return fields.Fail(3280, DaoErrors.CannotDeleteIndexedField);
             }
         }
-        return CallResult.Fail(Failure.NotModelled("NotModelled.DaoFieldsDelete", $"TableDef.Fields.Delete('{fieldName}') on a non-indexed or missing column is not recorded"));
+        return CallResult.Fail(Failure.NotModelled("NotModelled.DaoFieldsDelete", $"TableDef.Fields.Delete('{fieldName}') on a non-indexed, non-relationship column is not recorded"));
     }
 
     /// <summary>
@@ -2641,29 +2689,33 @@ internal sealed unsafe class DatabaseObject : DaoObject
     private static CallResult NullBstr() => CallResult.Of(Values.OwnedVariant.NullBstr());
 
     /// <summary>
-    /// Whether a saved query is a row-returning single-table query (SELECT or crosstab) over a table that stores
-    /// properties of its own: ACE then lists the table's properties among the query's with Inherited True (R-PRESERVE-1
-    /// PRES-QUERY-PROPS; r-dao-1b/querydef-properties-enumerated: QCross over Parent shows Description), not modelled yet.
+    /// The stored properties a row-returning single-table query (SELECT or crosstab) inherits from its source table,
+    /// listed with <c>Inherited = True</c> after the query's built-in and own stored properties (R-PRESERVE-1
+    /// PRES-QUERY-PROPS; <c>r-dao-1b/querydef-properties-enumerated</c>: QCross, QParam, QSel over Parent inherit Description).
     /// </summary>
-    public bool InheritsTableProperties(SavedQuery query)
+    public PropertyMap? InheritedTableProperties(SavedQuery query, out string? failure)
     {
+        failure = null;
         if (query.Family is not (QueryFamily.Select or QueryFamily.Crosstab) || query.Role(QueryAttributes.Join).Any())
         {
-            return false;
+            return null;
         }
         QueryRow[] sources = [.. query.Role(QueryAttributes.Source)];
         if (sources is not [{ Name1: { } table }])
         {
-            return false;
+            return null;
         }
         CatalogEntry? entry = Catalog.LocalTables(Format).FirstOrDefault(e => string.Equals(e.Name, table, StringComparison.OrdinalIgnoreCase));
         if (entry is null)
         {
-            return false;
+            return null;
         }
-        PropertyMap? stored = StoredProperties(entry, out string? failure);
-        return failure is not null || stored is { Properties.Count: > 0 };
+        return StoredProperties(entry, out failure);
     }
+
+    internal IReadOnlyList<IDatabaseRecordset> OpenRecordsets => _recordsets;
+
+    private RecordsetsObject RecordsetsCollection() => _recordsetsCollection ??= new RecordsetsObject(this);
 
     public void Forget(IDatabaseRecordset recordset) => _recordsets.Remove(recordset);
 
@@ -2844,6 +2896,8 @@ internal sealed unsafe class DatabaseObject : DaoObject
         _containers = null;
         _relations?.Release();
         _relations = null;
+        _recordsetsCollection?.Release();
+        _recordsetsCollection = null;
         _properties?.Release();
         _properties = null;
         // Database.Close keeps the Workspace's level (TXN-CLOSE): accepted changes keep their semantics; the bound rules go.
@@ -2906,5 +2960,47 @@ internal sealed unsafe class DatabaseObject : DaoObject
             return EditPublication.Open(open, "Database.Close could not write its closing commit: " + detail);
         }
         return CallResult.Nothing;
+    }
+}
+
+/// <summary>
+/// <c>Database.Recordsets</c> (<c>r-dao-1b/db-members-accdb</c>, <c>r-dao-1b/db-members-mdb</c>,
+/// <c>r-dao-1b/querydef-state-after-execute</c>): the live list of open Recordsets of this Database.
+/// </summary>
+internal sealed unsafe class RecordsetsObject : DaoObject
+{
+    private static readonly InterfaceDecl Decl = DaoTypes.Recordsets;
+    private static readonly nint Vtable = DualEntries.Build(Decl);
+    private static readonly OperationTable Operations = new OperationTable(Decl)
+        .Get("Count", (self, args) => Live(self, r => Int16(r._database.OpenRecordsets.Count)))
+        .Get("Item", (self, args) => { nint index = args[0]; return Live(self, r => r.Item(index)); })
+        .Method("Refresh", (self, args) => Live(self, _ => CallResult.Nothing));
+
+    private readonly DatabaseObject _database;
+
+    public RecordsetsObject(DatabaseObject database) : base(Decl, Vtable, database.Engine, "DAO.Recordsets")
+    {
+        _database = database;
+    }
+
+    public override bool Invalid => _database.Closed;
+
+    protected override OperationTable Table => Operations;
+
+    private static CallResult Live(ComObject self, Func<RecordsetsObject, CallResult> op)
+    {
+        var r = (RecordsetsObject)self;
+        return r.Invalid ? r.Fail(3420, DaoErrors.ObjectInvalid) : op(r);
+    }
+
+    private CallResult Item(nint index)
+    {
+        IReadOnlyList<IDatabaseRecordset> members = _database.OpenRecordsets;
+        int? found = CollectionLookup.Find(index, new CollectionNames([.. members.Select(m => m.RecordsetName)]), out bool objectIndex);
+        if (objectIndex)
+        {
+            return CallResult.Fail(Failure.NotImplemented("Recordsets.Item with an object index"));
+        }
+        return found is int i && members[i] is ComObject com ? Object(com) : Fail(3265, DaoErrors.ItemNotFound);
     }
 }

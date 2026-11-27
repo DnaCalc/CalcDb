@@ -840,6 +840,7 @@ internal sealed unsafe class IndexObject : DaoObject
             (c, i) => new DefinitionFieldObject(c, null, columns[i], _physical.Columns[i], i))
         {
             Appender = static (c, _) => c.Fail(3219, DaoErrors.InvalidOperation), // r-q52-ddl-make-domain/dao-idx-errors-accdb, dao-idx-errors-mdb call 369
+            Deleter = static (c, _) => c.Fail(3219, DaoErrors.InvalidOperation), // r-dao-1b/coll-append-delete-unsupported call 36
             IsOwnerInvalid = () => Invalid,
         };
         return Object(_fields);

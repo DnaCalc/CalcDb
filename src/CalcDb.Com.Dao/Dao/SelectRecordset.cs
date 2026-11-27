@@ -36,6 +36,9 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
     private static readonly InterfaceDecl Decl = DaoTypes.Recordset2;
     private static readonly nint Vtable = DualEntries.Build(Decl);
     private static readonly OperationTable Operations = new OperationTable(Decl)
+        .Get("Name", (self, args) => Live(self, r => r._name.Length > 0
+            ? Text(r._name)
+            : CallResult.Fail(Failure.NotModelled("NotModelled.SelectRecordsetName", "Recordset.Name on an ad-hoc SQL recordset (only saved QueryDef Name is recorded in r-dao-1b/querydef-state-after-execute)"))))
         .Get("Type", (self, args) => Live(self, r => Int16(r.RecordsetType)))
         .Get("Updatable", (self, args) => Live(self, r => r.Updatable()))
         .Get("Bookmarkable", (self, args) => Live(self, r => r.Bookmarkable()))
@@ -143,6 +146,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
     private ulong _seeChangesSerial;
     private readonly DerivedSourceSpec? _derivedSpec;
     private readonly bool _isDerived;
+    private readonly string _name;
     private string _filter = "";
     private string _sort = "";
     private bool _noMatch;
@@ -172,7 +176,8 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         JoinKeys? joinKeys = null,
         bool hasGroupBy = false,
         DerivedSourceSpec? derivedSpec = null,
-        bool isDerived = false) : base(Decl, Vtable, database.Engine, "DAO.Recordset")
+        bool isDerived = false,
+        string? name = null) : base(Decl, Vtable, database.Engine, "DAO.Recordset")
     {
         Database = database;
         Plan = plan;
@@ -184,6 +189,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         HasGroupBy = hasGroupBy;
         _derivedSpec = derivedSpec;
         _isDerived = isDerived;
+        _name = name ?? "";
         _openLevels = [.. database.Workspace.Transactions.Frames];
         _openOverlay = database.Workspace.Transactions.OverlayOf(database.Cache);
         _snapshotView = snapshotView;
@@ -228,6 +234,8 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
     }
 
     public ulong OpenSequence { get; }
+
+    public string RecordsetName => _name;
 
     internal bool HasGroupBy { get; }
 
@@ -3059,6 +3067,8 @@ internal sealed unsafe class SelectFieldsObject : DaoObject
     private static readonly OperationTable Operations = new OperationTable(Decl)
         .Get("Count", (self, args) => Live(self, f => Int16(f.Recordset.Cursor.Columns.Count)))
         .Get("Item", static (self, args) => (SelectFieldsObject)self is { Recordset.Closed: true } closed ? closed.Recordset.Fail(3420, DaoErrors.ObjectInvalid) : ((SelectFieldsObject)self).Item(args[0]))
+        .Method("Append", (self, args) => Live(self, f => f.Fail(3273, DaoErrors.MethodNotApplicable)))
+        .Method("Delete", (self, args) => Live(self, f => f.Fail(3273, DaoErrors.MethodNotApplicable)))
         .Method("Refresh", (self, args) => Live(self, f => CallResult.Nothing));
 
     private readonly Dictionary<int, SelectFieldObject> _held = [];

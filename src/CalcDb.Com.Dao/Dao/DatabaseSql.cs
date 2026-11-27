@@ -36,6 +36,9 @@ internal interface IDatabaseRecordset
 
     /// <summary>Whether this open recordset holds <c>dbDenyRead</c> on local table <paramref name="table"/>.</summary>
     bool DeniesRead(string table) => false;
+
+    /// <summary>The recordset's DAO <c>Name</c> (table name or saved query name; empty when unnamed).</summary>
+    string RecordsetName => "";
 }
 
 /// <summary>
@@ -114,7 +117,7 @@ internal static unsafe class SelectRoute
     /// <paramref name="values"/> are a QueryDef's parameter values, one per parameter of the statement in its order, null
     /// where none was assigned (SelectCursor.Open fails 3061 then); the cursor keeps copies.
     /// </summary>
-    public static CallResult Open(DatabaseObject database, string sql, int? type, int options, IReadOnlyList<NativeVariant?>? values = null)
+    public static CallResult Open(DatabaseObject database, string sql, int? type, int options, IReadOnlyList<NativeVariant?>? values = null, string? name = null)
     {
         if (database.PendingDeferredTableDefRefusal("NotModelled.OpenRecordsetWithPendingDeferredTableDef", "OpenRecordset") is { } deferredRefusal)
         {
@@ -178,7 +181,7 @@ internal static unsafe class SelectRoute
                 database.Workspace.Transactions.EndLazyBurst(database.Cache);
             }
             DerivedSourceSpec? derivedSpec = singleTableRowSelect ? BuildDerivedSpec(plan, baseWhere: null, baseOrderBy: null, hasOriginalWhere: syntax.Where is not null, hasOriginalOrderBy: hasOrderBy) : null;
-            var recordset = new SelectRecordsetObject(database, plan, cursor, recordsetType, singleTableRowSelect, hasOrderBy, snapshotView, snapshotOverlay, options, database.Engine.NextSequence(), joinKeys, hasGroupBy, derivedSpec);
+            var recordset = new SelectRecordsetObject(database, plan, cursor, recordsetType, singleTableRowSelect, hasOrderBy, snapshotView, snapshotOverlay, options, database.Engine.NextSequence(), joinKeys, hasGroupBy, derivedSpec, name: name);
             adopted = true;
             return database.Adopt(recordset);
         }
