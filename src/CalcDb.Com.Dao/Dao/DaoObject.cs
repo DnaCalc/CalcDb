@@ -169,6 +169,15 @@ internal static class DaoErrors
 
     /// <summary>3409 (r-q52-ddl-make-domain/dao-idx-errors-*: Indexes.Append naming a missing column).</summary>
     public static string InvalidIndexField(string fieldName) => $"Invalid field definition '{fieldName}' in definition of index or relationship.";
+
+    /// <summary>3384 (r-q51-codecs-props-compact/prop-errors-*: Properties.Delete on a built-in property).</summary>
+    public const string CannotDeleteBuiltInProperty = "Cannot delete a built-in property.";
+
+    /// <summary>3385 (r-q51-codecs-props-compact/prop-errors-*: CreateProperty / Value put with Null or empty string).</summary>
+    public const string UserPropertyNoNull = "User-defined properties do not support a Null value.";
+
+    /// <summary>3386 (r-q51-codecs-props-compact/prop-errors-*: Properties.Append of a draft Property before Value is set).</summary>
+    public const string PropertyValueRequired = "Property 'Value' must be set before using this method.";
 }
 
 /// <summary>

@@ -364,6 +364,14 @@ internal sealed unsafe class TableDefObject : DaoObject
         .Get("Indexes", (self, args) => Live(self, t => t.IndexesCollection()))
         .Method("CreateField", (self, args) => { nint name = args.Length > 0 ? args[0] : 0, type = args.Length > 1 ? args[1] : 0, size = args.Length > 2 ? args[2] : 0; return Live(self, t => t.CreateField(name, type, size)); })
         .Method("CreateIndex", (self, args) => { nint name = args.Length > 0 ? args[0] : 0; return Live(self, t => NewIndexObject.Create(t.Engine, name)); })
+        .Method("CreateProperty", (self, args) =>
+        {
+            nint name = args.Length > 0 ? args[0] : 0;
+            nint type = args.Length > 1 ? args[1] : 0;
+            nint value = args.Length > 2 ? args[2] : 0;
+            nint ddl = args.Length > 3 ? args[3] : 0;
+            return Live(self, t => PropertyObject.CreateDraft(t.Engine, name, type, value, ddl));
+        })
         .Method("OpenRecordset", (self, args) => { nint type = args.Length > 0 ? args[0] : 0, options = args.Length > 1 ? args[1] : 0; return Live(self, t => t.OpenRecordset(type, options)); });
 
     private readonly DefinitionCollection _owner;
@@ -496,14 +504,21 @@ internal sealed unsafe class TableDefObject : DaoObject
         return CallResult.Fail(FieldValidationRuleValidator.ValidateTableRuleRefusal(text));
     }
 
-    /// <summary>The 12 built-ins, then the table's own stored properties (r-dao-1b/tabledef-properties-enumerated: Description).</summary>
+    /// <summary>The 12 built-ins, then the table's own stored properties (r-dao-1b/tabledef-properties-enumerated: Description, r-q51-codecs-props-compact/prop-tdf-lifecycle-accdb).</summary>
     private CallResult PropertiesCollection()
     {
         if (_blobFailure is not null)
         {
             return BlobFailure();
         }
-        _properties ??= new PropertiesObject(this, BuiltInProperties.With(BuiltInProperties.TableDef, Blob?.ObjectMap));
+        if (_properties is null)
+        {
+            var host = new PropertyMutationHost(
+                Append: prop => _owner.Database.MutateUserProperty(_entry.Root, $"TableDef '{_entry.Name}'", PropertySectionKind.ObjectValues, "", prop.Name, prop, isAppend: true, tableDef: this),
+                Update: prop => _owner.Database.MutateUserProperty(_entry.Root, $"TableDef '{_entry.Name}'", PropertySectionKind.ObjectValues, "", prop.Name, prop, isAppend: false, tableDef: this),
+                Delete: name => _owner.Database.MutateUserProperty(_entry.Root, $"TableDef '{_entry.Name}'", PropertySectionKind.ObjectValues, "", name, propertyValue: null, isAppend: false, tableDef: this));
+            _properties = new PropertiesObject(this, BuiltInProperties.With(BuiltInProperties.TableDef, Blob?.ObjectMap), host);
+        }
         return Object(_properties);
     }
 
@@ -898,7 +913,15 @@ internal sealed unsafe class DefinitionFieldObject : DaoObject
         .Get("FieldSize", (self, args) => Live(self, f => f.Fail(3267, DaoErrors.RecordsetFieldOnly)))
         .Get("OriginalValue", (self, args) => Live(self, f => f.Fail(3251, DaoErrors.NotSupportedForType)))
         .Get("VisibleValue", (self, args) => Live(self, f => f.Fail(3251, DaoErrors.NotSupportedForType)))
-        .Get("Properties", (self, args) => Live(self, f => f.PropertiesCollection(f._table)));
+        .Get("Properties", (self, args) => Live(self, f => f.PropertiesCollection(f._table)))
+        .Method("CreateProperty", (self, args) =>
+        {
+            nint name = args.Length > 0 ? args[0] : 0;
+            nint type = args.Length > 1 ? args[1] : 0;
+            nint value = args.Length > 2 ? args[2] : 0;
+            nint ddl = args.Length > 3 ? args[3] : 0;
+            return Live(self, f => PropertyObject.CreateDraft(f.Engine, name, type, value, ddl));
+        });
 
     private readonly DefinitionCollection _owner;
     private readonly TableDefObject? _table;
@@ -1053,7 +1076,14 @@ internal sealed unsafe class DefinitionFieldObject : DaoObject
         {
             return CallResult.Fail(Failure.NotImplemented($"Field.Properties of native type {_column.TypeCode}"));
         }
-        _properties ??= new PropertiesObject(this, BuiltInProperties.With(BuiltInProperties.TableDefField((short)type), ColumnMap(t)));
+        if (_properties is null)
+        {
+            var host = new PropertyMutationHost(
+                Append: prop => _owner.Database.MutateUserProperty(t.Entry.Root, $"Field '{t.Name}.{_column.Name}'", PropertySectionKind.ColumnValues, _column.Name, prop.Name, prop, isAppend: true, tableDef: t),
+                Update: prop => _owner.Database.MutateUserProperty(t.Entry.Root, $"Field '{t.Name}.{_column.Name}'", PropertySectionKind.ColumnValues, _column.Name, prop.Name, prop, isAppend: false, tableDef: t),
+                Delete: name => _owner.Database.MutateUserProperty(t.Entry.Root, $"Field '{t.Name}.{_column.Name}'", PropertySectionKind.ColumnValues, _column.Name, name, propertyValue: null, isAppend: false, tableDef: t));
+            _properties = new PropertiesObject(this, BuiltInProperties.With(BuiltInProperties.TableDefField((short)type), ColumnMap(t)), host);
+        }
         return Object(_properties);
     }
 
