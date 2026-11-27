@@ -2266,7 +2266,7 @@ public static class DdlExecutor
             [.. ct.Columns.Select(c => new NewField(c.Name, NewFieldType.Long))],
             route);
         SchemaOutcome outcome = writer.CreateTable(database.Workspace, request, schemaDb.NowDateBits(), schemaDb.NowDateBits());
-        if (outcome.PublishedAny)
+        if (outcome.PublishedAny || outcome.Succeeded)
         {
             schemaDb.OnSchemaPublished(outcome.ExtentPages);
         }
@@ -2312,10 +2312,13 @@ public static class DdlExecutor
         {
             return ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.SchemaHost", "database host does not implement ISqlSchemaDatabase"));
         }
-        if (database.Workspace.Depth > 0)
+        if (database.Workspace.Depth > 1
+            || (database.Workspace.Depth == 1 && plan.Kind is not (BoundDdlKind.CreateTable or BoundDdlKind.DropTable)))
         {
-            // Unpublished schema changes live in the Workspace overlay, which CatalogBootstrap.Open does not yet read.
-            return ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.TransactionalDdlOverlay", "DDL inside an active Workspace transaction is not yet visible to subsequent catalog reads"));
+            // 4nfc (evidence/r-q53-conv-abspos-subq-loc/txnddl-commit-rollback-accdb, txnddl-commit-rollback-mdb,
+            // evidence/r-q28-schema-write-open/txn-sql-create-commit, txn-sql-create-rollback):
+            // only depth-1 SQL CREATE TABLE and DROP TABLE are recorded inside BeginTrans.
+            return ActionOutcome.Fail(SqlFailure.Open(SqlPhase.Execute, "NotModelled.TransactionalDdlOverlay", $"DDL {plan.Kind} inside Workspace transaction depth {database.Workspace.Depth} is not recorded (qualified.md R-TXN-1 4nfc Open)"));
         }
         if (plan.Kind is BoundDdlKind.CreateTable
             or BoundDdlKind.CreateIndex
@@ -2357,7 +2360,7 @@ public static class DdlExecutor
             _ => new SchemaOutcome(new SchemaRefusal(null, plan.Kind.ToString()), default, 0),
         };
 
-        if (outcome.PublishedAny)
+        if (outcome.PublishedAny || outcome.Succeeded)
         {
             schemaDb.OnSchemaPublished(outcome.ExtentPages);
         }

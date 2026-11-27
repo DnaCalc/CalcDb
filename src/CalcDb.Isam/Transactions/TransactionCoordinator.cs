@@ -227,6 +227,39 @@ public sealed class ExplicitFrame
 
     internal bool FlushedTableDefOnPeerConflict { get; set; }
 
+    internal bool HasSchemaChanges { get; set; }
+
+    internal bool HasSchemaPageAllocation { get; set; }
+
+    internal int SchemaCatalogAllocCount { get; set; }
+
+    internal Dictionary<PageCache, ulong>? SchemaBaseExtent { get; set; }
+
+    internal Dictionary<PageCache, HashSet<string>>? TxnCreatedTables { get; set; }
+
+    internal void RecordTxnCreatedTable(PageCache cache, string tableName)
+    {
+        TxnCreatedTables ??= new Dictionary<PageCache, HashSet<string>>(ReferenceEqualityComparer.Instance);
+        if (!TxnCreatedTables.TryGetValue(cache, out HashSet<string>? names))
+        {
+            TxnCreatedTables[cache] = names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        }
+        names.Add(tableName);
+    }
+
+    internal bool IsTxnCreatedTable(PageCache cache, string tableName) =>
+        TxnCreatedTables is not null
+        && TxnCreatedTables.TryGetValue(cache, out HashSet<string>? names)
+        && names.Contains(tableName);
+
+    internal void RemoveTxnCreatedTable(PageCache cache, string tableName)
+    {
+        if (TxnCreatedTables is not null && TxnCreatedTables.TryGetValue(cache, out HashSet<string>? names))
+        {
+            names.Remove(tableName);
+        }
+    }
+
     internal void SaveExplicitCounterBefore(AutoNumberCounter counter, long? valueBefore = null)
     {
         InitialExplicitCounters ??= new Dictionary<AutoNumberCounter, long>(ReferenceEqualityComparer.Instance);
@@ -621,6 +654,8 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     private readonly Dictionary<PageCache, List<uint>> _pendingGroup2AllocatedPages = [];
     private readonly HashSet<PageCache> _closeCommitRequired = [];
     private readonly Dictionary<PageCache, List<PageEdit>> _deferredCloseEdits = [];
+    private readonly HashSet<PageCache> _splitDeferredCloseEdits = [];
+    private readonly Dictionary<(PageCache Cache, uint Page), int> _pendingDdlRollbackRowCountDeltas = [];
     private readonly Dictionary<PageCache, List<uint>> _pendingRolledBackPages = [];
     private readonly Dictionary<(PageCache Cache, ulong Page), PageRole> _sideEffectRoles = [];
     private readonly HashSet<PageCache> _pendingCloseCommit = [];
@@ -1271,6 +1306,54 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         return _participants.TryGetValue(cache, out FileParticipant? p) ? p.Overlay : null;
     }
 
+    /// <summary>True when an active explicit transaction has unpublished schema changes on <paramref name="cache"/> (4nfc).</summary>
+    public bool HasSchemaChanges(PageCache cache)
+    {
+        if (_frames.Count == 0 || !_participants.ContainsKey(cache))
+        {
+            return false;
+        }
+        for (int i = 0; i < _frames.Count; i++)
+        {
+            if (_frames[i].HasSchemaChanges)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>Record a table created inside the active explicit transaction so a same-transaction DROP TABLE is recognized (4nfc).</summary>
+    public void RecordTxnCreatedTable(PageCache cache, string tableName)
+    {
+        if (_frames.Count > 0)
+        {
+            _frames[^1].RecordTxnCreatedTable(cache, tableName);
+        }
+    }
+
+    /// <summary>True when <paramref name="tableName"/> was created inside an active explicit transaction on <paramref name="cache"/>.</summary>
+    public bool IsTxnCreatedTable(PageCache cache, string tableName)
+    {
+        for (int i = _frames.Count - 1; i >= 0; i--)
+        {
+            if (_frames[i].IsTxnCreatedTable(cache, tableName))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>Forget a table dropped inside the active explicit transaction.</summary>
+    public void RemoveTxnCreatedTable(PageCache cache, string tableName)
+    {
+        for (int i = _frames.Count - 1; i >= 0; i--)
+        {
+            _frames[i].RemoveTxnCreatedTable(cache, tableName);
+        }
+    }
+
     /// <summary>The lifetime an accepted change holds its pages with: the transaction inside a level, else until published.</summary>
     public LockLifetime ChangeLifetime => _frames.Count > 0 ? LockLifetime.Transaction : LockLifetime.UntilPublished;
 
@@ -1542,6 +1625,65 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             }
             return new ResolutionOutcome();
         }
+        // 4nfc (evidence/r-q28-schema-write-open/txn-*-commit, evidence/r-q53-conv-abspos-subq-loc/txnddl-commit-rollback-*,
+        // dao-ddl-begintrans-*): committing a depth-1 transactional DDL level that allocated pages on a shared file with
+        // no prior global-map activity reserves the remaining unused bits of the 32-page block on page 1 in the CommitTrans
+        // commit and queues them for release at Database.Close.
+        List<(PageCache Cache, List<uint> UnusedPages)>? commitExtentReservations = null;
+        if (top.HasSchemaPageAllocation && Publisher is not null)
+        {
+            FormatDescriptor dRes = FormatDescriptor.Jet4Family;
+            foreach (FileParticipant p in _participants.Values)
+            {
+                if (IsExclusive(p.Cache) || _allocatedGlobalMap.Contains(p.Cache) || HasActiveExtentReservation(p.Cache) || !HasCommitCounterHeader(p.Cache))
+                {
+                    continue;
+                }
+                ulong baseExtent = p.Cache.KnownExtentPages;
+                if (top.SchemaBaseExtent is not null && top.SchemaBaseExtent.TryGetValue(p.Cache, out ulong recordedBase) && recordedBase > baseExtent)
+                {
+                    baseExtent = recordedBase;
+                }
+                var allocator = new PageAllocator(p.Cache, dRes, baseExtent);
+                if (allocator.TryPlanOverlayExtentReservation(p.Overlay, out List<PageEdit> reserveEdits, out List<uint> unusedPages, out _))
+                {
+                    foreach (PageEdit re in reserveEdits)
+                    {
+                        EditResult resEdited = p.Edit(re.Page, re.Delta);
+                        if (!resEdited.Succeeded)
+                        {
+                            return new ResolutionOutcome(null, MutationOpen.Publication, $"page {re.Page} could not take the CommitTrans extent reservation: {resEdited.Failure} {resEdited.Detail}", resolved);
+                        }
+                        _sideEffectRoles[(p.Cache, re.Page)] = PageRole.Map;
+                    }
+                    if (unusedPages.Count > 0)
+                    {
+                        (commitExtentReservations ??= []).Add((p.Cache, unusedPages));
+                    }
+                }
+            }
+        }
+        if (_pendingDdlRollbackRowCountDeltas.Count > 0)
+        {
+            FormatDescriptor dCarry = FormatDescriptor.Jet4Family;
+            List<(PageCache Cache, uint Page)> appliedCarry = [];
+            foreach (((PageCache cCache, uint cPage), int rcDelta) in _pendingDdlRollbackRowCountDeltas)
+            {
+                if (_participants.TryGetValue(cCache, out FileParticipant? p) && p.Overlay.ChangedPages.Contains(cPage))
+                {
+                    EditResult carryEdited = p.Edit(cPage, new TableDefCountsDelta(rcDelta, autoNumberFloor: null, [], dCarry));
+                    if (!carryEdited.Succeeded)
+                    {
+                        return new ResolutionOutcome(null, MutationOpen.Publication, $"page {cPage} could not apply carried-over DDL rollback RowCount delta: {carryEdited.Failure} {carryEdited.Detail}", resolved);
+                    }
+                    appliedCarry.Add((cCache, cPage));
+                }
+            }
+            foreach ((PageCache, uint) key in appliedCarry)
+            {
+                _pendingDdlRollbackRowCountDeltas.Remove(key);
+            }
+        }
         // The level's pages stay held until its publication writes them (LockLifetime.UntilPublished).
         foreach (PageCache file in _locked)
         {
@@ -1553,6 +1695,24 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         if (open == MutationOpen.None)
         {
             top.ApplyPendingCounterReseed();
+            if (commitExtentReservations is not null)
+            {
+                foreach ((PageCache resCache, List<uint> unusedPages) in commitExtentReservations)
+                {
+                    _reservedExtent.Add(resCache);
+                    if (!_releaseAtClose.TryGetValue(resCache, out List<uint>? relList))
+                    {
+                        _releaseAtClose[resCache] = relList = [];
+                    }
+                    foreach (uint pg in unusedPages)
+                    {
+                        if (!relList.Contains(pg))
+                        {
+                            relList.Add(pg);
+                        }
+                    }
+                }
+            }
         }
         foreach (PopulationFamily pop in _populations)
         {
@@ -2441,6 +2601,85 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             }
             return new ResolutionOutcome(ResolvedChanges: top.Changes.Count);
         }
+        // 4nfc (evidence/r-q28-schema-write-open/txn-*-rollback, evidence/r-q53-conv-abspos-subq-loc/txnddl-commit-rollback-*,
+        // dao-ddl-begintrans-*): rolling back a depth-1 transactional DDL level that allocated pages publishes one live
+        // page-1 32-page extent reservation commit (+1 on 0xE02, file length unchanged) and defers the reached MSysObjects
+        // (page 2) & MSysACEs (page 3) TableDef counts plus page-1 restoration to Close (+1 for 1 catalog-allocating DDL
+        // op per r-q28, +2 for 2+ catalog-allocating DDL ops per r-q53). A DDL rollback with 0 page allocations (such as
+        // Relations.Delete in dao-ddl-begintrans Phase 3) writes 0 bytes.
+        List<(PageCache Cache, List<PageEdit> ReserveEdits, List<uint> ReservedPages, List<PageEdit> CatalogCountEdits, bool SplitClose)>? ddlRollbackPlans = null;
+        if (top.HasSchemaChanges && top.HasSchemaPageAllocation && top.SchemaCatalogAllocCount > 0 && Publisher is not null && write is null)
+        {
+            FormatDescriptor dRb = FormatDescriptor.Jet4Family;
+            uint objectsPage = dRb.Catalog.ObjectTableRoot; // page 2
+            uint acesPage = 3u;
+            foreach (FileParticipant p in _participants.Values)
+            {
+                if (!HasCommitCounterHeader(p.Cache))
+                {
+                    continue;
+                }
+                List<PageEdit> countEdits = [];
+                foreach (uint catPage in new[] { objectsPage, acesPage })
+                {
+                    if (p.Overlay.ChangedPages.Contains(catPage))
+                    {
+                        using PagePin? catPin = p.Overlay.Pin(catPage).Pin;
+                        if (catPin is not null && TableDefCounterSnapshotDelta.Capture(catPin.Bytes, dRb) is { } snap)
+                        {
+                            countEdits.Add(new PageEdit(catPage, snap, PageRole.Catalog));
+                        }
+                    }
+                }
+                List<PageEdit> reserveEdits = [];
+                List<uint> reservedPages = [];
+                if (!IsExclusive(p.Cache) && !HasGlobalMapActivity(p.Cache))
+                {
+                    ulong baseExtent = p.Cache.KnownExtentPages;
+                    if (top.SchemaBaseExtent is not null && top.SchemaBaseExtent.TryGetValue(p.Cache, out ulong recordedBase) && recordedBase > baseExtent)
+                    {
+                        baseExtent = recordedBase;
+                    }
+                    var allocator = new PageAllocator(p.Cache, dRb, baseExtent);
+                    if (!allocator.TryPlanOverlayExtentReservation(overlay: null, out reserveEdits, out reservedPages, out string? resFail))
+                    {
+                        return new ResolutionOutcome(null, MutationOpen.Publication, $"transactional DDL Rollback could not plan page-1 extent reservation: {resFail}", top.Changes.Count);
+                    }
+                }
+                (ddlRollbackPlans ??= []).Add((p.Cache, reserveEdits, reservedPages, countEdits, top.SchemaCatalogAllocCount >= 2));
+            }
+        }
+        else if (top.HasSchemaChanges && !top.HasSchemaPageAllocation && Publisher is not null && write is null)
+        {
+            // 4nfc (evidence/r-q53-conv-abspos-subq-loc/dao-ddl-begintrans-accdb, dao-ddl-begintrans-mdb Phase 3):
+            // rolling back a 0-allocation depth-1 DDL level (Relations.Delete) writes 0 bytes live and at Close,
+            // while ACE retains the decremented in-memory RowCount on MSysObjects (page 2) and MSysACEs (page 3)
+            // so a subsequent CommitTrans editing those pages persists both decrements (0x18->0x16, 0x30->0x2C).
+            FormatDescriptor dRb = FormatDescriptor.Jet4Family;
+            foreach (FileParticipant p in _participants.Values)
+            {
+                foreach (uint catPage in new[] { dRb.Catalog.ObjectTableRoot, 3u })
+                {
+                    if (!p.Overlay.ChangedPages.Contains(catPage))
+                    {
+                        continue;
+                    }
+                    using PagePin? basePin = p.Cache.Pin(catPage).Pin;
+                    using PagePin? ovPin = p.Overlay.Pin(catPage).Pin;
+                    if (basePin is not null && ovPin is not null)
+                    {
+                        uint baseRc = (uint)dRb.TableDef.RowCount.Read(basePin.Bytes);
+                        uint ovRc = (uint)dRb.TableDef.RowCount.Read(ovPin.Bytes);
+                        if (ovRc < baseRc)
+                        {
+                            int delta = (int)ovRc - (int)baseRc;
+                            (PageCache, uint) key = (p.Cache, catPage);
+                            _pendingDdlRollbackRowCountDeltas[key] = _pendingDdlRollbackRowCountDeltas.GetValueOrDefault(key) + delta;
+                        }
+                    }
+                }
+            }
+        }
         foreach (EditFrame e in _edits.ToArray())
         {
             e.DropForRollback();
@@ -2458,6 +2697,53 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         if (write is { } words)
         {
             return WriteRolledBackAutoNumbers(words, top.Changes.Count);
+        }
+        if (ddlRollbackPlans is { Count: > 0 })
+        {
+            foreach ((PageCache rbCache, List<PageEdit> reserveEdits, List<uint> reservedPages, List<PageEdit> countEdits, bool splitClose) in ddlRollbackPlans)
+            {
+                LockResource[] footprint = reserveEdits.Count > 0
+                    ? [new LockResource(FormatDescriptor.Jet4Family.Map.GlobalMapPage, LockPurpose.Map)]
+                    : [];
+                (MutationOpen rbOpen, string? rbDetail) = PublishNonTransactional(
+                    rbCache,
+                    reserveEdits,
+                    footprint,
+                    CommitMode.Immediate,
+                    MutationErrorSource.Workspace,
+                    out MutationError? rbError);
+                if (rbError is not null)
+                {
+                    return new ResolutionOutcome(rbError, ResolvedChanges: top.Changes.Count);
+                }
+                if (rbOpen != MutationOpen.None)
+                {
+                    return new ResolutionOutcome(null, rbOpen, rbDetail, top.Changes.Count);
+                }
+                if (reservedPages.Count > 0)
+                {
+                    _reservedExtent.Add(rbCache);
+                    if (!_releaseAtClose.TryGetValue(rbCache, out List<uint>? relList))
+                    {
+                        _releaseAtClose[rbCache] = relList = [];
+                    }
+                    foreach (uint pg in reservedPages)
+                    {
+                        if (!relList.Contains(pg))
+                        {
+                            relList.Add(pg);
+                        }
+                    }
+                }
+                if (countEdits.Count > 0)
+                {
+                    AppendDeferredCloseEdits(rbCache, countEdits);
+                }
+                if (splitClose && countEdits.Count > 0 && reservedPages.Count > 0)
+                {
+                    _splitDeferredCloseEdits.Add(rbCache);
+                }
+            }
         }
         top.RestoreExplicitCounters();
         return new ResolutionOutcome(ResolvedChanges: top.Changes.Count);
@@ -3166,6 +3452,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
                     or MutationError.Required
                     or MutationError.RuleWithText
                     or 3464
+                    or 11 // evidence/r-q18-statements/ins-div0-fail (56cs): division by zero on row 3 persists AutoNumber=2 & +3 page-0 commits across Execute+Close
                 : _statementRefusal is MutationError.Duplicate
                     or MutationError.RelatedRecordRequired
                     or MutationError.Required
@@ -3878,7 +4165,8 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         MutationSemantics catalogTable,
         Func<FileParticipant, CompiledChange> compile,
         DeferredCatalogCommitKind? allowPendingDeferredKind = null,
-        bool skipCommitCounter = false)
+        bool skipCommitCounter = false,
+        ulong baseExtentPages = 0)
     {
         if (_unresolved.Contains(file))
         {
@@ -3949,7 +4237,32 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             return new AcceptOutcome(false, null, MutationOpen.Conflict, $"page {conflict.Resource.Page} ({conflict.Resource.Purpose}) is held by locker {conflict.Holder.Value}: a catalog change beside another Workspace's change is R-LOCK-4 WRITE-DDL's");
         }
         op.Complete(new AcceptedRowChange(catalogTable, RowChangeKind.Insert, null, [], [], null, compiled));
-        if (_frames.Count > 0 || Publisher is null || _unwrittenPendingCount > 0)
+        if (_frames.Count > 0)
+        {
+            ExplicitFrame activeFrame = _frames[^1];
+            activeFrame.HasSchemaChanges = true;
+            if (baseExtentPages > 0)
+            {
+                activeFrame.SchemaBaseExtent ??= new Dictionary<PageCache, ulong>(ReferenceEqualityComparer.Instance);
+                activeFrame.SchemaBaseExtent.TryAdd(file, baseExtentPages);
+            }
+            if (AllocatesGlobalMapPage(physical))
+            {
+                activeFrame.HasSchemaPageAllocation = true;
+            }
+            uint objectsRoot = FormatDescriptor.Jet4Family.Catalog.ObjectTableRoot;
+            IReadOnlyList<PageEdit> schemaEdits = physical.Edits;
+            for (int ei = 0; ei < schemaEdits.Count; ei++)
+            {
+                if (schemaEdits[ei].Page == objectsRoot && schemaEdits[ei].Delta is TableDefCountsDelta { RowCountDelta: > 0 })
+                {
+                    activeFrame.SchemaCatalogAllocCount++;
+                    break;
+                }
+            }
+            return new AcceptOutcome(true);
+        }
+        if (Publisher is null || _unwrittenPendingCount > 0)
         {
             return new AcceptOutcome(true);
         }
@@ -4128,13 +4441,50 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         }
         if (_deferredCloseEdits.TryGetValue(cache, out List<PageEdit>? closeEdits) && closeEdits.Count > 0)
         {
-            HashSet<ulong> lockedCatalogPages = [];
-            foreach (PageEdit edit in closeEdits)
+            if (_splitDeferredCloseEdits.Contains(cache) && releasedPages.Count > 0)
             {
-                frees.Add(edit);
-                if (lockedCatalogPages.Add(edit.Page))
+                // 4nfc (evidence/r-q53-conv-abspos-subq-loc/txnddl-commit-rollback-accdb, txnddl-commit-rollback-mdb,
+                // dao-ddl-begintrans-accdb, dao-ddl-begintrans-mdb p1-after-rollback-close): after 2+ catalog-creating DDL ops roll
+                // back, Close writes the deferred MSysObjects/MSysACEs counts (+1) and then frees the reserved page-1
+                // extent (+1, +2 total on 0xE02).
+                List<LockResource> countFootprint = [];
+                HashSet<ulong> lockedCat = [];
+                foreach (PageEdit edit in closeEdits)
                 {
-                    footprint.Add(new LockResource(edit.Page, LockPurpose.TableDef));
+                    if (lockedCat.Add(edit.Page))
+                    {
+                        countFootprint.Add(new LockResource(edit.Page, LockPurpose.TableDef));
+                    }
+                }
+                (MutationOpen countOpen, string? countDetail) = PublishNonTransactional(
+                    cache,
+                    closeEdits,
+                    [.. countFootprint],
+                    CommitMode.Immediate,
+                    MutationErrorSource.Workspace,
+                    out MutationError? countError,
+                    allowDuringRollbackExtent: true);
+                if (countError is { } countRefused)
+                {
+                    return (MutationOpen.Publication, $"the closing catalog-count commit: {countRefused.Describe()}");
+                }
+                if (countOpen != MutationOpen.None)
+                {
+                    return (countOpen, countDetail);
+                }
+                _deferredCloseEdits.Remove(cache);
+                _splitDeferredCloseEdits.Remove(cache);
+            }
+            else
+            {
+                HashSet<ulong> lockedCatalogPages = [];
+                foreach (PageEdit edit in closeEdits)
+                {
+                    frees.Add(edit);
+                    if (lockedCatalogPages.Add(edit.Page))
+                    {
+                        footprint.Add(new LockResource(edit.Page, LockPurpose.TableDef));
+                    }
                 }
             }
         }
@@ -4158,6 +4508,11 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             _pendingGroup2AllocatedPages.Remove(cache);
             _closeCommitRequired.Remove(cache);
             _deferredCloseEdits.Remove(cache);
+            _splitDeferredCloseEdits.Remove(cache);
+            foreach ((PageCache Cache, uint Page) key in _pendingDdlRollbackRowCountDeltas.Keys.Where(k => ReferenceEquals(k.Cache, cache)).ToArray())
+            {
+                _pendingDdlRollbackRowCountDeltas.Remove(key);
+            }
             _pendingRolledBackPages.Remove(cache);
             cache.UnregisterRollbackExtentOwner(Locker);
         }

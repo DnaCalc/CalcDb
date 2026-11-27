@@ -98,6 +98,27 @@ internal sealed unsafe class DatabaseObject : DaoObject
     /// A QueryDef's Execute counts on the QueryDef and leaves this one (r-cat-1b/qd-execute-action-saved: db.RecordsAffected reads 0 after each).
     /// </summary>
     private RecordsAffectedState _recordsAffected;
+    private CatalogSnapshot? _overlayCatalog;
+    private IReadOnlyList<Relationship>? _overlayRelationships;
+    private Dictionary<int, TableEditContext>? _overlayEditContexts;
+    private CatalogRelationshipContext? _overlayRelationshipContext;
+    private ExpressionRuleBinder? _overlayRuleBinder;
+
+    private bool HasActiveOverlaySchema =>
+        _workspace.Transactions.HasSchemaChanges(Cache) && _workspace.Transactions.OverlayOf(Cache) is not null;
+
+    private ulong OverlayExtentPages =>
+        PageAllocator.ExtentOf(Cache, PageCount, _workspace.Transactions.OverlayOf(Cache));
+
+    private void ClearOverlaySchemaCache()
+    {
+        _overlayCatalog = null;
+        _overlayRelationships = null;
+        _overlayEditContexts = null;
+        _overlayRelationshipContext = null;
+        _overlayRuleBinder = null;
+        _sql?.Forget();
+    }
 
     /// <summary>Catalog flags of rows neither TableDefs nor the Tables Documents list (the MSysComplexType_* tables; r-dao-1b/documents-members-each: 17 documents).</summary>
     public const int HiddenFromTableDefs = 0x0003_0000;
@@ -254,8 +275,24 @@ internal sealed unsafe class DatabaseObject : DaoObject
     /// </summary>
     public ulong PageCount => _session.PageCount;
 
-    /// <summary>The catalog as committed; read again after each published catalog change.</summary>
-    public CatalogSnapshot Catalog => _session.Catalog;
+    /// <summary>The catalog as committed, or this Workspace's uncommitted overlay catalog when depth-1 DDL is active (4nfc).</summary>
+    public CatalogSnapshot Catalog
+    {
+        get
+        {
+            if (HasActiveOverlaySchema)
+            {
+                return _overlayCatalog ??= CatalogBootstrap.Open(
+                    Cache,
+                    Format,
+                    OverlayExtentPages,
+                    out _,
+                    readProperties: true,
+                    overlay: _workspace.Transactions.OverlayOf(Cache)) ?? _session.Catalog;
+            }
+            return _session.Catalog;
+        }
+    }
 
     /// <summary>
     /// The database sort order's text compare for its expressions (II-10 §14: Database compare mode; W-06/restricted-scalar),
@@ -568,10 +605,75 @@ internal sealed unsafe class DatabaseObject : DaoObject
     /// relationship names it (MSysRelationships). Made at the first edit member of a recordset over the table and shared by
     /// every recordset of this Database over it; null with the reason when the table's definition or blob cannot be read.
     /// </summary>
-    public TableEditContext? EditContext(CatalogEntry entry, out string? failure) => _session.EditContext(entry, out failure);
+    public TableEditContext? EditContext(CatalogEntry entry, out string? failure)
+    {
+        if (!HasActiveOverlaySchema)
+        {
+            return _session.EditContext(entry, out failure);
+        }
+        failure = null;
+        if ((_overlayEditContexts ??= []).TryGetValue(entry.Id, out TableEditContext? known))
+        {
+            return known;
+        }
+        if (Definition(entry, out failure) is not { } table)
+        {
+            return null;
+        }
+        PropertyBlob? blob = Blob(entry, out failure);
+        if (failure is not null)
+        {
+            return null;
+        }
+        if (Relationships(out failure) is not { } relationships)
+        {
+            return null;
+        }
+        if (_session.CheckConstraints(out failure) is not { } checkConstraints)
+        {
+            return null;
+        }
+        ulong extent = OverlayExtentPages;
+        _overlayRuleBinder ??= new ExpressionRuleBinder(CreateExpressionContext(ExpressionUse.Query));
+        var semantics = MutationSemantics.Compile(
+            entry.Name,
+            table,
+            blob,
+            _overlayRuleBinder,
+            Format.IndexDescriptor,
+            CheckConstraintCatalog.ForTable(checkConstraints, entry.Name));
+        _overlayRelationshipContext ??= new CatalogRelationshipContext(Cache, Format, relationships, extent, ResolveOverlayEditContextByName);
+        IRelationshipProbe? relProbe = _overlayRelationshipContext.ForTable(entry.Name, table);
+        var context = new TableEditContext(semantics, new StoredUniqueProbe(Cache, Format, table, extent), SessionLocale.Lcid, relProbe is not null, new TableFootprints(Cache, Format, table, extent), relProbe);
+        OnEditContextCreated(context, entry, table);
+        _overlayEditContexts.Add(entry.Id, context);
+        return context;
+    }
 
-    /// <summary>MSysRelationships, read once per Database at first use; null with the reason when it cannot be read.</summary>
-    public IReadOnlyList<Relationship>? Relationships(out string? failure) => _session.Relationships(out failure);
+    private TableEditContext? ResolveOverlayEditContextByName(string tableName)
+    {
+        CatalogEntry? entry = Catalog.LocalTables(Format).FirstOrDefault(e => CatalogRelationshipContext.NamesEqual(e.Name, tableName));
+        return entry is null ? null : EditContext(entry, out _);
+    }
+
+    /// <summary>MSysRelationships, read once per Database at first use (or from this Workspace's overlay when depth-1 DDL is active); null with the reason when it cannot be read.</summary>
+    public IReadOnlyList<Relationship>? Relationships(out string? failure)
+    {
+        if (!HasActiveOverlaySchema)
+        {
+            return _session.Relationships(out failure);
+        }
+        failure = null;
+        if (_overlayRelationships is null)
+        {
+            _overlayRelationships = RelationshipCatalog.Read(Cache, Format, Catalog, OverlayExtentPages, out failure, _workspace.Transactions.OverlayOf(Cache));
+            if (_overlayRelationships is null)
+            {
+                failure = "MSysRelationships cannot be read: " + failure;
+            }
+        }
+        return _overlayRelationships;
+    }
 
     /// <summary>How the open recordsets of this Database hold <paramref name="table"/>: locked by any one locks it; else the first hold no record decides.</summary>
     public TableHold Hold(string table)
@@ -968,14 +1070,33 @@ internal sealed unsafe class DatabaseObject : DaoObject
     /// A SchemaWriter over this Database's cache, catalog and extent, the one route of TableDefs.Append and SQL DDL
     /// (W-07/native-metadata-write). Null with the reason when the session cannot write.
     /// </summary>
-    public SchemaWriter? OpenSchemaWriter(out string? failure) => _session.OpenSchemaWriter(out failure);
+    public SchemaWriter? OpenSchemaWriter(out string? failure)
+    {
+        if (!HasActiveOverlaySchema)
+        {
+            return _session.OpenSchemaWriter(out failure);
+        }
+        if (SchemaFailure is not null)
+        {
+            failure = SchemaFailure;
+            return null;
+        }
+        failure = null;
+        return new SchemaWriter(Cache, Format, Catalog, OverlayExtentPages, Header.SortOrder, _workspace.Transactions.OverlayOf(Cache));
+    }
 
     /// <summary>
-    /// A SQL DDL statement's catalog change was published (<see cref="DatabaseSql.OnSchemaPublished"/>). A catalog that
-    /// cannot be read again is kept as the failure of the next schema write and statement (<see cref="SchemaFailure"/>).
+    /// A SQL DDL statement's catalog change was published (<see cref="DatabaseSql.OnSchemaPublished"/>). Inside an
+    /// explicit transaction, invalidates this Database's overlay catalog cache without mutating the shared committed
+    /// catalog; outside a transaction, reloads the shared catalog.
     /// </summary>
     public void SqlSchemaPublished(ulong extentPages)
     {
+        if (_workspace.Transactions.Depth > 0)
+        {
+            ClearOverlaySchemaCache();
+            return;
+        }
         CatalogSnapshot before = _session.Catalog;
         _session.SqlSchemaPublished(extentPages, IsTableHeld, () => OnSharedCatalogReloaded(before));
     }
@@ -1065,7 +1186,23 @@ internal sealed unsafe class DatabaseObject : DaoObject
     }
 
     /// <summary>A catalog table's decoded TableDef, read through the cache (null with the reason when it cannot be read).</summary>
-    public TableDefinition? Definition(CatalogEntry entry, out string? failure) => _session.Definition(entry, out failure);
+    public TableDefinition? Definition(CatalogEntry entry, out string? failure)
+    {
+        if (!HasActiveOverlaySchema)
+        {
+            return _session.Definition(entry, out failure);
+        }
+        var source = new PageSource(Cache, _workspace.Transactions.OverlayOf(Cache));
+        TableDefSegmentView? view = TableDefSegmentView.Open((uint)entry.Id, p =>
+        {
+            using PagePin? pin = source.Pin(p).Pin;
+            return pin is null ? null : pin.Bytes.ToArray();
+        }, Format, 64, out failure);
+        TableDefinition? table = view is null ? null : TableDefDecoder.Decode(view, (uint)entry.Id, Format, out failure);
+        return table is null || !table.Columns.Any(c => ScalarCodecs.IsCalculated(c, Format.Payload))
+            ? table
+            : ScalarCodecs.BindCalculatedResults(table, Blob(entry, out _), Format.Payload);
+    }
 
     /// <summary>
     /// TableDefs: the local tables of the catalog, system tables included, in name order as ACE lists them
@@ -1153,9 +1290,9 @@ internal sealed unsafe class DatabaseObject : DaoObject
             return InheritedWriteRefusal("TableDefs.Append");
         }
         TransactionCoordinator workspace = _workspace.Transactions;
-        if (workspace.Depth > 0)
+        if (workspace.Depth > 1)
         {
-            return CallResult.Fail(Failure.NotImplemented("TableDefs.Append inside a transaction: the level's own catalog view (R-TXN-1 TXN-DDL) is not built yet"));
+            return CallResult.Fail(Failure.NotImplemented("TableDefs.Append inside nested BeginTrans (depth > 1) is not recorded (qualified.md R-TXN-1 4nfc Open)"));
         }
         if (draft.Request(out string? notWritten) is not { } request)
         {
@@ -1184,9 +1321,17 @@ internal sealed unsafe class DatabaseObject : DaoObject
             };
         }
         AcceptOutcome accepted = outcome.Accepted;
-        if (outcome.PublishedAny && SchemaPublished(outcome.ExtentPages) is { } stale)
+        if (workspace.Depth == 0 && outcome.PublishedAny)
         {
-            return CallResult.Fail(Failure.NotImplemented(stale));
+            if (SchemaPublished(outcome.ExtentPages) is { } stale)
+            {
+                return CallResult.Fail(Failure.NotImplemented(stale));
+            }
+        }
+        else if (workspace.Depth > 0 && accepted.Accepted)
+        {
+            ClearOverlaySchemaCache();
+            tableDefs.Relist();
         }
         return accepted.Error is { } error ? EditPublication.Published(error)
             : accepted.Open != MutationOpen.None ? EditPublication.Open(accepted.Open, accepted.Detail)
@@ -1229,9 +1374,9 @@ internal sealed unsafe class DatabaseObject : DaoObject
             return CallResult.Fail(Failure.NotImplemented("TableDef.Fields.Append on a system table (not recorded)"));
         }
         TransactionCoordinator workspace = _workspace.Transactions;
-        if (workspace.Depth > 0)
+        if (workspace.Depth > 1)
         {
-            return CallResult.Fail(Failure.NotImplemented("TableDef.Fields.Append inside a transaction is not recorded"));
+            return CallResult.Fail(Failure.NotImplemented("TableDef.Fields.Append inside nested BeginTrans (depth > 1) is not recorded (qualified.md R-TXN-1 4nfc Open)"));
         }
         if (SharedHold(tableDef.Name) != TableHold.None)
         {
@@ -1260,11 +1405,18 @@ internal sealed unsafe class DatabaseObject : DaoObject
             };
         }
         AcceptOutcome accepted = outcome.Accepted;
-        if (outcome.PublishedAny)
+        if ((workspace.Depth == 0 && outcome.PublishedAny) || (workspace.Depth > 0 && accepted.Accepted))
         {
-            if (SchemaPublished(outcome.ExtentPages) is { } stale)
+            if (workspace.Depth == 0 && outcome.PublishedAny)
             {
-                return CallResult.Fail(Failure.NotImplemented(stale));
+                if (SchemaPublished(outcome.ExtentPages) is { } stale)
+                {
+                    return CallResult.Fail(Failure.NotImplemented(stale));
+                }
+            }
+            else
+            {
+                ClearOverlaySchemaCache();
             }
             fields.Relist();
             if (tableDef.Definition is { } updatedDef && updatedDef.Columns.Count > 0)
@@ -2244,9 +2396,9 @@ internal sealed unsafe class DatabaseObject : DaoObject
             return InheritedWriteRefusal("Relations.Append");
         }
         TransactionCoordinator workspace = _workspace.Transactions;
-        if (workspace.Depth > 0)
+        if (workspace.Depth > 1)
         {
-            return CallResult.Fail(Failure.NotImplemented("Relations.Append inside a transaction is not recorded"));
+            return CallResult.Fail(Failure.NotImplemented("Relations.Append inside nested BeginTrans (depth > 1) is not recorded (qualified.md R-TXN-1 4nfc Open)"));
         }
         if (draft.Request(out string? notWritten) is not { } request)
         {
@@ -2280,12 +2432,17 @@ internal sealed unsafe class DatabaseObject : DaoObject
             };
         }
         AcceptOutcome accepted = outcome.Accepted;
-        if (outcome.PublishedAny)
+        if (workspace.Depth == 0 && outcome.PublishedAny)
         {
             if (SchemaPublished(outcome.ExtentPages) is { } stale)
             {
                 return CallResult.Fail(Failure.NotImplemented(stale));
             }
+            relations.Relist();
+        }
+        else if (workspace.Depth > 0 && accepted.Accepted)
+        {
+            ClearOverlaySchemaCache();
             relations.Relist();
         }
         return accepted.Error is { } error ? EditPublication.Published(error)
@@ -2313,11 +2470,11 @@ internal sealed unsafe class DatabaseObject : DaoObject
             return InheritedWriteRefusal("Relations.Delete");
         }
         TransactionCoordinator workspace = _workspace.Transactions;
-        if (workspace.Depth > 0)
+        if (workspace.Depth > 1)
         {
-            return CallResult.Fail(Failure.NotImplemented("Relations.Delete inside a transaction is not recorded"));
+            return CallResult.Fail(Failure.NotImplemented("Relations.Delete inside nested BeginTrans (depth > 1) is not recorded (qualified.md R-TXN-1 4nfc Open)"));
         }
-        if (RelationshipCatalog.Read(Cache, Format, Catalog, PageCount, out _) is { } existingRels)
+        if (RelationshipCatalog.Read(Cache, Format, Catalog, OverlayExtentPages, out _, workspace.OverlayOf(Cache)) is { } existingRels)
         {
             Relationship? existing = existingRels.FirstOrDefault(r => string.Equals(r.Name, name, StringComparison.OrdinalIgnoreCase));
             if (existing is not null && (SharedHold(existing.Table) != TableHold.None || SharedHold(existing.ForeignTable) != TableHold.None))
@@ -2339,12 +2496,17 @@ internal sealed unsafe class DatabaseObject : DaoObject
             };
         }
         AcceptOutcome accepted = outcome.Accepted;
-        if (outcome.PublishedAny)
+        if (workspace.Depth == 0 && outcome.PublishedAny)
         {
             if (SchemaPublished(outcome.ExtentPages) is { } stale)
             {
                 return CallResult.Fail(Failure.NotImplemented(stale));
             }
+            relations.Relist();
+        }
+        else if (workspace.Depth > 0 && accepted.Accepted)
+        {
+            ClearOverlaySchemaCache();
             relations.Relist();
         }
         return accepted.Error is { } error ? EditPublication.Published(error)
@@ -2568,6 +2730,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
     /// <summary>A Rollback of <paramref name="level"/> of this Database's Workspace reaches each of its recordsets (TXN-CLOSE).</summary>
     public void RolledBack(Isam.Transactions.ExplicitFrame level, bool outermost)
     {
+        ClearOverlaySchemaCache();
         foreach (IDatabaseRecordset r in _recordsets.ToArray())
         {
             r.RolledBack(level, outermost);
@@ -2575,8 +2738,13 @@ internal sealed unsafe class DatabaseObject : DaoObject
     }
 
     /// <summary>A CommitTrans of <paramref name="level"/> of this Database's Workspace reaches each of its recordsets.</summary>
-    public void Committed(Isam.Transactions.ExplicitFrame level, bool outermost, bool hadOverlay)
+    public void Committed(Isam.Transactions.ExplicitFrame level, bool outermost, bool hadOverlay, bool hadSchemaChanges = false)
     {
+        ClearOverlaySchemaCache();
+        if (outermost && hadSchemaChanges)
+        {
+            SqlSchemaPublished(Cache.KnownExtentPages);
+        }
         foreach (IDatabaseRecordset r in _recordsets.ToArray())
         {
             r.Committed(level, outermost, hadOverlay);

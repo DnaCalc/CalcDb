@@ -183,19 +183,29 @@ public sealed class AutonumberTxnReplayTests
         }
 
         // 4. Late division-by-zero (error 11 on row 3) in autocommit INSERT...SELECT (dbFailOnError) targeting a
-        // generated AutoNumber streams the prefix rows, calls RecordStatementConversionFailure(11), and propagates
-        // TransactionCoordinator.Rollback()'s ResolutionOutcome (9dnf -> NotModelled.Edit.CounterWrite until
-        // TransactionCoordinator.cs admits _statementRefusal == 11 for r-q18-statements/ins-div0-fail), writing 0 bytes;
-        // the same shape inside BeginTrans stays refused as NotModelled.InsertSelectLateExpressionFailure.
+        // generated AutoNumber streams the prefix rows, calls RecordStatementConversionFailure(11), and persists the
+        // consumed AutoNumber (3), reached RowCount (2), and page-0 commit counter (+3 across Execute + Close) per
+        // evidence/r-q18-statements/ins-div0-fail (56cs, page 42 0x10..0x17 = 02 00 00 00 03 00 00 00); the same
+        // shape inside BeginTrans stays refused as NotModelled.InsertSelectLateExpressionFailure.
         RecordPlan convPlan = LoadPlan("ins-conv-3464-fail", FirstA1("ins-conv-3464-fail"));
-        using (var db = new KeptSetupDatabase(convPlan.SetupImage, convPlan.Question))
+        using (var db = new KeptSetupDatabase(convPlan.SetupImage.ToArray(), convPlan.Question))
         {
-            byte[] beforeDivZero = db.Image.Snapshot();
+            uint anPage = db.Table("An")!.FirstPage;
+            ulong counterBefore = D.Header.CommitCounter.Read(db.Image.Snapshot().AsSpan(0, D.PageSize));
             ActionOutcome lateDivZero = ActionExecutor.Execute("INSERT INTO An (K, S) SELECT 100 \\ (N - 3), S FROM Src ORDER BY N", db, options: 128);
             Assert.False(lateDivZero.Succeeded);
-            Assert.True(lateDivZero.Failure!.IsNotModelled, lateDivZero.Failure.ToString());
-            Assert.Equal("NotModelled.Edit.CounterWrite", lateDivZero.Failure.NotModelled);
-            Assert.Equal(beforeDivZero, db.Image.Snapshot());
+            Assert.False(lateDivZero.Failure!.IsNotModelled, lateDivZero.Failure.ToString());
+            Assert.Equal(11, lateDivZero.Failure.Number);
+            if (db.Workspace.NeedsCloseCommit(db.Cache))
+            {
+                Assert.Equal(MutationOpen.None, db.Workspace.PublishCloseCommit(db.Cache).Open);
+            }
+            byte[] afterDivZero = db.Image.Snapshot();
+            ulong counterAfter = D.Header.CommitCounter.Read(afterDivZero.AsSpan(0, D.PageSize));
+            Assert.Equal(counterBefore + 3UL, counterAfter);
+            ReadOnlySpan<byte> anTdef = afterDivZero.AsSpan((int)(anPage * D.PageSize), D.PageSize);
+            Assert.Equal(2u, D.TableDef.RowCount.Read(anTdef));
+            Assert.Equal(3u, D.TableDef.AutoNumber.Read(anTdef));
         }
         using (var db = new KeptSetupDatabase(convPlan.SetupImage, convPlan.Question))
         {

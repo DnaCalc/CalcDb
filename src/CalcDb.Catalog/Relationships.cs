@@ -20,9 +20,9 @@ public static class RelationshipCatalog
     /// The relationships, in first-row encounter order, or null with the reason. Rows of one name that disagree on the
     /// tables or grbit, or whose icolumn values are not 0..ccolumn-1, are a failure, never resolved by choice.
     /// </summary>
-    public static IReadOnlyList<Relationship>? Read(PageCache cache, FormatDescriptor d, CatalogSnapshot catalog, ulong pageCount, out string? failure)
+    public static IReadOnlyList<Relationship>? Read(PageCache cache, FormatDescriptor d, CatalogSnapshot catalog, ulong pageCount, out string? failure, PrivateOverlay? overlay = null)
     {
-        IReadOnlyList<SystemRow>? rows = SystemTables.Read(cache, d, catalog, pageCount, d.Catalog.RelationshipTableName, d.Catalog.RelationshipFields, out failure);
+        IReadOnlyList<SystemRow>? rows = SystemTables.Read(cache, d, catalog, pageCount, d.Catalog.RelationshipTableName, d.Catalog.RelationshipFields, out failure, overlay);
         if (rows is null)
         {
             return null;

@@ -1149,12 +1149,11 @@ public sealed class SchemaWriterTests
         Assert.Contains("single-row LVAL limit", chained.Refused?.NotWritten);
         Assert.Equal(fixture, session.File.Snapshot());
 
-        // Inside BeginTrans the N+1 frames (and SQL/ADO/DAO duplicate rollbacks) would join the level: refused before any change.
+        // Inside depth-1 BeginTrans, SQL/ADO/DAO duplicate rollbacks stay refused before any change;
+        // valid DAO TableDefs.Append inside nested depth-2 BeginTrans stays refused by name
+        // (depth 1 is admitted per evidence/r-q28-schema-write-open/txn-dao-append-1-commit and
+        // evidence/r-q53-conv-abspos-subq-loc/dao-ddl-begintrans-accdb).
         Assert.Null(session.Workspace.BeginTrans());
-        SchemaOutcome inLevel = w.CreateTable(session.Workspace, new("T", [Long("n")], SchemaRoute.Dao), 1, 1);
-        Assert.False(inLevel.PublishedAny);
-        Assert.Null(inLevel.Refused?.Error);
-        Assert.Contains("BeginTrans", inLevel.Refused?.NotWritten);
         SchemaOutcome dupInLevel = w.CreateTable(session.Workspace, new("T", [Long("a"), Long("a")], SchemaRoute.Dao), 1, 1);
         Assert.False(dupInLevel.PublishedAny);
         Assert.Null(dupInLevel.Refused?.Error);
@@ -1163,6 +1162,13 @@ public sealed class SchemaWriterTests
         Assert.False(sqlDupInLevel.PublishedAny);
         Assert.Null(sqlDupInLevel.Refused?.Error);
         Assert.Contains("BeginTrans", sqlDupInLevel.Refused?.NotWritten);
+        Assert.Null(session.Workspace.BeginTrans());
+        SchemaOutcome inLevel = w.CreateTable(session.Workspace, new("T", [Long("n")], SchemaRoute.Dao), 1, 1);
+        Assert.False(inLevel.PublishedAny);
+        Assert.Null(inLevel.Refused?.Error);
+        Assert.Contains("BeginTrans", inLevel.Refused?.NotWritten);
+        Assert.Null(session.Workspace.Rollback().Error);
+        Assert.Null(session.Workspace.Rollback().Error);
         Assert.Equal(fixture, session.File.Snapshot());
     }
 
@@ -1427,12 +1433,15 @@ public sealed class SchemaWriterTests
             Assert.False(dup.PublishedAny);
             Assert.Null(dup.Refused?.Error);
             Assert.Contains("Jet 4 MDB", dup.Refused?.NotWritten);
-            // CREATE TABLE on MDB inside BeginTrans stays refused by name.
+            // CREATE TABLE on MDB inside nested depth-2 BeginTrans stays refused by name
+            // (depth 1 is admitted per evidence/r-q53-conv-abspos-subq-loc/txnddl-commit-rollback-mdb).
+            Assert.Null(session.Workspace.BeginTrans());
             Assert.Null(session.Workspace.BeginTrans());
             SchemaOutcome inTx = w.CreateTable(session.Workspace, new("T", [Long("n")], SchemaRoute.Sql), 1, 1);
             Assert.False(inTx.Succeeded);
             Assert.False(inTx.PublishedAny);
             Assert.Contains("BeginTrans", inTx.Refused?.NotWritten);
+            Assert.Null(session.Workspace.Rollback().Error);
             Assert.Null(session.Workspace.Rollback().Error);
             // Create a table on MDB, then verify CreateIndex inside BeginTrans, DAO/ADO CreateIndex, and DropTable stay refused by name,
             // while SQL CreateIndex on MDB outside BeginTrans is now admitted (ddl2, evidence/r-q34-ddl-sweep/ix-cat1b-chain-mdb-dao, uqix-*-mdb-dao).

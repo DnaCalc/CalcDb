@@ -256,9 +256,8 @@ public sealed unsafe class SqlConvGuidTests
     {
         // 56cs (evidence/r-q18-statements/ins-div0-fail) + 9dnf (ActionExecutor Rollback ResolutionOutcome):
         // ActionExecutor streams the prefix rows before row 3's division-by-zero (11), calls
-        // RecordStatementConversionFailure(11), and propagates TransactionCoordinator.Rollback()'s
-        // ResolutionOutcome (NotModelled.Edit.CounterWrite until TransactionCoordinator admits refusal 11)
-        // instead of pre-refusing NotModelled.InsertSelectLateExpressionFailure or discarding Rollback().
+        // RecordStatementConversionFailure(11), and persists RowCount=2, AutoNumber=3, and +3 page-0 commits
+        // across Execute + Close per evidence/r-q18-statements/ins-div0-fail.
         byte[] emptyAccdb = LoadKeptSnapshot(Path.Combine("r-q53-conv-abspos-subq-loc", "conv-sql-ins-upd-accdb"), "pg1");
         using var db = new WritableSqlFixture(emptyAccdb);
         Assert.True(ActionExecutor.Execute("CREATE TABLE An (ID COUNTER CONSTRAINT PK PRIMARY KEY, K LONG, S TEXT(50), D DOUBLE)", db, options: 128).Succeeded);
@@ -266,13 +265,28 @@ public sealed unsafe class SqlConvGuidTests
         Assert.True(ActionExecutor.Execute("INSERT INTO Src VALUES (9, 3, 31, 'g3-a')", db, options: 128).Succeeded);
         Assert.True(ActionExecutor.Execute("INSERT INTO Src VALUES (10, 3, 32, 'g3-b')", db, options: 128).Succeeded);
         Assert.True(ActionExecutor.Execute("INSERT INTO Src VALUES (11, 3, 33, 'g3-c-div0')", db, options: 128).Succeeded);
+        if (db.Workspace.NeedsCloseCommit(db.Cache))
+        {
+            Assert.Equal(MutationOpen.None, db.Workspace.PublishCloseCommit(db.Cache).Open);
+        }
 
+        uint anPage = db.Table("An")!.FirstPage;
+        ulong counterBefore = FormatDescriptor.Jet4Family.Header.CommitCounter.Read(db.Image.Snapshot().AsSpan(0, FormatDescriptor.Jet4Family.PageSize));
         ActionOutcome div0 = ActionExecutor.Execute(
             "INSERT INTO An (K, S, D) SELECT K, S, 1 / (K - 33) FROM Src WHERE G = 3 ORDER BY N",
             db, options: 128);
         Assert.False(div0.Succeeded);
-        Assert.True(div0.Failure!.IsNotModelled, div0.Failure.ToString());
-        Assert.Equal("NotModelled.Edit.CounterWrite", div0.Failure.NotModelled);
+        Assert.False(div0.Failure!.IsNotModelled, div0.Failure.ToString());
+        Assert.Equal(11, div0.Failure.Number);
+        if (db.Workspace.NeedsCloseCommit(db.Cache))
+        {
+            Assert.Equal(MutationOpen.None, db.Workspace.PublishCloseCommit(db.Cache).Open);
+        }
+        byte[] after = db.Image.Snapshot();
+        Assert.Equal(counterBefore + 3UL, FormatDescriptor.Jet4Family.Header.CommitCounter.Read(after.AsSpan(0, FormatDescriptor.Jet4Family.PageSize)));
+        ReadOnlySpan<byte> anTdef = after.AsSpan((int)(anPage * FormatDescriptor.Jet4Family.PageSize), FormatDescriptor.Jet4Family.PageSize);
+        Assert.Equal(2u, FormatDescriptor.Jet4Family.TableDef.RowCount.Read(anTdef));
+        Assert.Equal(3u, FormatDescriptor.Jet4Family.TableDef.AutoNumber.Read(anTdef));
     }
 
     private static NativeVariant ReadVal(SelectCursor cur, int col)
