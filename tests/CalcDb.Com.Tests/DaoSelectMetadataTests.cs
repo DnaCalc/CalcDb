@@ -60,8 +60,9 @@ public sealed unsafe class DaoSelectMetadataTests : IDisposable
     [InlineData(DefCursorMain, "SELECT N FROM T", 8, false)]
     // r-q-cursor-dao/prov-heap-second-row-edit (heap table H)
     [InlineData(DefCursorMain, "SELECT A, B FROM H", 2, true)]
-    // r-def-cursor-dao/prov-distinct-distinctrow-plain, prov-aggregate-groupby, prov-union-crosstab
+    // r-def-cursor-dao/prov-distinct-distinctrow-plain, prov-aggregate-groupby, prov-union-crosstab, r-q54-excl-ddl-ix-cmd/select-dynaset-edit
     [InlineData(DefCursorMain, "SELECT DISTINCT N FROM T WHERE ID IN (4, 5)", 2, false)]
+    [InlineData(DefCursorMain, "SELECT Count(*) AS Cn FROM T", 2, false)]
     [InlineData(DefCursorMain, "SELECT N, Count(*) AS Cn, Sum(ID) AS Si FROM T GROUP BY N", 2, false)]
     [InlineData(DefCursorMain, "SELECT ID, N FROM T WHERE ID <= 3 UNION SELECT ID + 10, N FROM T WHERE ID > 6", 2, false)]
     // r-def-cursor-dao/prov-outer-join-absent-side, r-fix-cursor-dao/pos-query-sources-rw
@@ -130,7 +131,6 @@ public sealed unsafe class DaoSelectMetadataTests : IDisposable
     }
 
     [Theory]
-    [InlineData("SELECT Count(*) AS Cn FROM T", "NotModelled.QueryUpdatable.UngroupedAggregate")]
     [InlineData("SELECT 1 + 2 AS V FROM T", "NotModelled.QueryUpdatable.NoBaseColumn")]
     [InlineData("SELECT ID FROM (SELECT ID FROM T) AS D", "NotModelled.QueryUpdatable.DerivedTable")]
     [InlineData("SELECT PA.ID, CH.ID FROM PA RIGHT JOIN CH ON PA.ID = CH.PID", "NotModelled.QueryUpdatable.JoinShape")]
@@ -393,11 +393,11 @@ public sealed unsafe class DaoSelectMetadataTests : IDisposable
         AssertNotModelled(Get(vvField, "Properties"), "NotModelled.FieldProperties.StoredColumnProperties");
         Ok(Method(reqRs, "Close"));
 
-        // Properties value refusals on unrecorded field types (DateTime Precision, Memo AppendOnly).
+        // Properties: DateTime Precision is 1033 (r-q54-excl-ddl-ix-cmd/field-meta-and-lockwait-*); Memo AppendOnly stays refused.
         SelectRecordsetObject typesRs = Recover<SelectRecordsetObject>(Ok(Method(db, "OpenRecordset", "SELECT D, Mm FROM T WHERE ID = 1", 2)));
         SelectFieldsObject typesFields = Object<SelectFieldsObject>(typesRs, "Fields");
         PropertiesObject dProps = Object<PropertiesObject>(Object<SelectFieldObject>(typesFields, "Item", 0), "Properties");
-        AssertNotModelled(Get(Object<PropertyObject>(dProps, "Item", "Precision"), "Value"), "NotModelled.FieldProperties.Precision");
+        Assert.Equal((short)1033, Int16Value(Ok(Get(Object<PropertyObject>(dProps, "Item", "Precision"), "Value"))));
         PropertiesObject mmProps = Object<PropertiesObject>(Object<SelectFieldObject>(typesFields, "Item", 1), "Properties");
         AssertNotModelled(Get(Object<PropertyObject>(mmProps, "Item", "AppendOnly"), "Value"), "NotModelled.FieldProperties.AppendOnly");
         Ok(Method(typesRs, "Close"));
@@ -468,9 +468,8 @@ public sealed unsafe class DaoSelectMetadataTests : IDisposable
         Ok(Method(rs, "CancelUpdate"));
         AssertDaoError(Method(rs, "Update"), 3020, "DAO.Recordset");
         AssertNotModelled(Method(rs, "CancelUpdate"), "NotModelled.QueryRecordsetCancelUpdateNoEdit");
-        CallResult deleteResult = Method(rs, "Delete");
-        Assert.NotNull(deleteResult.Failure);
-        Assert.Equal(FailureKind.NotImplemented, deleteResult.Failure!.Kind);
+        // Writable single-table SELECT dynaset admits Delete (r-q54-excl-ddl-ix-cmd/select-dynaset-edit-*).
+        Ok(Method(rs, "Delete"));
         Ok(Method(rs, "Close"));
 
         // Snapshot SELECT keeps Edit refused by name.

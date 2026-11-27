@@ -160,7 +160,15 @@ internal static unsafe class SelectRoute
         {
             database.EnsureReadOnlyFirstView();
             bool singleTableRowSelect = IsSingleTableRowSelect(plan);
-            cursor = OpenCursor(database, plan, recordsetType, singleTableRowSelect, hasOrderBy, values, out snapshotView, out snapshotOverlay, out failure, out CallResult? viewRefusal);
+            JoinKeys? joinKeys = ExtractJoinKeys(syntax, plan);
+            bool isUpdatableJoin = !singleTableRowSelect
+                && recordsetType == 2
+                && joinKeys is not null
+                && plan.Sources.Count == 2
+                && plan.Sources[0].Table is not null
+                && plan.Sources[1].Table is not null
+                && plan.TryUpdatable(ResultKind.Dynaset, out _) == true;
+            cursor = OpenCursor(database, plan, recordsetType, singleTableRowSelect, hasOrderBy, values, out snapshotView, out snapshotOverlay, out failure, out CallResult? viewRefusal, dynamicJoinOverlay: isUpdatableJoin);
             if (cursor is null)
             {
                 return viewRefusal ?? Published(database, failure!);
@@ -169,9 +177,8 @@ internal static unsafe class SelectRoute
             {
                 database.Workspace.Transactions.EndLazyBurst(database.Cache);
             }
-            InnerJoinKeys? innerJoin = ExtractInnerJoinKeys(syntax, plan);
             DerivedSourceSpec? derivedSpec = singleTableRowSelect ? BuildDerivedSpec(plan, baseWhere: null, baseOrderBy: null, hasOriginalWhere: syntax.Where is not null, hasOriginalOrderBy: hasOrderBy) : null;
-            var recordset = new SelectRecordsetObject(database, plan, cursor, recordsetType, singleTableRowSelect, hasOrderBy, snapshotView, snapshotOverlay, options, database.Engine.NextSequence(), innerJoin, hasGroupBy, derivedSpec);
+            var recordset = new SelectRecordsetObject(database, plan, cursor, recordsetType, singleTableRowSelect, hasOrderBy, snapshotView, snapshotOverlay, options, database.Engine.NextSequence(), joinKeys, hasGroupBy, derivedSpec);
             adopted = true;
             return database.Adopt(recordset);
         }
@@ -335,7 +342,7 @@ internal static unsafe class SelectRoute
                 cursor.MoveFirst();
             }
             var childSpec = new DerivedSourceSpec(source.TableName, source.SelectList, combinedWhere, combinedOrderBy);
-            var recordset = new SelectRecordsetObject(database, plan, cursor, recordsetType, singleTableRowSelect, hasOrderBy, snapshotView, snapshotOverlay, options, database.Engine.NextSequence(), innerJoin: null, hasGroupBy, childSpec, isDerived: true);
+            var recordset = new SelectRecordsetObject(database, plan, cursor, recordsetType, singleTableRowSelect, hasOrderBy, snapshotView, snapshotOverlay, options, database.Engine.NextSequence(), joinKeys: null, hasGroupBy, childSpec, isDerived: true);
             adopted = true;
             return database.Adopt(recordset);
         }
@@ -402,7 +409,8 @@ internal static unsafe class SelectRoute
         out PrivateOverlay? snapshotOverlay,
         out SqlFailure? failure,
         out CallResult? viewRefusal,
-        bool useReadOnlyFirstView = true)
+        bool useReadOnlyFirstView = true,
+        bool dynamicJoinOverlay = false)
     {
         snapshotView = null;
         snapshotOverlay = null;
@@ -422,7 +430,7 @@ internal static unsafe class SelectRoute
         // snapshots opened inside a transaction (r-txn-1b/rs-types-after-rollback ks), forward-only and complex
         // shapes keep database.Sql and refuse unrecorded transitions by name.
         ISqlDatabase scanDatabase;
-        if (recordsetType == 2 && singleTableRowSelect)
+        if (recordsetType == 2 && (singleTableRowSelect || dynamicJoinOverlay))
         {
             scanDatabase = new SelectSourceDatabase(database.Sql, database, new PageSource(database.Cache, database.Workspace.Transactions), dynamicOverlay: true, snapshotOverlay: null);
         }
@@ -520,7 +528,7 @@ internal static unsafe class SelectRoute
         && plan.Top is null
         && plan.TryUpdatable(ResultKind.Dynaset, out _) == true;
 
-    internal static InnerJoinKeys? ExtractInnerJoinKeys(SelectSyntax syntax, BoundSelect plan)
+    internal static JoinKeys? ExtractJoinKeys(SelectSyntax syntax, BoundSelect plan)
     {
         if (plan.IsUnion
             || plan.Predicate != SelectPredicate.All
@@ -528,7 +536,7 @@ internal static unsafe class SelectRoute
             || plan.Sources.Count != 2
             || plan.Sources[0].Table is null
             || plan.Sources[1].Table is null
-            || syntax.From is not [JoinSource { Kind: JoinKind.Inner, Left: NamedSource leftSrc, Right: NamedSource rightSrc, On.Syntax.Root: { Kind: SyntaxKind.Binary, Operation: ScalarOperation.Equal, Left: { Kind: SyntaxKind.Name, Text: { } lhs }, Right: { Kind: SyntaxKind.Name, Text: { } rhs } } }])
+            || syntax.From is not [JoinSource { Kind: JoinKind.Inner or JoinKind.Left, Left: NamedSource leftSrc, Right: NamedSource rightSrc, On.Syntax.Root: { Kind: SyntaxKind.Binary, Operation: ScalarOperation.Equal, Left: { Kind: SyntaxKind.Name, Text: { } lhs }, Right: { Kind: SyntaxKind.Name, Text: { } rhs } } } join])
         {
             return null;
         }
@@ -539,12 +547,12 @@ internal static unsafe class SelectRoute
         if (string.Equals(q1, leftSrc.ScopeName, StringComparison.OrdinalIgnoreCase)
             && string.Equals(q2, rightSrc.ScopeName, StringComparison.OrdinalIgnoreCase))
         {
-            return new InnerJoinKeys(c1, c2);
+            return new JoinKeys(join.Kind, c1, c2);
         }
         if (string.Equals(q2, leftSrc.ScopeName, StringComparison.OrdinalIgnoreCase)
             && string.Equals(q1, rightSrc.ScopeName, StringComparison.OrdinalIgnoreCase))
         {
-            return new InnerJoinKeys(c2, c1);
+            return new JoinKeys(join.Kind, c2, c1);
         }
         return null;
     }

@@ -830,6 +830,9 @@ internal sealed unsafe class DefinitionFieldObject : DaoObject
         .Put("AllowZeroLength", (self, args) => { nint value = args[^1]; return Live(self, f => f.PutAllowZeroLength(value)); })
         .Get("AppendOnly", (self, args) => Live(self, f => f.OfTable(t => Bool(false))))
         .Get("Expression", (self, args) => Live(self, f => f.OfTable(t => Text(""))))
+        // Field.Precision (evidence/r-q54-excl-ddl-ix-cmd/field-meta-and-lockwait-accdb, -mdb):
+        // VT_I2 declared precision on Decimal (e.g. 18 on DECIMAL(18,4)), VT_I2 1033 on all other types (Byte..GUID).
+        .Get("Precision", (self, args) => Live(self, f => f.OfTable(t => f._column.CalculatedResultType == NativeTypes.Numeric ? CallResult.Fail(Failure.NotImplemented("Field.Precision of a calculated Decimal field")) : f._column.TypeCode == NativeTypes.Numeric ? Int16(f._column.NumericPrecision) : Int16(1033))))
         .Get("Scale", (self, args) => Live(self, f => f.OfTable(t => f._column.CalculatedResultType == NativeTypes.Numeric ? CallResult.Fail(Failure.NotImplemented("Field.Scale of a calculated Decimal field")) : f._column.TypeCode == NativeTypes.Numeric ? Int16(f._column.NumericScale) : Int16(0))))
         .Get("DataUpdatable", (self, args) => Live(self, f => f.OfTable(t => f._owner.Database.ReadOnly ? Bool(false) : CallResult.Fail(Failure.NotImplemented("TableDef Field.DataUpdatable on a writable open (not observed)")))))
         .Get("Value", (self, args) => Live(self, f => f.Fail(3219, DaoErrors.InvalidOperation, publishesErrorInfo: true)))
