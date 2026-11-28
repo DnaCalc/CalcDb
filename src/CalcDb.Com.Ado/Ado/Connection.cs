@@ -2630,6 +2630,18 @@ internal sealed unsafe class ConnectionObject : AdoObject
         }
         if (outcome.Failure is { } sqlFailure)
         {
+            if (allowAdoConnectionExecute
+                && session.Profile.Format != FileFormat.Jet4
+                && session.Transactions.Depth == 0
+                && sqlFailure is { IsNotModelled: true, NotModelled: "NotModelled.DdlTableInUsePrecedence" }
+                && sqlFailure.Message.Contains("in ALTER TABLE (AddColumnsAlterAction)", StringComparison.Ordinal)
+                && DdlParser.Parse(effectiveSql, out _, allowAdoCheck: true) is AlterTableStatement { Action: AddColumnsAlterAction { Columns.Count: 1 } addCols } alterAdd
+                && addCols.Columns[0] is { DataType: { Kind: DdlTypeKind.Text, Size: null or (>= 1 and <= 255) }, Constraints.Count: 0, Nullability: DdlNullability.Unspecified, WithCompression: false, DefaultExpression: null })
+            {
+                // r-ado-1b/fields-refresh-ddl #28, r-fix-wire-ado/fields-refresh-ddl-keyset-only #27-35:
+                // plain single-column TEXT ALTER TABLE ADD COLUMN on an ACCDB held table (depth 0) maps to ACE 3211 (0x80040E14, SQLState "3211", NativeError -534316312).
+                sqlFailure = SqlFailure.Ace(SqlPhase.Bind, 3211, SqlMessages.TableInUse(alterAdd.TableName));
+            }
             if (sqlFailure.IsNotModelled && sqlFailure.NotModelled != "NotModelled.ReadOnlyAction")
             {
                 return CallResult.Fail(Failure.NotModelled(sqlFailure.NotModelled!, sqlFailure.Message));

@@ -1677,7 +1677,8 @@ internal sealed unsafe class DatabaseObject : DaoObject
         }
         if (SharedHold(tableDef.Name) != TableHold.None)
         {
-            return CallResult.Fail(Failure.NotImplemented($"TableDef.Fields.Append on '{tableDef.Name}' while a recordset of it is open is not recorded"));
+            // r-def-cursor-dao/err-dup-field-append #28: open recordset on table fails 3211 from DAO.TableDef without IErrorInfo.
+            return CallResult.Fail(Failure.Dao(3211, "DAO.TableDef", DaoErrors.TableInUse(tableDef.Name)));
         }
         if (field.ToNewField(forAttachedTable: true, out string? notWritten) is not { } newField)
         {
@@ -1830,7 +1831,8 @@ internal sealed unsafe class DatabaseObject : DaoObject
         }
         if (SharedHold(tableDef.Name) != TableHold.None)
         {
-            return CallResult.Fail(Failure.NotImplemented($"TableDef.Indexes.Append on '{tableDef.Name}' while a recordset of it is open is not recorded"));
+            // r-def-cursor-dao/err-dup-index-append #36: open recordset on table fails 3211 from DAO.Indexes without IErrorInfo.
+            return indexes.Fail(3211, DaoErrors.TableInUse(tableDef.Name));
         }
         if (OpenSchemaWriter(out string? writerFailure) is not { } writer)
         {

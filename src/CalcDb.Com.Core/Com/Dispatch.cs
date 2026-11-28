@@ -215,6 +215,14 @@ public abstract unsafe class DispatchObject : ComObject
     protected virtual ushort CoercionFlags(MemberDecl member, int parameter) => 0;
 
     /// <summary>
+    /// Direct COM HRESULT returned when a named argument targets a parameter slot already filled by a positional
+    /// argument or an earlier named argument, or null to fall back to <see cref="RepeatedNamedArgumentFailure"/>.
+    /// ADO returns <c>DISP_E_PARAMNOTFOUND</c> (0x80020004) without EXCEPINFO or IErrorInfo
+    /// (r-q2-ado-misc/ado-named-arguments #36, #54).
+    /// </summary>
+    protected virtual int? RepeatedNamedArgumentHResult(MemberDecl member) => null;
+
+    /// <summary>
     /// The failure an Invoke publishes when a named argument targets a parameter slot already filled by a positional
     /// argument or an earlier named argument, or null to refuse by name. DAO Database.OpenRecordset fails 3001 with
     /// IErrorInfo and records in DBEngine.Errors (r-q2-cursor-dao/named-dao-refusals #37, named-dao-order-variants #45).
@@ -464,6 +472,10 @@ public abstract unsafe class DispatchObject : ComObject
             }
             if (args[target] != 0)
             {
+                if (RepeatedNamedArgumentHResult(member) is int repeatedHResult)
+                {
+                    return repeatedHResult;
+                }
                 // ACE fails a repeated or positional+named argument collision with DAO 3001 (R-ACT-1 ACT-ABI;
                 // r-q2-cursor-dao/named-dao-refusals #37, r-q2-cursor-dao/named-dao-order-variants #45).
                 if (RepeatedNamedArgumentFailure(member) is { } repeated)

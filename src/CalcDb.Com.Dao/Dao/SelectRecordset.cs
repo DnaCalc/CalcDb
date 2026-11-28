@@ -203,6 +203,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
     private RowReader? _editReader;
     private RowReader? _seeChangesReader;
     private EditFrame? _frame;
+    private HashSet<int>? _chunkAppendOrdinals;
     private EditFrame?[]? _joinFrames;
     private RowReader?[]? _joinReaders;
     private int _dirtyJoinSource = -1;
@@ -2582,15 +2583,16 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
                 "NotModelled.QueryRecordsetRequeryArg",
                 "Recordset.Requery with a NewQueryDef argument on a SELECT recordset (not recorded)"));
         }
-        // r-def-cursor-dao/field-value-trio-other-writer (call 34): Requery on a writable single-table ACCDB SELECT
-        // dynaset without ORDER BY inside depth-1 BeginTrans with a pending Edit (after 3197) discards the edit buffer
-        // and re-reads the current row.
-        bool allowNoOrderByDynasetAfterEdit = !IsMdb && !Database.ReadOnly && RecordsetType == 2 && _isSingleTableRowSelect && !_hasOrderBy && _openLevels.Length == 1 && _frame is { Mode: EditMode.Edit };
+        // r-def-cursor-dao/field-value-trio-other-writer (call 34) and edit-conflict-restore-value (calls 32, 67): Requery
+        // on a writable single-table ACCDB SELECT dynaset without ORDER BY inside depth-1 BeginTrans refreshes the cursor;
+        // if a 3197 Edit frame is still pending, Requery discards the edit buffer and re-reads the current row.
+        bool allowDepth1SingleTableDynaset = !IsMdb && !Database.ReadOnly && RecordsetType == 2 && _isSingleTableRowSelect && !_hasOrderBy && _openLevels.Length == 1;
+        bool allowNoOrderByDynasetAfterEdit = allowDepth1SingleTableDynaset && _frame is { Mode: EditMode.Edit };
         if (_appendOnly
             || (IsMdb && !(RecordsetType is 2 or 4 && _openLevels.Length == 0))
             || RecordsetType is not (2 or 4)
             || !_isSingleTableRowSelect
-            || (!_hasOrderBy && !allowNoOrderByDynasetAfterEdit)
+            || (!_hasOrderBy && !allowDepth1SingleTableDynaset)
             || Plan.Parameters.Count > 0
             || Database.Workspace.Transactions.Depth != _openLevels.Length
             || _openLevels.Length > 1)
@@ -2628,6 +2630,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         {
             _frame?.Discard();
             _editReader?.Position(null);
+            ClearChunkAppends();
         }
         SelectCursor previousCursor = Cursor;
         PrivateOverlay? previousSnapshotOverlay = _snapshotOverlay;
@@ -3137,7 +3140,12 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
                     "Edit on a SELECT dynaset whose source cursor has no current row (not recorded)"));
             }
             _editReader!.Position(currentRow);
-            return EditPublication.Of(frame.Edit(), Database);
+            CallResult editRes = EditPublication.Of(frame.Edit(), Database);
+            if (editRes.Failure is null)
+            {
+                ClearChunkAppends();
+            }
+            return editRes;
         }
         PositionJoinCursorSources();
         RowId? row0 = (((IExpressionRow)Cursor).Source(0) as RowReader)?.Current;
@@ -3266,8 +3274,19 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
                 "NotModelled.Edit.UnpublishedCounter",
                 $"another Database of this engine issued AutoNumber values of '{Plan.Sources[0].TableName}' that the file's counter does not hold yet"));
         }
-        return EditPublication.Of(frame.AddNew());
+        CallResult addResult = EditPublication.Of(frame.AddNew());
+        if (addResult.Failure is null)
+        {
+            ClearChunkAppends();
+        }
+        return addResult;
     }
+
+    internal bool HasChunkAppend(int ordinal) => _chunkAppendOrdinals is not null && _chunkAppendOrdinals.Contains(ordinal);
+
+    internal void MarkChunkAppend(int ordinal) => (_chunkAppendOrdinals ??= []).Add(ordinal);
+
+    internal void ClearChunkAppends() => _chunkAppendOrdinals?.Clear();
 
     private CallResult Delete()
     {
@@ -3492,6 +3511,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
                 sourceReader.Position(null);
             }
             CaptureSeeChangesRow();
+            ClearChunkAppends();
         }
         return result;
     }
@@ -3530,20 +3550,21 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         }
         if (frame.Mode == EditMode.None)
         {
-            if (Database.Workspace.Transactions.Depth == 0 && !IsMdb)
+            if (!IsMdb)
             {
-                // r-str-ado-act/str-edit-requery call 32: CancelUpdate without a pending Edit on a depth-0 ACCDB SELECT dynaset
-                // fails 3020 ("Update or CancelUpdate without AddNew or Edit.") from DAO.Recordset without IErrorInfo.
+                // r-str-ado-act/str-edit-requery call 32 (depth 0), r-def-cursor-dao/edit-conflict-restore-value call 31 (depth 1):
+                // CancelUpdate without a pending Edit on an ACCDB SELECT dynaset fails 3020 from DAO.Recordset without IErrorInfo.
                 return Fail(MutationError.NoEdit, "Update or CancelUpdate without AddNew or Edit.");
             }
             return CallResult.Fail(Failure.NotModelled(
                 "NotModelled.QueryRecordsetCancelUpdateNoEdit",
-                "CancelUpdate without a pending Edit on an MDB or depth > 0 SELECT dynaset (not recorded)"));
+                "CancelUpdate without a pending Edit on an MDB SELECT dynaset (not recorded)"));
         }
         CallResult result = EditPublication.Of(frame.CancelUpdate());
         if (result.Failure is null)
         {
             _editReader?.Position(null);
+            ClearChunkAppends();
         }
         return result;
     }
@@ -3709,6 +3730,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         {
             _frame?.Dispose();
             _frame = null;
+            ClearChunkAppends();
             _editReader?.Dispose();
             _editReader = null;
             _appendOnlyReader?.Dispose();
@@ -3903,6 +3925,7 @@ internal sealed unsafe class SelectFieldObject : DaoObject
             nint offset = args[0], bytes = args[1];
             return ((SelectFieldObject)self).GetChunk(offset, bytes);
         })
+        .Method("AppendChunk", (self, args) => ((SelectFieldObject)self).AppendChunk(args.Length > 0 ? args[0] : 0))
         .Get("Properties", (self, args) => Live(self, f => f.PropertiesCollection()));
 
     /// <summary>
@@ -3970,9 +3993,38 @@ internal sealed unsafe class SelectFieldObject : DaoObject
                 "NotModelled.FieldSizeNonLvType",
                 $"Field.FieldSize of non-LV type {type} ({Column.Name}) on {(Recordset.IsMdb ? "MDB" : "ACCDB")} type {Recordset.RecordsetType} SELECT (not recorded)"));
         }
+        if (Column.Origin == ColumnOrigin.BaseColumn
+            && Column.SourceColumn is { } editSc
+            && Recordset.FrameForSourceIfEditing(editSc.SourceIndex) is { } editFrame)
+        {
+            FieldResult buffered = editFrame.Read(editSc.Column);
+            if (!buffered.Succeeded)
+            {
+                return CallResult.Fail(Failure.NotImplemented($"Field.FieldSize when edit buffer cannot be read: {buffered.Failure} {buffered.Detail}"));
+            }
+            return DaoLongValueChunks.FieldSizeFromBuffered(type, buffered.Value, Column.Name);
+        }
         if (Recordset.IsAtEof || Recordset.IsAtBof)
         {
             return Fail(3021, DaoErrors.NoCurrentRecord);
+        }
+        if (Recordset.IsOnAddedRow)
+        {
+            CallResult added = Recordset.ReadAddedRowField(_ordinal, fromCollect: false);
+            try
+            {
+                if (added.Failure is { } addedFail)
+                {
+                    return CallResult.Fail(addedFail);
+                }
+                NativeVariant addedVal = added.HasScalar ? added.Scalar : *added.Value!.Pointer;
+                return FieldSizeFromVariant(type, in addedVal);
+            }
+            finally
+            {
+                added.ReleaseUntaken();
+                added.Value?.Dispose();
+            }
         }
         if (Recordset.IsAppendOnly)
         {
@@ -4004,14 +4056,16 @@ internal sealed unsafe class SelectFieldObject : DaoObject
             }
             return CallResult.Fail(Failure.NotModelled("NotModelled.FieldSizeReadFailure", $"Field.FieldSize of {Column.Name} met Cursor.Read failure {failure.Number} (not recorded)"));
         }
-        return (VarType)value.Vt switch
-        {
-            VarType.Null => Int32(0),
-            VarType.Bstr when type == 12 => Int32(Bstrs.Chars(value.Pointer).Length * 2),
-            VarType.Array | VarType.UI1 when type == 11 => OleFieldSize(value.Pointer),
-            var other => CallResult.Fail(Failure.NotModelled("NotModelled.FieldSizeValue", $"Field.FieldSize of a {other} value of type {type} (not recorded)")),
-        };
+        return FieldSizeFromVariant(type, in value);
     }
+
+    private CallResult FieldSizeFromVariant(int type, in NativeVariant value) => (VarType)value.Vt switch
+    {
+        VarType.Null => Int32(0),
+        VarType.Bstr when type == 12 => Int32(Bstrs.Chars(value.Pointer).Length * 2),
+        VarType.Array | VarType.UI1 when type == 11 => OleFieldSize(value.Pointer),
+        var other => CallResult.Fail(Failure.NotModelled("NotModelled.FieldSizeValue", $"Field.FieldSize of a {other} value of type {type} (not recorded)")),
+    };
 
     private static CallResult OleFieldSize(nint array)
     {
@@ -4104,6 +4158,17 @@ internal sealed unsafe class SelectFieldObject : DaoObject
                 "NotModelled.GetChunkNonLvType",
                 $"Field.GetChunk of non-LV type {type} ({Column.Name}) on {(Recordset.IsMdb ? "MDB" : "ACCDB")} type {Recordset.RecordsetType} SELECT (not recorded)"));
         }
+        if (Column.Origin == ColumnOrigin.BaseColumn
+            && Column.SourceColumn is { } editSc
+            && Recordset.FrameForSourceIfEditing(editSc.SourceIndex) is { } editFrame)
+        {
+            FieldResult buffered = editFrame.Read(editSc.Column);
+            if (!buffered.Succeeded)
+            {
+                return CallResult.Fail(Failure.NotImplemented($"Field.GetChunk when edit buffer cannot be read: {buffered.Failure} {buffered.Detail}"));
+            }
+            return DaoLongValueChunks.GetChunkFromBuffered(type, buffered.Value, offset, bytes, Column.Name);
+        }
         if (Recordset.IsAtEof || Recordset.IsAtBof)
         {
             if (offset < 0 || bytes < 0)
@@ -4113,6 +4178,28 @@ internal sealed unsafe class SelectFieldObject : DaoObject
                     "Field.GetChunk with a negative argument at BOF/EOF or on an empty recordset (precedence between 3001 and 3021 is not recorded)"));
             }
             return Fail(3021, DaoErrors.NoCurrentRecord);
+        }
+        if (Recordset.IsOnAddedRow)
+        {
+            if (offset < 0 || bytes < 0)
+            {
+                return Fail(3001, DaoErrors.InvalidArgument);
+            }
+            CallResult added = Recordset.ReadAddedRowField(_ordinal, fromCollect: false);
+            try
+            {
+                if (added.Failure is { } addedFail)
+                {
+                    return CallResult.Fail(addedFail);
+                }
+                NativeVariant addedVal = added.HasScalar ? added.Scalar : *added.Value!.Pointer;
+                return GetChunkFromVariant(type, in addedVal, offset, bytes);
+            }
+            finally
+            {
+                added.ReleaseUntaken();
+                added.Value?.Dispose();
+            }
         }
         if (Recordset.IsAppendOnly)
         {
@@ -4154,14 +4241,16 @@ internal sealed unsafe class SelectFieldObject : DaoObject
         {
             return Fail(3001, DaoErrors.InvalidArgument);
         }
-        return (VarType)value.Vt switch
-        {
-            VarType.Null => CallResult.OfScalar(VarType.Null, 0),
-            VarType.Bstr when type == 12 => MemoChunk(value.Pointer, offset, bytes),
-            VarType.Array | VarType.UI1 when type == 11 => OleChunk(value.Pointer, offset, bytes),
-            var other => CallResult.Fail(Failure.NotModelled("NotModelled.GetChunkValue", $"Field.GetChunk of a {other} value of type {type} (not recorded)")),
-        };
+        return GetChunkFromVariant(type, in value, offset, bytes);
     }
+
+    private CallResult GetChunkFromVariant(int type, in NativeVariant value, int offset, int bytes) => (VarType)value.Vt switch
+    {
+        VarType.Null => CallResult.OfScalar(VarType.Null, 0),
+        VarType.Bstr when type == 12 => MemoChunk(value.Pointer, offset, bytes),
+        VarType.Array | VarType.UI1 when type == 11 => OleChunk(value.Pointer, offset, bytes),
+        var other => CallResult.Fail(Failure.NotModelled("NotModelled.GetChunkValue", $"Field.GetChunk of a {other} value of type {type} (not recorded)")),
+    };
 
     private static bool IsRecordedChunkArgType(int parameter, VarType vt) => parameter switch
     {
@@ -4867,7 +4956,18 @@ internal sealed unsafe class SelectFieldObject : DaoObject
             return multiSideRefused;
         }
         NativeVariant incoming = ByRefValues.Dereference(Args.Cell(value));
-        EditOutcome outcome = frame.Assign(sc.Column, incoming, ExtendedDateTimeWriteMode.SqlUpdateOrDynaset);
+        EditOutcome outcome;
+        if (DaoLongValueChunks.TryWrapBinaryBstr(sc.Column, incoming, out OwnedVariant? binaryWrapped))
+        {
+            using (binaryWrapped)
+            {
+                outcome = frame.Assign(sc.Column, *binaryWrapped!.Pointer, ExtendedDateTimeWriteMode.SqlUpdateOrDynaset);
+            }
+        }
+        else
+        {
+            outcome = frame.Assign(sc.Column, incoming, ExtendedDateTimeWriteMode.SqlUpdateOrDynaset);
+        }
         if (outcome.Error is { Number: MutationError.ExtendedDateTimeInvalid })
         {
             return FieldObject.PublishExtendedDateTimeInvalid(Engine);
@@ -4877,6 +4977,44 @@ internal sealed unsafe class SelectFieldObject : DaoObject
             Recordset.NoteJoinAssignment(sc.SourceIndex);
         }
         return EditPublication.Of(outcome);
+    }
+
+    private CallResult AppendChunk(nint value)
+    {
+        if (Recordset.Closed)
+        {
+            return Fail(3420, DaoErrors.ObjectInvalid);
+        }
+        if (Recordset.TransactionRefusal("Field.AppendChunk") is { } txRefused)
+        {
+            return txRefused;
+        }
+        if (Recordset.RecordsetType != 2 || Recordset.IsKnownNonUpdatable)
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.QueryFieldAppendChunkReadOnly",
+                $"Field.AppendChunk on a non-updatable type {Recordset.RecordsetType} SELECT recordset (not recorded)"));
+        }
+        if (Column.Origin != ColumnOrigin.BaseColumn || Column.SourceColumn is not { } sc || !Recordset.IsSingleTableRowSelect || sc.SourceIndex != 0)
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.QueryFieldAppendChunkColumnOrigin",
+                $"Field.AppendChunk on {Column.Origin} column {Column.Name} of this SELECT recordset shape (not recorded)"));
+        }
+        if (Recordset.EditFrameForSource("Field.AppendChunk", sc.SourceIndex, out CallResult refused) is not { } frame)
+        {
+            return refused;
+        }
+        int daoType = Recordset.Cursor.FieldType(_ordinal, out _) ?? ColumnFacts.DaoType(sc.Column) ?? 0;
+        return DaoLongValueChunks.AppendChunk(
+            frame,
+            sc.Column,
+            daoType,
+            Recordset.HasChunkAppend(_ordinal),
+            () => Recordset.MarkChunkAppend(_ordinal),
+            value,
+            (code, msg) => Fail(code, msg),
+            ExtendedDateTimeWriteMode.SqlUpdateOrDynaset);
     }
 
     /// <summary>The current row's value of column <paramref name="ordinal"/> of an open query recordset (Field.Value, Recordset.Collect, Recordset.GetRows).</summary>

@@ -201,6 +201,7 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
     private bool _lockEditsChangedDuringEdit;
     private readonly ExplicitFrame[] _openLevels;
     private EditFrame? _frame;
+    private HashSet<int>? _chunkAppendOrdinals;
     private bool _staleEditModeAfterCloneCloseAbort;
     private RecordsetAfterRollback _afterRollback;
     private bool _fieldsTakenAfterMoveFirst;
@@ -1141,9 +1142,21 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
             refused = CallResult.Fail(Failure.NotImplemented("an edit member when the table's edit semantics cannot be compiled: " + failure));
             return null;
         }
-        _frame = new EditFrame(context, Cursor, Transactions, updatable: RecordsetType is 1 or 2) { LockEdits = _pessimistic };
+        _frame = new EditFrame(context, Cursor, Transactions, updatable: RecordsetType is 1 or 2)
+        {
+            LockEdits = _pessimistic,
+            // r-def-cursor-dao/assign-without-edit-by-type #37: a dynaset (2) reopened after an earlier
+            // table-type (1) Edit/Update inside BeginTrans may edit the same row again.
+            AllowExplicitTxnReedit = RecordsetType is 1 or 2,
+        };
         return _frame;
     }
+
+    internal bool HasChunkAppend(int ordinal) => _chunkAppendOrdinals is not null && _chunkAppendOrdinals.Contains(ordinal);
+
+    internal void MarkChunkAppend(int ordinal) => (_chunkAppendOrdinals ??= []).Add(ordinal);
+
+    internal void ClearChunkAppends() => _chunkAppendOrdinals?.Clear();
 
     /// <summary>
     /// LockEdits put (R-CURSOR-1 CUR-EDIT conflicts; TXN-LOCAL; r-def-cursor-dao/lockedits-put-after-open):
@@ -1457,7 +1470,12 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         {
             return Fail(MutationError.WriteConflict, "The Microsoft Access database engine stopped the process because you and another user are attempting to change the same data at the same time.");
         }
-        return EditPublication.Of(frame.Edit(), Database);
+        CallResult editResult = EditPublication.Of(frame.Edit(), Database);
+        if (editResult.Failure is null)
+        {
+            ClearChunkAppends();
+        }
+        return editResult;
     }
 
     /// <summary>
@@ -1480,7 +1498,12 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
             return CallResult.Fail(Failure.NotModelled("NotModelled.Edit.UnpublishedCounter", $"another Database of this engine issued AutoNumber values of '{_entry.Name}' that the file's counter does not hold yet (new rows are W-05/growth-structural-closure)"));
         }
         EditOutcome outcome = frame.AddNew();
-        return EditPublication.Of(outcome);
+        CallResult addResult = EditPublication.Of(outcome);
+        if (addResult.Failure is null)
+        {
+            ClearChunkAppends();
+        }
+        return addResult;
     }
 
     /// <summary>
@@ -1548,6 +1571,7 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
             }
             Modified(mode, outcome);
             CaptureSeeChangesRow();
+            ClearChunkAppends();
         }
         return result;
     }
@@ -1990,7 +2014,18 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
         {
             return CallResult.Fail(Failure.NotModelled("NotModelled.Edit.CancelUpdateType", "CancelUpdate with an UpdateType other than dbUpdateRegular (batch updates are not recorded)"));
         }
-        return Frame(out CallResult refused) is { } frame ? EditPublication.Of(frame.CancelUpdate()) : ReadOnlyByOption ? NoEditPending : refused;
+        return Frame(out CallResult refused) is { } frame
+            ? ClearChunksOnOk(EditPublication.Of(frame.CancelUpdate()))
+            : ReadOnlyByOption ? NoEditPending : refused;
+    }
+
+    private CallResult ClearChunksOnOk(CallResult r)
+    {
+        if (r.Failure is null)
+        {
+            ClearChunkAppends();
+        }
+        return r;
     }
 
     /// <summary>3020 from DAO.Recordset: Update or CancelUpdate of a recordset no edit can be pending on (option-readonly-write).</summary>
@@ -2840,6 +2875,7 @@ internal sealed unsafe class FieldObject : DaoObject
             ? CallResult.Fail(Failure.NotModelled("NotModelled.OriginalValueDuringEdit", "Field.OriginalValue with an edit pending (not recorded)"))
             : f.Fail(3251, DaoErrors.NotSupportedForType)))
         .Get("FieldSize", (self, args) => Live(self, f => f.FieldSize()))
+        .Method("AppendChunk", (self, args) => ((FieldObject)self).AppendChunk(args.Length > 0 ? args[0] : 0))
         .Get("Properties", (self, args) => Live(self, f => f.PropertiesCollection()));
 
     private readonly FieldsObject _fields;
@@ -2904,9 +2940,14 @@ internal sealed unsafe class FieldObject : DaoObject
         {
             return Fail(3259, DaoErrors.InvalidFieldType);
         }
-        if (Recordset.FrameIfMade is { Mode: not EditMode.None })
+        if (Recordset.FrameIfMade is { Mode: not EditMode.None } frame)
         {
-            return CallResult.Fail(Failure.NotModelled("NotModelled.FieldSizeDuringEdit", "Field.FieldSize of a long value with an edit pending (not recorded)"));
+            FieldResult buffered = frame.Read(column);
+            if (!buffered.Succeeded)
+            {
+                return CallResult.Fail(Failure.NotImplemented($"Field.FieldSize when edit buffer cannot be read: {buffered.Failure} {buffered.Detail}"));
+            }
+            return DaoLongValueChunks.FieldSizeFromBuffered(ColumnFacts.DaoType(column) ?? 0, buffered.Value, column.Name);
         }
         if (Recordset.UnpublishedRead("Field.FieldSize") is { } unpublished)
         {
@@ -3030,6 +3071,42 @@ internal sealed unsafe class FieldObject : DaoObject
 
     private CallResult Assign(nint value) => Recordset.Closed ? Fail(3420, DaoErrors.ObjectInvalid, publishesErrorInfo: true) : AssignValue(Recordset, Column, value);
 
+    private CallResult AppendChunk(nint value)
+    {
+        if (Recordset.Closed)
+        {
+            return Fail(3420, DaoErrors.ObjectInvalid);
+        }
+        if (Recordset.AfterRollback != RecordsetAfterRollback.Valid)
+        {
+            return FieldsObject.AfterRollbackNamed("Field.AppendChunk");
+        }
+        if (Recordset.Frame(out CallResult refused) is not { } frame)
+        {
+            return Recordset.ReadOnlyByOption
+                ? CallResult.Fail(Failure.NotModelled(
+                    "NotModelled.AppendChunkReadOnlyOption",
+                    "Field.AppendChunk on a dbReadOnly table or dynaset recordset (not recorded)"))
+                : refused;
+        }
+        if (!frame.Updatable)
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.TableAppendChunkReadOnly",
+                $"Field.AppendChunk on a non-updatable type {Recordset.RecordsetType} table recordset (not recorded)"));
+        }
+        int daoType = ColumnFacts.DaoType(Column) ?? 0;
+        return DaoLongValueChunks.AppendChunk(
+            frame,
+            Column,
+            daoType,
+            Recordset.HasChunkAppend(_ordinal),
+            () => Recordset.MarkChunkAppend(_ordinal),
+            value,
+            (code, msg) => Fail(code, msg),
+            ExtendedDateTimeWriteMode.DaoTable);
+    }
+
     /// <summary>
     /// A Value put (II-10 §21 F-91; W-05/edit-frames): the value, read through one by-reference level, converts into the
     /// frame's temporary candidate and is accepted, or fails from DAO.Field with an IErrorInfo (3020 without an edit, 3027
@@ -3056,7 +3133,18 @@ internal sealed unsafe class FieldObject : DaoObject
             return CallResult.Fail(new Failure(FailureKind.Ado, MutationError.MissingArgument, "", "", null, 0) { NullExcepStrings = true });
         }
         NativeVariant incoming = ByRefValues.Dereference(Args.Cell(value));
-        EditOutcome outcome = frame.Assign(column, incoming, allowEmptyBstrBinaryNull: true, allowDaoConversions: true);
+        EditOutcome outcome;
+        if (DaoLongValueChunks.TryWrapBinaryBstr(column, incoming, out OwnedVariant? binaryWrapped))
+        {
+            using (binaryWrapped)
+            {
+                outcome = frame.Assign(column, *binaryWrapped!.Pointer, allowEmptyBstrBinaryNull: true, allowDaoConversions: true);
+            }
+        }
+        else
+        {
+            outcome = frame.Assign(column, incoming, allowEmptyBstrBinaryNull: true, allowDaoConversions: true);
+        }
         if (outcome.Error is { Number: MutationError.ExtendedDateTimeInvalid })
         {
             return PublishExtendedDateTimeInvalid(recordset.Engine);
