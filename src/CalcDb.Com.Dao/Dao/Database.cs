@@ -971,9 +971,9 @@ internal sealed unsafe class DatabaseObject : DaoObject
             return Fail(3001, DaoErrors.InvalidArgument);
         }
         CatalogEntry? entry = Catalog.LocalTables(Format).FirstOrDefault(e => string.Equals(e.Name, name, StringComparison.OrdinalIgnoreCase));
-        if (type is null && options != 0 && !(entry is not null && options == 4 && lockEdit is null))
+        if (type is null && options != 0 && !(entry is not null && options == 4 && lockEdit is null or 3))
         {
-            // CUR-PROV: with the Type cell omitted, option 4 is recorded only on a local table with no LockEdit (open-argument-shapes, open-argument-shapes-rw call 131).
+            // CUR-PROV: with the Type cell omitted, option 4 is recorded only on a local table with LockEdit omitted (open-argument-shapes) or 3 (prov-readonly-option-forms call 64: 3001).
             return CallResult.Fail(Failure.NotImplemented("OpenRecordset with Options and no Type (CUR-PROV's omitted-Type rule)"));
         }
         if (entry is null)
@@ -2207,6 +2207,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
                 Membership = QueryDefsMembership,
                 PreserveHeldByName = true,
                 ClosedSource = "DAO.Database",
+                ObjectIndexFailure = (3421, DaoErrors.ConversionError), // r-q-cursor-dao/errorder-dispatch-ordinal-by-collection call 18
             };
         }
         return _queryDefs;
@@ -2663,6 +2664,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
                 Membership = RelationsMembership,
                 Appender = static (c, arg) => c.Database.AppendRelation(c, arg),
                 Deleter = static (c, arg) => c.Database.DeleteRelation(c, arg),
+                ObjectIndexFailure = (3421, DaoErrors.ConversionError), // r-q-cursor-dao/errorder-dispatch-ordinal-by-collection call 24
             };
         }
         return Object(_relations);

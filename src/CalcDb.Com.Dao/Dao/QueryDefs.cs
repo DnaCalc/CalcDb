@@ -45,7 +45,7 @@ internal sealed unsafe class QueryDefObject : DaoObject
         .Get("DateCreated", (self, args) => Live(self, q => q._query is { } s ? CatalogDates.Date(s.Entry.DateCreateBits) : CallResult.Fail(Failure.NotModelled("NotModelled.QueryDefDraftDate", "DateCreated on an unsaved QueryDef"))))
         .Get("LastUpdated", (self, args) => Live(self, q => q._query is { } s ? CatalogDates.Date(s.Entry.DateUpdateBits) : CallResult.Fail(Failure.NotModelled("NotModelled.QueryDefDraftDate", "LastUpdated on an unsaved QueryDef"))))
         .Get("ODBCTimeout", (self, args) => Live(self, q => q.StoredOr("ODBCTimeout", Int16(60))))
-        .Get("MaxRecords", (self, args) => Live(self, q => q.StoredOr("MaxRecords", Int32(0))))
+        .Get("MaxRecords", (self, args) => Live(self, q => q._mode == QueryDefMode.Temporary ? Int32(q._temporaryMaxRecords ?? 0) : q.StoredOr("MaxRecords", Int32(0))))
         .Put("MaxRecords", (self, args) => { nint value = args[^1]; return Live(self, q => q.PutMaxRecords(value)); })
         .Get("RecordsAffected", (self, args) => Live(self, q => Int32(q._recordsAffected)))
         .Get("StillExecuting", (self, args) => Live(self, q => q.Fail(3251, DaoErrors.NotSupportedForType)))
@@ -81,6 +81,7 @@ internal sealed unsafe class QueryDefObject : DaoObject
     private NativeVariant?[] _values = [];
     private bool[] _parameterTypeMismatch = [];
     private int _sqlGeneration;
+    private int? _temporaryMaxRecords;
 
     /// <summary>Wrap an already-saved QueryDef owned by <paramref name="owner"/> (or created in this session).</summary>
     public QueryDefObject(
@@ -478,11 +479,43 @@ internal sealed unsafe class QueryDefObject : DaoObject
         return CallResult.Nothing;
     }
 
+    protected override Failure? ArgumentConversionFailure(MemberDecl member, ArgumentConversion conversion)
+    {
+        if (Invalid)
+        {
+            return Failure.Dao(3420, Source, DaoErrors.ObjectInvalid);
+        }
+        if (member.Kind != InvokeKind.PropertyPut || member.Name != "MaxRecords" || _mode != QueryDefMode.Temporary)
+        {
+            return null;
+        }
+        return conversion.Reason switch
+        {
+            ArgumentConversionReason.TypeMismatch => Failure.Dao(3421, Source, DaoErrors.ConversionError) with { PublishesErrorInfo = true },
+            ArgumentConversionReason.Overflow => Failure.NotModelled("NotModelled.QueryDefMaxRecordsOverflow", "QueryDef.MaxRecords put with numeric overflow (not recorded)"),
+            _ => null,
+        };
+    }
+
     private CallResult PutMaxRecords(nint value)
     {
+        if (_mode == QueryDefMode.Temporary)
+        {
+            // r-fix-cursor-dao/querydef-maxrecords-odbctimeout calls 8..82:
+            // temporary SELECT QueryDef MaxRecords stores any Int32 (including -1) in memory; non-convertible inputs fail 3421 with IErrorInfo.
+            int hr = 0;
+            if (value == 0 || !OwnedVariant.TryChangeScalar(Args.Cell(value), VarType.I4, SessionLocale.Lcid, out NativeVariant converted, out hr))
+            {
+                return value != 0 && hr == HResults.DISP_E_OVERFLOW
+                    ? CallResult.Fail(Failure.NotModelled("NotModelled.QueryDefMaxRecordsOverflow", "QueryDef.MaxRecords put with numeric overflow (not recorded)"))
+                    : Fail(3421, DaoErrors.ConversionError, publishesErrorInfo: true);
+            }
+            _temporaryMaxRecords = (int)converted.Int64;
+            return CallResult.Nothing;
+        }
         if (_mode != QueryDefMode.Saved)
         {
-            return CallResult.Fail(Failure.NotModelled("NotModelled.QueryDefMaxRecordsPutUnsaved", "QueryDef.MaxRecords put on an unsaved QueryDef is not recorded"));
+            return CallResult.Fail(Failure.NotModelled("NotModelled.QueryDefMaxRecordsPutUnsaved", "QueryDef.MaxRecords put on a draft QueryDef is not recorded"));
         }
         if (EffectiveFamily != QueryFamily.Select)
         {

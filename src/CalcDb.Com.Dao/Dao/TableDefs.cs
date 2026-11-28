@@ -333,7 +333,7 @@ internal sealed unsafe class DefinitionCollection : DaoObject, IDaoEnumerableCol
         if (objectIndex)
         {
             return ObjectIndexFailure is { } refused
-                ? CallResult.Fail(Failure.Dao(refused.Number, Source, refused.Text) with { Preceding = Failure.Dao(3001, Source, DaoErrors.InvalidArgument) })
+                ? CallResult.Fail(Failure.Dao(refused.Number, Source, refused.Text) with { Preceding = Failure.Dao(3001, "DAO.TableDefs", DaoErrors.InvalidArgument) })
                 : CallResult.Fail(Failure.NotImplemented("a definition collection's Item with an object index"));
         }
         if (ordinal is null && NameEndsAtNul && index != 0 && Args.TypeOf(index) == Foundation.VarType.Bstr && Args.Text(index) is { } text && text.IndexOf('\0') is int nul and >= 0)
@@ -614,6 +614,7 @@ internal sealed unsafe class TableDefObject : DaoObject
                 Deleter = (c, nameArg) => c.Database.DeleteField(this, c, nameArg),
                 IsOwnerInvalid = () => _dropped,
                 OwnerInvalidSource = "DAO.TableDef", // r-q47-bigint-expr-edges/mh-held-tdf-after-drop-* call 125
+                ObjectIndexFailure = (3421, DaoErrors.ConversionError), // r-q-cursor-dao/errorder-dispatch-ordinal-by-collection call 30
             };
         }
         return Object(_fields);
@@ -650,6 +651,7 @@ internal sealed unsafe class TableDefObject : DaoObject
             {
                 Denied = IsSystem ? (3110, DaoErrors.NoReadDefinitions(_entry.Name)) : null,
                 ClosedSource = "DAO.TableDef", // 3420 after Close from the owner (r-dao-1-err-1/life-database-workspace-close)
+                ObjectIndexFailure = (3421, DaoErrors.ConversionError), // r-q-cursor-dao/errorder-dispatch-ordinal-by-collection call 36
                 Membership = () => IndexesMembership(reload: true),
                 Refreshed = static (_, held) =>
                 {
@@ -987,7 +989,8 @@ internal sealed unsafe class DefinitionFieldObject : DaoObject
                         ? Int16(0)
                         : CallResult.Fail(Failure.NotModelled("NotModelled.FieldPrecisionCollatingOrder", $"Field.Precision with CollatingOrder {ColumnFacts.CollatingOrder(f._column)} (only 1024 and 1033 are recorded)")))))
         .Get("Scale", (self, args) => Live(self, f => f.OfTable(t => f._column.CalculatedResultType == NativeTypes.Numeric ? CallResult.Fail(Failure.NotImplemented("Field.Scale of a calculated Decimal field")) : f._column.TypeCode == NativeTypes.Numeric ? Int16(f._column.NumericScale) : Int16(0))))
-        .Get("DataUpdatable", (self, args) => Live(self, f => f.OfTable(t => f._owner.Database.ReadOnly ? Bool(false) : CallResult.Fail(Failure.NotImplemented("TableDef Field.DataUpdatable on a writable open (not observed)")))))
+        // r-fix-cursor-dao/updatable-members-rw call 69[0..13].1: TableDef Field.DataUpdatable is False on writable open too.
+        .Get("DataUpdatable", (self, args) => Live(self, f => f.OfTable(_ => Bool(false))))
         .Get("Value", (self, args) => Live(self, f => f.Fail(3219, DaoErrors.InvalidOperation, publishesErrorInfo: true)))
         .Get("ValidateOnSet", (self, args) => Live(self, f => f.Fail(3219, DaoErrors.InvalidOperation)))
         .Get("ForeignName", (self, args) => Live(self, f => f.Fail(3219, DaoErrors.InvalidOperation)))

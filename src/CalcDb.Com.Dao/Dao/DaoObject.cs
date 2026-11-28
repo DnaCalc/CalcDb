@@ -34,6 +34,9 @@ internal static class DaoErrors
     /// <summary>3358 (R-DAO-1 DAO-META: Container and Document Permissions before a put; r-dao-1b/containers-members-each).</summary>
     public const string NoWorkgroupFile = "Cannot open the Microsoft Access database engine workgroup information file.";
 
+    /// <summary>3028 (R-DAO-1 DAO-SEC: r-dao-1-err-1/sec-logon-defaults CreateWorkspace with named user or wrong password).</summary>
+    public const string WorkgroupMissingOrExclusive = "Cannot start your application. The workgroup information file is missing or opened exclusively by another user.";
+
     /// <summary>3265 (R-DAO-1 DAO-COLL).</summary>
     public const string ItemNotFound = "Item not found in this collection.";
 

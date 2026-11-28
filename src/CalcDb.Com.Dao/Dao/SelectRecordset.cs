@@ -225,6 +225,22 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
     private string? _criteriaText;
     private ExpressionSchema? _schema;
     private ExpressionContext? _context;
+    private SelectCloneFamily? _selectFamily;
+    private PlanRef? _planRef;
+    private bool _familyPopulatedHere;
+
+    private sealed class SelectCloneFamily
+    {
+        public readonly List<SelectRecordsetObject> Live = [];
+        public bool FullyPopulated;
+
+        public SelectCloneFamily(SelectRecordsetObject root) => Live.Add(root);
+    }
+
+    private sealed class PlanRef
+    {
+        public int Count = 1;
+    }
 
     /// <param name="plan">The bound statement, owned by this recordset with its cursor.</param>
     public SelectRecordsetObject(
@@ -244,7 +260,9 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         bool isDerived = false,
         string? name = null,
         bool pessimistic = true,
-        CatalogEntry? queryEntry = null) : base(Decl, Vtable, database.Engine, "DAO.Recordset")
+        CatalogEntry? queryEntry = null,
+        object? selectFamily = null,
+        object? planRef = null) : base(Decl, Vtable, database.Engine, "DAO.Recordset")
     {
         Database = database;
         Plan = plan;
@@ -252,6 +270,16 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         RecordsetType = recordsetType;
         _pessimistic = pessimistic;
         _queryEntry = queryEntry;
+        if (selectFamily is SelectCloneFamily family)
+        {
+            _selectFamily = family;
+            family.Live.Add(this);
+        }
+        if (planRef is PlanRef sharedPlan)
+        {
+            _planRef = sharedPlan;
+            sharedPlan.Count++;
+        }
         _options = options;
         _joinKeys = joinKeys;
         OpenSequence = openSequence;
@@ -784,6 +812,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
                 "NotModelled.QueryRecordCount.Mdb",
                 "RecordCount: RecordCount on an MDB DAO SELECT recordset is not recorded (CUR-POP)"));
         }
+        EnsureFamilyPopulation();
         long count;
         if (!Cursor.TryRecordCount(out count, out string? openName, out string? openDetail))
         {
@@ -889,8 +918,10 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
     }
 
     /// <summary>
-    /// PercentPosition on a single-table SELECT dynaset (2) or snapshot (4) (r-fix-cursor-dao/arg-percentposition-150-readback):
-    /// 100 * ordinal / populated RecordCount, matching PopulationCursor. Forward-only refuses 3219; BOF/EOF/empty 3021.
+    /// PercentPosition on a SELECT dynaset (2) or snapshot (4) for recorded shapes (single-table ORDER BY/at-open,
+    /// DISTINCT, GROUP BY, TOP, UNION, LEFT JOIN; r-fix-cursor-dao/arg-percentposition-150-readback,
+    /// r-fix-cursor-dao/pos-query-sources-rw): 100 * ordinal / populated RecordCount via <see cref="SelectCursor.TryRecordCount"/>.
+    /// Forward-only refuses 3219; unrecorded shapes refuse by name before BOF/EOF 3021.
     /// </summary>
     private CallResult PercentPosition()
     {
@@ -898,19 +929,27 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         {
             return Fail(3219, DaoErrors.InvalidOperation);
         }
-        if ((!_isSingleTableRowSelect && !IsUnionSnapshot) || _appendOnly || RecordsetType is not (2 or 4)
+        if (_appendOnly || RecordsetType is not (2 or 4)
             || _deletedRows is { Count: > 0 } || _addedRows is { Count: > 0 })
         {
             return CallResult.Fail(Failure.NotModelled(
                 "NotModelled.QueryRecordsetPercentPosition",
                 "Recordset.PercentPosition on this SELECT recordset shape or state (not recorded)"));
         }
-        if (_deletedCurrent || IsAtBof || IsAtEof || _selectOrdinal < 0)
+        EnsureFamilyPopulation();
+        long count;
+        if (!Cursor.TryRecordCount(out count, out string? openName, out string? openDetail))
         {
-            return Fail(3021, DaoErrors.NoCurrentRecord);
+            if (_isDerived && _isSingleTableRowSelect && RecordsetType is 2 or 4 && Cursor.Eof)
+            {
+                count = Cursor.RecordCount;
+            }
+            else
+            {
+                return CallResult.Fail(Failure.NotModelled(openName!, "PercentPosition: " + openDetail));
+            }
         }
-        long count = Cursor.RecordCount;
-        if (count <= 0)
+        if (_deletedCurrent || IsAtBof || IsAtEof || _selectOrdinal < 0 || count <= 0)
         {
             return Fail(3021, DaoErrors.NoCurrentRecord);
         }
@@ -965,15 +1004,29 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
 
     private CallResult AbsolutePosition()
     {
-        if (RecordsetType == 8)
+        if (RecordsetType == 8 || (_options & 256) != 0)
         {
             return Fail(3219, DaoErrors.InvalidOperation);
         }
-        if ((!_isSingleTableRowSelect && !IsUnionSnapshot) || _appendOnly || RecordsetType is not (2 or 4))
+        if (_appendOnly || RecordsetType is not (2 or 4))
         {
             return CallResult.Fail(Failure.NotModelled(
                 "NotModelled.QueryRecordsetAbsolutePosition",
                 "Recordset.AbsolutePosition on a non-single-table or append-only SELECT recordset (not recorded)"));
+        }
+        EnsureFamilyPopulation();
+        if (!_isSingleTableRowSelect)
+        {
+            if (_deletedRows is { Count: > 0 } || _addedRows is { Count: > 0 })
+            {
+                return CallResult.Fail(Failure.NotModelled(
+                    "NotModelled.QueryRecordsetAbsolutePosition",
+                    "Recordset.AbsolutePosition on a non-single-table SELECT recordset with pending/added/deleted rows (not recorded)"));
+            }
+            if (!Cursor.TryRecordCount(out _, out string? openName, out string? openDetail))
+            {
+                return CallResult.Fail(Failure.NotModelled(openName!, "AbsolutePosition: " + openDetail));
+            }
         }
         if (_deletedCurrent || IsAtBof || IsAtEof)
         {
@@ -1153,6 +1206,11 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
             {
                 return Fail(3219, DaoErrors.InvalidOperation);
             }
+            _familyPopulatedHere = true;
+            if (_selectFamily is not null)
+            {
+                _selectFamily.FullyPopulated = true;
+            }
             _deletedCurrent = false;
             _noMatch = false;
             _addedRowIndex = _addedRows.Count - 1;
@@ -1170,6 +1228,11 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
             _addedRowIndex = -1;
             _addedRowEof = false;
             _selectOrdinal = Cursor.Bof || Cursor.Eof ? -1 : (int)Math.Max(0, Cursor.RecordCount - 1);
+            _familyPopulatedHere = true;
+            if (_selectFamily is not null)
+            {
+                _selectFamily.FullyPopulated = true;
+            }
             CaptureNewlyPopulatedSnapshotRows(_selectOrdinal);
         }
         return result;
@@ -1230,6 +1293,14 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
             _deletedCurrent = false;
             _noMatch = false;
             _selectOrdinal = Cursor.Bof || Cursor.Eof ? -1 : (wasBof ? 0 : prevOrdinal + 1);
+            if (Cursor.Eof)
+            {
+                _familyPopulatedHere = true;
+                if (_selectFamily is not null)
+                {
+                    _selectFamily.FullyPopulated = true;
+                }
+            }
             CaptureNewlyPopulatedSnapshotRows(_selectOrdinal);
         }
         return result;
@@ -2090,6 +2161,14 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
             {
                 _selectOrdinal = Math.Max(0, prevOrdinal + rows.Value);
             }
+            if (Cursor.Eof)
+            {
+                _familyPopulatedHere = true;
+                if (_selectFamily is not null)
+                {
+                    _selectFamily.FullyPopulated = true;
+                }
+            }
             CaptureNewlyPopulatedSnapshotRows(_selectOrdinal);
         }
         return result;
@@ -2368,22 +2447,120 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
 
     private CallResult Clone()
     {
-        if (!_isDerived
-            || RecordsetType != 2
-            || _options != 0
-            || !Database.ReadOnly
-            || !_isSingleTableRowSelect
-            || Plan.Parameters.Count > 0
-            || _appendOnly
-            || Database.Workspace.Transactions.Depth > 0
-            || _derivedSpec is not { } spec)
+        if (_isDerived
+            && RecordsetType == 2
+            && _options == 0
+            && Database.ReadOnly
+            && _isSingleTableRowSelect
+            && Plan.Parameters.Count == 0
+            && !_appendOnly
+            && Database.Workspace.Transactions.Depth == 0
+            && _derivedSpec is { } spec)
         {
-            return CallResult.Fail(Failure.NotModelled("NotModelled.QueryRecordsetClone", "Clone on this SELECT query recordset shape, cursor type, options, database writability, or transaction depth (not recorded)"));
+            // r-q53-conv-abspos-subq-loc/filter-sort-openrs-read-accdb, filter-sort-openrs-read-mdb calls 55-84:
+            // Clone of a derived read-only-database dynaset (Options 0) opens an independent cursor at row 0
+            // with Filter = "", Sort = "", surviving parent Close().
+            return SelectRoute.OpenDerived(Database, this, spec, RecordsetType, filter: "", sort: "", typeArg: 0, optionsArg: 0);
         }
-        // r-q53-conv-abspos-subq-loc/filter-sort-openrs-read-accdb, filter-sort-openrs-read-mdb calls 55-84:
-        // Clone of a derived read-only-database dynaset (Options 0) opens an independent cursor at row 0
-        // with Filter = "", Sort = "", surviving parent Close().
-        return SelectRoute.OpenDerived(Database, this, spec, RecordsetType, filter: "", sort: "", typeArg: 0, optionsArg: 0);
+        if (!_isDerived
+            && !IsMdb
+            && !Database.ReadOnly
+            && RecordsetType == 2
+            && _options == 0
+            && _isSingleTableRowSelect
+            && Plan.Parameters.Count == 0
+            && !_appendOnly
+            && Database.Workspace.Transactions.Depth == 0
+            && _openLevels.Length == 0
+            && _deletedRows is not { Count: > 0 }
+            && _addedRows is not { Count: > 0 }
+            && Database.Cache.PublishedSerial == _openPublishedSerial)
+        {
+            // r-dao-1-err-1/life-recordset-querydef-release call 6; r-q-cursor-dao/life-clone-population-order calls 11, 19, 30:
+            // non-derived writable ACCDB single-table SELECT dynaset Clone shares full-population state and Plan lifetime across the family.
+            SelectCursor? cloneCursor = SelectRoute.OpenCursor(
+                Database,
+                Plan,
+                RecordsetType,
+                _isSingleTableRowSelect,
+                _hasOrderBy,
+                values: null,
+                out ReadView? cloneView,
+                out PrivateOverlay? cloneOverlay,
+                out SqlFailure? failure,
+                out CallResult? viewRefusal);
+            if (cloneCursor is null)
+            {
+                return viewRefusal ?? CallResult.Fail(Failure.NotModelled(failure?.NotModelled ?? "NotModelled.QueryRecordsetClone", failure?.Message ?? "SELECT Clone cursor could not open"));
+            }
+            if (_selectFamily is null)
+            {
+                _selectFamily = new SelectCloneFamily(this);
+            }
+            _planRef ??= new PlanRef();
+            if (_familyPopulatedHere || Cursor.Eof)
+            {
+                _familyPopulatedHere = true;
+                _selectFamily.FullyPopulated = true;
+            }
+            var clone = new SelectRecordsetObject(
+                Database,
+                Plan,
+                cloneCursor,
+                RecordsetType,
+                _isSingleTableRowSelect,
+                _hasOrderBy,
+                cloneView,
+                cloneOverlay,
+                _options,
+                Database.Engine.NextSequence(),
+                _joinKeys,
+                HasGroupBy,
+                _derivedSpec,
+                isDerived: false,
+                _name,
+                _pessimistic,
+                _queryEntry,
+                _selectFamily,
+                _planRef);
+            if (_selectFamily.FullyPopulated)
+            {
+                clone.EnsureFamilyPopulation();
+            }
+            return Database.Adopt(clone);
+        }
+        return CallResult.Fail(Failure.NotModelled("NotModelled.QueryRecordsetClone", "Clone on this SELECT query recordset shape, cursor type, options, database writability, or transaction depth (not recorded)"));
+    }
+
+    private void EnsureFamilyPopulation()
+    {
+        if (_selectFamily is not { FullyPopulated: true }
+            || _familyPopulatedHere
+            || Closed
+            || _deletedCurrent
+            || IsOnAddedRow
+            || _deletedRows is { Count: > 0 }
+            || _addedRows is { Count: > 0 })
+        {
+            return;
+        }
+        _familyPopulatedHere = true;
+        if (Cursor.Eof)
+        {
+            return;
+        }
+        bool wasBof = Cursor.Bof;
+        int savedOrdinal = _selectOrdinal;
+        Cursor.MoveLast();
+        if (wasBof)
+        {
+            Cursor.MoveFirst();
+            Cursor.MovePrevious();
+        }
+        else if (savedOrdinal >= 0)
+        {
+            MoveCursorToOrdinal(savedOrdinal);
+        }
     }
 
     /// <summary>
@@ -2461,6 +2638,12 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         _openOverlay = Database.Workspace.Transactions.OverlayOf(Database.Cache);
         _openOverlaySnapshot = RecordsetType == 4 && _openOverlay is { } overlay ? CaptureOverlayPages(overlay) : null;
         _openPublishedSerial = Database.Cache.PublishedSerial;
+        if (_selectFamily is { } fam)
+        {
+            fam.Live.Remove(this);
+            _selectFamily = null;
+        }
+        _familyPopulatedHere = false;
         _movedSinceOpen = false;
         _parentRequeried = false;
         _deletedCurrent = false;
@@ -2853,9 +3036,13 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         }
         if (_isUpdatableJoin)
         {
-            EditMode mode = _dirtyJoinSource >= 0
-                ? (_joinFrames?[_dirtyJoinSource]?.Mode ?? EditMode.None)
-                : (_joinFrames?[0]?.Mode ?? EditMode.None);
+            // r-fix-cursor-dao/prov-outer-join-cancel-after-failed-update call 25:
+            // Edit on an unmatched LEFT JOIN row prepares parent Edit (1) + child AddNew (2); EditMode reads 1 even after child assignment/failed Update.
+            EditMode mode = _joinAddNew
+                ? (_joinFrames?[_joinChildSource]?.Mode ?? EditMode.None)
+                : _joinCurrentChildAbsent
+                    ? (_joinFrames?[0]?.Mode ?? EditMode.None)
+                    : (_dirtyJoinSource >= 0 ? (_joinFrames?[_dirtyJoinSource]?.Mode ?? EditMode.None) : (_joinFrames?[0]?.Mode ?? EditMode.None));
             return Int16((short)mode);
         }
         return Int16((short)(_frame?.Mode ?? EditMode.None));
@@ -3042,12 +3229,6 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         }
         if (_isUpdatableJoin)
         {
-            if (_joinKeys is { Kind: JoinKind.Left })
-            {
-                return CallResult.Fail(Failure.NotModelled(
-                    "NotModelled.QueryRecordsetLeftJoinAddNew",
-                    "AddNew on a LEFT JOIN SELECT dynaset (only INNER JOIN AddNew is recorded)"));
-            }
             if (EditFrameForSource("AddNew", _joinChildSource, out CallResult joinRefused) is not { } childFrame)
             {
                 return joinRefused;
@@ -3206,6 +3387,23 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
             }
             int active = _joinAddNew ? _joinChildSource : (_dirtyJoinSource >= 0 ? _dirtyJoinSource : 0);
             EditFrame targetFrame = _joinFrames?[active] ?? jf0;
+            if (_joinAddNew && _joinKeys is { Kind: JoinKind.Left } leftJoin)
+            {
+                // r-fix-cursor-dao/prov-outer-join-cancel-after-failed-update calls 48-59:
+                // AddNew on a LEFT JOIN dynaset with Null child join key fails 3101 before PK checks and keeps EditMode = 2 (AddNew).
+                ColumnDescriptor? childKeyCol = Plan.Sources[_joinChildSource].Table!.Columns
+                    .FirstOrDefault(c => string.Equals(c.Name, leftJoin.RightColumn, StringComparison.OrdinalIgnoreCase));
+                if (childKeyCol is null)
+                {
+                    return CallResult.Fail(Failure.NotModelled("NotModelled.QueryRecordsetLeftJoinAddNew", "LEFT JOIN AddNew Update without resolved child join key (not recorded)"));
+                }
+                FieldResult keyRead = targetFrame.Read(childKeyCol);
+                if (!keyRead.Succeeded || keyRead.Value.Kind == NativeKind.Null)
+                {
+                    return Fail(3101, $"The Microsoft Access database engine cannot find a record in the table '{Plan.Sources[0].TableName}' with key matching field(s) '{childKeyCol.Name}'.");
+                }
+                return CallResult.Fail(Failure.NotModelled("NotModelled.QueryRecordsetLeftJoinAddNew", "LEFT JOIN AddNew Update with non-Null child join key (not recorded)"));
+            }
             UpdateOutcome joinOutcome = targetFrame.Update(type: 1, force: false);
             CallResult joinResult = EditPublication.Of(joinOutcome, Database);
             if (joinResult.Failure is null && targetFrame.Mode == EditMode.None)
@@ -3265,6 +3463,11 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
                 if (!Cursor.Eof)
                 {
                     Cursor.MoveLast();
+                    _familyPopulatedHere = true;
+                    if (_selectFamily is not null)
+                    {
+                        _selectFamily.FullyPopulated = true;
+                    }
                     if (hadCursorPos)
                     {
                         MoveCursorToOrdinal(savedOrdinal);
@@ -3519,7 +3722,16 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
             Cursor.Dispose();
             _criteria?.Dispose();
             _criteria = null;
-            Plan.Dispose();
+            if (_selectFamily is { } fam)
+            {
+                fam.Live.Remove(this);
+                _selectFamily = null;
+            }
+            if (_planRef is null || --_planRef.Count == 0)
+            {
+                Plan.Dispose();
+            }
+            _planRef = null;
             _snapshotOverlay?.Dispose();
             _snapshotView?.Dispose();
             _parentFamily?.Derived?.Remove(this);
@@ -4640,7 +4852,7 @@ internal sealed unsafe class SelectFieldObject : DaoObject
         }
         if (frame.Mode == EditMode.None)
         {
-            return Recordset.IsAppendOnly
+            return Recordset.IsAppendOnly || Recordset.IsSingleTableRowSelect
                 ? Fail(MutationError.NoEdit, "Update or CancelUpdate without AddNew or Edit.", publishesErrorInfo: true)
                 : CallResult.Fail(Failure.NotModelled(
                     "NotModelled.QueryFieldValuePutWithoutEdit",
