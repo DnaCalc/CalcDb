@@ -21,6 +21,7 @@ namespace CalcDb.Com.Dao;
 internal sealed class EngineState(HostBinding binding) : IPublicationTarget
 {
     private WorkspaceObject? _defaultWorkspace;
+    private string _defaultUser = "admin";
     private ErrorsObject? _errors;
     private ulong _nextSeq;
 
@@ -150,7 +151,10 @@ internal sealed class EngineState(HostBinding binding) : IPublicationTarget
     }
 
     /// <summary>The default Workspace, created by the first touch; the engine state keeps it for its lifetime.</summary>
-    public WorkspaceObject DefaultWorkspace => _defaultWorkspace ??= new WorkspaceObject(this, "#Default Workspace#", "admin", isDefault: true);
+    public WorkspaceObject DefaultWorkspace => _defaultWorkspace ??= new WorkspaceObject(this, "#Default Workspace#", _defaultUser, isDefault: true);
+
+    /// <summary>Set the default user name before the default Workspace is created (r-dao-1-err-1/sec-logon-defaults call 8).</summary>
+    public void SetDefaultUser(string user) => _defaultUser = user;
 
     /// <summary>Whether the default session exists yet (DAO-BOOT: SystemDB reads "" before it).</summary>
     public bool Touched => _defaultWorkspace is not null;
@@ -205,6 +209,9 @@ internal sealed unsafe class DBEngineObject : DaoObject
         .Get("LoginTimeout", (self, args) => Int16(20))
         .Get("IniPath", (self, args) => Text(""))
         .Get("DefaultType", (self, args) => Int32(2))
+        .Put("DefaultType", (self, args) => ((DBEngineObject)self).PutDefaultType(args[^1]))
+        .Put("DefaultUser", (self, args) => ((DBEngineObject)self).PutDefaultUser(args[^1]))
+        .Put("DefaultPassword", (self, args) => ((DBEngineObject)self).PutDefaultPassword(args[^1]))
         .Get("SystemDB", (self, args) => Text(((DBEngineObject)self).Engine.Touched ? "system.mdb" : ""))
         .Method("CreateWorkspace", (self, args) => ((DBEngineObject)self).CreateWorkspace(args))
         .Method("CompactDatabase", (self, args) => ((DBEngineObject)self).CompactDatabase(args))
@@ -324,7 +331,8 @@ internal sealed unsafe class DBEngineObject : DaoObject
         }
         if (!string.Equals(user, "admin", StringComparison.OrdinalIgnoreCase) || password.Length != 0)
         {
-            return CallResult.Fail(Failure.NotModelled("NotModelled.NamedLogon", "a workspace for a named user or a password (user-level security is excluded)"));
+            // r-dao-1-err-1/sec-logon-defaults calls 14, 24: without a workgroup file, named user or wrong password fails 3028 from DAO.Workspace.
+            return CallResult.Fail(Failure.Dao(3028, "DAO.Workspace", DaoErrors.WorkgroupMissingOrExclusive));
         }
         if (type != 2)
         {
@@ -335,6 +343,35 @@ internal sealed unsafe class DBEngineObject : DaoObject
         workspace.Release();
         return result;
     }
+
+    private CallResult PutDefaultType(nint value) =>
+        Args.Int32(value, omitted: null) is 2
+            ? CallResult.Nothing // r-dao-1-err-1/sec-logon-defaults call 7: DefaultType = 2 (dbUseJet)
+            : CallResult.Fail(Failure.NotModelled("NotModelled.DefaultType", "DBEngine.DefaultType put with a value other than 2 (dbUseJet) is not recorded"));
+
+    private CallResult PutDefaultUser(nint value)
+    {
+        if (Args.Text(value) is not { } user)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.DefaultUser", "DBEngine.DefaultUser put with a non-string value is not recorded"));
+        }
+        if (!string.Equals(user, "admin", StringComparison.OrdinalIgnoreCase))
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.DefaultUser", "DBEngine.DefaultUser put with a user other than Admin is not recorded"));
+        }
+        if (Engine.Touched)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.DefaultUserAfterBoot", "DBEngine.DefaultUser put after the default Workspace has been created is not recorded"));
+        }
+        // r-dao-1-err-1/sec-logon-defaults call 8: sets DefaultWorkspace.UserName when called before first touch.
+        Engine.SetDefaultUser(user);
+        return CallResult.Nothing;
+    }
+
+    private CallResult PutDefaultPassword(nint value) =>
+        Args.Text(value) is ""
+            ? CallResult.Nothing // r-dao-1-err-1/sec-logon-defaults call 9: DefaultPassword = ""
+            : CallResult.Fail(Failure.NotModelled("NotModelled.DefaultPassword", "DBEngine.DefaultPassword put with a non-empty or non-string value is not recorded"));
 
     /// <summary>SetOptionEnum constants (SET-OPTION; evidence/r-q51-codecs-props-compact/setoption-matrix-accdb, setoption-matrix-mdb).</summary>
     private const int PageTimeoutOption = 6;
@@ -1101,6 +1138,13 @@ internal sealed unsafe class WorkspaceObject : DaoObject
         .Get("Properties", (self, args) => Live(self, w => Object(w._properties ??= new PropertiesObject(w, BuiltInProperties.Workspace))))
         .Method("OpenDatabase", static (self, args) => (WorkspaceObject)self is { Invalid: true } closed ? closed.Fail(3420, DaoErrors.ObjectInvalid) : ((WorkspaceObject)self).OpenDatabase(args))
         .Method("CreateDatabase", static (self, args) => (WorkspaceObject)self is { Invalid: true } closed ? closed.Fail(3420, DaoErrors.ObjectInvalid) : ((WorkspaceObject)self).CreateDatabase(args))
+        .Method("CreateUser", (self, args) =>
+        {
+            nint name = args.Length > 0 ? args[0] : 0;
+            nint pid = args.Length > 1 ? args[1] : 0;
+            nint password = args.Length > 2 ? args[2] : 0;
+            return Live(self, w => w.CreateUser(name, pid, password));
+        })
         .Method("BeginTrans", (self, args) => Live(self, w => w.BeginTrans()))
         .Method("CommitTrans", (self, args) => { nint options = args.Length > 0 ? args[0] : 0; return Live(self, w => w.CommitTrans(options)); })
         .Method("Rollback", (self, args) => Live(self, w => w.Rollback()))
@@ -1712,10 +1756,52 @@ internal sealed unsafe class WorkspaceObject : DaoObject
             case null:
                 return CallResult.Fail(Failure.NotModelled("NotModelled.CreateOption", "CreateDatabase with a non-integer Option argument"));
             default:
+                if ((option.Value & ~0x1FF) != 0)
+                {
+                    // r-dao-1-err-1/create-workspace-route call 36: unknown option flags (e.g. 12345) fail 3001 from DAO.Workspace.
+                    return Fail(3001, DaoErrors.InvalidArgument);
+                }
                 return CallResult.Fail(Failure.NotModelled(
                     "NotModelled.CreateOption",
                     $"CreateDatabase option {option}: only dbVersion40 (64) and dbVersion120 (128 or omitted) are implemented"));
         }
+    }
+
+    /// <summary>
+    /// CreateUser([Name], [PID], [Password]) (r-dao-1-err-1/sec-default-admin-accdb, -mdb call 12):
+    /// returns an unappended <see cref="UserObject"/> without altering files or <c>Workspace.Users</c>.
+    /// </summary>
+    private CallResult CreateUser(nint nameArg, nint pidArg, nint passwordArg)
+    {
+        static bool TryOptionalText(nint arg, out string text)
+        {
+            text = "";
+            if (arg == 0)
+            {
+                return true;
+            }
+            NativeVariant* cell = Args.Cell(arg);
+            if (TypedCall.IsMissing(cell) || ((VarType)cell->Vt & ~VarType.ByRef) == VarType.Empty)
+            {
+                return true;
+            }
+            if (Args.Text(arg) is not { } read)
+            {
+                return false;
+            }
+            text = read;
+            return true;
+        }
+        if (!TryOptionalText(nameArg, out string name)
+            || !TryOptionalText(pidArg, out _)
+            || !TryOptionalText(passwordArg, out _))
+        {
+            return CallResult.Fail(Failure.NotImplemented("Workspace.CreateUser with a non-string argument"));
+        }
+        var user = new UserObject(Engine, name);
+        CallResult result = Object(user);
+        user.Release();
+        return result;
     }
 
     public void Forget(DatabaseObject database) => _databases.Remove(database);
@@ -1926,4 +2012,22 @@ internal sealed unsafe class EmptyCollection : DaoObject, IDaoEnumerableCollecti
         var c = (EmptyCollection)self;
         return c.Invalid ? c.Fail(3420, DaoErrors.ObjectInvalid) : op(c);
     }
+}
+
+/// <summary>An unappended User returned by Workspace.CreateUser (r-dao-1-err-1/sec-default-admin-accdb, -mdb calls 12-13).</summary>
+internal sealed unsafe class UserObject : DaoObject
+{
+    private static readonly InterfaceDecl Decl = DaoTypes.User;
+    private static readonly nint Vtable = DualEntries.Build(Decl);
+    private static readonly OperationTable Operations = new OperationTable(Decl)
+        .Get("Name", (self, args) => Text(((UserObject)self)._name));
+
+    private readonly string _name;
+
+    public UserObject(EngineState engine, string name) : base(Decl, Vtable, engine, "DAO.User")
+    {
+        _name = name;
+    }
+
+    protected override OperationTable Table => Operations;
 }

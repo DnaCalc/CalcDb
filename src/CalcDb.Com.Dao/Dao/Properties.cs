@@ -292,7 +292,8 @@ internal sealed unsafe class PropertiesObject : DaoObject, IDaoEnumerableCollect
         int? ordinal = CollectionLookup.Find(index, _names, out bool objectIndex);
         if (objectIndex)
         {
-            return CallResult.Fail(Failure.NotImplemented("Properties.Item with an object index"));
+            // r-q-cursor-dao/errorder-dispatch-ordinal-by-collection call 42: preceding Error[0] carries source DAO.TableDefs.
+            return CallResult.Fail(Failure.Dao(3421, Source, DaoErrors.ConversionError) with { Preceding = Failure.Dao(3001, "DAO.TableDefs", DaoErrors.InvalidArgument) });
         }
         if (ordinal is not int i)
         {

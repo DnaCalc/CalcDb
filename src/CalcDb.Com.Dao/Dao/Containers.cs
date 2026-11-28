@@ -108,6 +108,8 @@ internal sealed unsafe class DocumentObject : DaoObject
         .Get("Name", (self, args) => Live(self, d => Text(d._entry.Name)))
         .Get("Owner", (self, args) => Live(self, d => Text("")))
         .Get("UserName", (self, args) => Live(self, d => Text(d.Database.Workspace.UserName)))
+        // r-dao-1-err-1/sec-default-admin-accdb, sec-default-admin-mdb call 25: Document.UserName put fails 3358 without IErrorInfo.
+        .Put("UserName", (self, args) => Live(self, d => d.Fail(3358, DaoErrors.NoWorkgroupFile)))
         .Get("Container", (self, args) => Live(self, d => Text(d._container.Name)))
         .Get("DateCreated", (self, args) => Live(self, d => CatalogDates.Date(d._entry.DateCreateBits)))
         .Get("LastUpdated", (self, args) => Live(self, d => CatalogDates.Date(d._entry.DateUpdateBits)))
