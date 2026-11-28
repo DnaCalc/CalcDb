@@ -1155,18 +1155,22 @@ internal sealed unsafe class QueryFieldObject : DaoObject
         && Column is { TypeRule: ColumnTypeRule.Bound, FieldType: 4 or 7 };
 
     private bool IsRecordedQueryField() =>
+        (Column.Origin == ColumnOrigin.BaseColumn && Column.SourceColumn is not null)
+        || IsRecordedUnionLongColumn();
+
+    private bool IsRecordedQueryFieldSize() =>
         (Column.Origin is ColumnOrigin.BaseColumn or ColumnOrigin.GroupKey && Column.SourceColumn is not null)
         || IsRecordedUnionColumn()
         || IsRecordedExpressionOrAggregate();
 
     private CallResult RecordedMember(string member, Func<CallResult> op) =>
-        (Column.Origin == ColumnOrigin.BaseColumn && Column.SourceColumn is not null) || IsRecordedUnionLongColumn()
+        IsRecordedQueryField()
             ? op()
             : CallResult.Fail(Failure.NotModelled("NotModelled.QueryFieldMember", $"QueryDef Field.{member} of {Column.Origin} column {Column.Name} is not recorded"));
 
     private CallResult Size()
     {
-        if (!IsRecordedQueryField())
+        if (!IsRecordedQueryFieldSize())
         {
             return CallResult.Fail(Failure.NotModelled("NotModelled.QueryFieldSize", $"QueryDef Field.Size of {Column.Origin} column {Column.Name} is not recorded"));
         }

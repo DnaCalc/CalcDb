@@ -204,7 +204,9 @@ public sealed unsafe class Wave24ComDaoAdoBehTests : IDisposable
         string selPath = CopyFixture(Cat1bBaseAccdb, ".accdb");
         DatabaseObject selDb = OpenDaoPath(selPath, readOnly: false);
         QueryDefObject qSel = Recover<QueryDefObject>(Ok(Method(selDb, "CreateQueryDef", "QSel", "SELECT ID, A, B * 2 AS Twice FROM T WHERE B > 5 ORDER BY ID;")));
-        AssertQueryField(FieldObj(qSel, "Twice"), "Twice", expectedType: 4, expectedSize: 4, expectedSourceTable: "T", expectedSourceField: "B");
+        DispatchObject twiceField = FieldObj(qSel, "Twice");
+        AssertQueryField(twiceField, "Twice", expectedType: 4, expectedSize: 4, expectedSourceTable: "T", expectedSourceField: "B");
+        AssertNotModelled(Get(twiceField, "Properties"), "NotModelled.QueryFieldProperties");
         Ok(Method(selDb, "Close"));
 
         DatabaseObject selReopened = OpenDaoPath(selPath, readOnly: true);
@@ -216,8 +218,10 @@ public sealed unsafe class Wave24ComDaoAdoBehTests : IDisposable
         string uniPath = CopyFixture(Cat1bBaseAccdb, ".accdb");
         DatabaseObject uniDb = OpenDaoPath(uniPath, readOnly: false);
         QueryDefObject qUni = Recover<QueryDefObject>(Ok(Method(uniDb, "CreateQueryDef", "QUni", "SELECT ID, A FROM T UNION ALL SELECT ID, A FROM W;")));
+        DispatchObject uniTextField = FieldObj(qUni, "A");
         AssertQueryField(FieldObj(qUni, "ID"), "ID", expectedType: 4, expectedSize: 4, expectedSourceTable: "", expectedSourceField: "");
-        AssertQueryField(FieldObj(qUni, "A"), "A", expectedType: 10, expectedSize: 255, expectedSourceTable: "", expectedSourceField: "");
+        AssertQueryField(uniTextField, "A", expectedType: 10, expectedSize: 255, expectedSourceTable: "", expectedSourceField: "");
+        AssertNotModelled(Get(uniTextField, "Properties"), "NotModelled.QueryFieldProperties");
         Ok(Method(uniDb, "Close"));
 
         DatabaseObject uniReopened = OpenDaoPath(uniPath, readOnly: true);
@@ -388,7 +392,23 @@ public sealed unsafe class Wave24ComDaoAdoBehTests : IDisposable
             Ok(Method(w, "Close"));
         }
 
-        // 2. Odd-byte BSTR put into FOle -> Provider 0x80040E21 (#1236); wv.Value() -> VT_NULL (#1237);
+        // 2. Odd-byte BSTR put into FMemo -> succeeds, truncates trailing odd byte (#628..#633, #660..#665).
+        foreach ((int id, byte[] oddBytes, string expected) in new[] { (904, new byte[] { 0x41 }, ""), (905, [0x41, 0x00, 0x42, 0x00, 0x43], "AB") })
+        {
+            AdoRecordsetObject w = CreateAdoRecordset();
+            Ok(Method(w, "Open", "W", cn, 1, 3, 2));
+            Ok(Method(w, "AddNew"));
+            Ok(PutField(w, "ID", id));
+            DispatchObject wv = FieldObj(w, "FMemo");
+            Ok(PutBstrBytes(wv, "Value", oddBytes));
+            Assert.Equal(expected, TextValue(Ok(Get(wv, "Value"))));
+            Ok(Method(w, "Update"));
+            Assert.Equal(0, Int32Value(Ok(Get(w, "EditMode"))));
+            Assert.Equal(0, Int32Value(Ok(Get(errs, "Count"))));
+            Ok(Method(w, "Close"));
+        }
+
+        // 3. Odd-byte BSTR put into FOle -> Provider 0x80040E21 (#1236); wv.Value() -> VT_NULL (#1237);
         // Update() succeeds (#1238), EditMode == 0 (#1239), AND cn.Errors.Count == 1 (#1241).
         {
             AdoRecordsetObject w = CreateAdoRecordset();
