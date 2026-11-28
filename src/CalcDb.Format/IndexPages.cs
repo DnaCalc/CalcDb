@@ -23,6 +23,14 @@ public readonly ref struct IndexKeyView(ReadOnlySpan<byte> head, ReadOnlySpan<by
 
     public bool StartsWith(ReadOnlySpan<byte> key) => Length >= key.Length && ComparePrefix(key, key.Length) == 0;
 
+    public bool SequenceEqual(ReadOnlySpan<byte> key) => Length == key.Length && ComparePrefix(key, key.Length) == 0;
+
+    public void CopyTo(Span<byte> destination)
+    {
+        Head.CopyTo(destination);
+        Tail.CopyTo(destination[Head.Length..]);
+    }
+
     public byte[] ToArray() => [.. Head, .. Tail];
 }
 

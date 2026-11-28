@@ -127,6 +127,42 @@ public sealed class CursorTests
     }
 
     [Fact]
+    public void Negative_move_past_start_from_EOF_keeps_EOF_set_until_MoveFirst()
+    {
+        // r-def-cursor-dao/mdb-pos-dynaset (#99-120), mdb-pos-snapshot (#99-120), mdb-pos-table (#91-111):
+        // after Move(100) puts the cursor at EOF, Move(-100) sets BOF while keeping EOF true; Move(0) gives
+        // NoCurrentRecord preserving both flags, and MoveFirst() clears EOF and lands on row 1.
+        var p = new PositionState<int>(new ListSource(8), forwardOnly: false);
+        Assert.Equal(MoveOutcome.ReachedBoundary, p.Move(100));
+        Assert.True(!p.Bof && p.Eof);
+
+        Assert.Equal(MoveOutcome.ReachedBoundary, p.Move(-100));
+        Assert.Equal(PositionTag.BeforeAndAfter, p.Tag);
+        Assert.True(p.Bof && p.Eof);
+        Assert.Null(p.Current);
+
+        Assert.Equal(MoveOutcome.NoCurrentRecord, p.Move(0));
+        Assert.True(p.Bof && p.Eof);
+        Assert.Equal(MoveOutcome.NotModelled, p.MoveNext());
+        Assert.Equal(MoveOutcome.NotModelled, p.MovePrevious());
+        Assert.Equal(MoveOutcome.NotModelled, p.Move(1));
+        Assert.Equal(MoveOutcome.NotModelled, p.Move(-1));
+
+        Assert.Equal(MoveOutcome.Moved, p.MoveFirst());
+        Assert.Equal((PositionTag.At, 0, false, false), (p.Tag, p.Current!.Value, p.Bof, p.Eof));
+
+        // r-cursor-1/pos-moves-* (#132): Move(-100) starting on a live row sets BOF without setting EOF.
+        Assert.Equal(MoveOutcome.Moved, p.Move(2));
+        Assert.Equal(MoveOutcome.ReachedBoundary, p.Move(-100));
+        Assert.Equal((PositionTag.Before, true, false), (p.Tag, p.Bof, p.Eof));
+
+        // Stepping backwards by 1 from EOF lands on the last row without BeforeAndAfter.
+        Assert.Equal(MoveOutcome.ReachedBoundary, p.Move(100));
+        Assert.Equal(MoveOutcome.Moved, p.Move(-1));
+        Assert.Equal((PositionTag.At, 7, false, false), (p.Tag, p.Current!.Value, p.Bof, p.Eof));
+    }
+
+    [Fact]
     public void An_empty_set_and_forward_only_follow_their_subsets()
     {
         var empty = new PositionState<int>(new ListSource(0), forwardOnly: false);

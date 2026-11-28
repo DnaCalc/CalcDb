@@ -1427,6 +1427,10 @@ public sealed class EditFrame : IDisposable
             _workspace.AppendDeferredCloseEdits(deferWriter.File, countsCommit.Change.Edits);
         }
         Clear();
+        if (mode == EditMode.Edit && _cursor is IMutableCursor updatedCursor)
+        {
+            updatedCursor.OnRowUpdated();
+        }
         int? insertedOrdinal = null;
         if (mode == EditMode.AddNew && _workspace.Depth <= 1 && accepted.Open == MutationOpen.None && change.Inserted is { } insertedRow && _cursor is IMutableCursor mutable)
         {

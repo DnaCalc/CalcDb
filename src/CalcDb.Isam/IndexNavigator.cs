@@ -216,6 +216,56 @@ public sealed class IndexNavigator
     /// <summary>The stored user-key bytes of the entry at a position, copied (for checks against the encoder: R-SORT-3), or null.</summary>
     public byte[]? KeyBytes(IndexPosition at) => Page(at.Leaf) is { } p ? p.Entry(at.Ordinal).Key.ToArray() : null;
 
+    /// <summary>Copy the stored user-key bytes at <paramref name="at"/> into a reusable buffer without steady-state allocation.</summary>
+    public bool TryCopyKeyBytes(IndexPosition at, ref byte[] buffer, out int length)
+    {
+        if (Page(at.Leaf) is not { } p || at.Ordinal < 0 || at.Ordinal >= p.Count)
+        {
+            length = 0;
+            return false;
+        }
+        IndexKeyView key = p.Entry(at.Ordinal).Key;
+        length = key.Length;
+        if (buffer.Length < length)
+        {
+            buffer = new byte[length];
+        }
+        key.CopyTo(buffer);
+        return true;
+    }
+
+    /// <summary>Whether the entry at <paramref name="at"/> still carries exact key bytes <paramref name="key"/>.</summary>
+    public bool KeyEquals(IndexPosition at, ReadOnlySpan<byte> key) =>
+        Page(at.Leaf) is { } p && at.Ordinal >= 0 && at.Ordinal < p.Count && p.Entry(at.Ordinal).Key.SequenceEqual(key);
+
+    /// <summary>
+    /// First entry after a position whose row was deleted or whose key changed (r-def-cursor-dao/delete-by-other-cursor-current-row,
+    /// r-cursor-1/id-key-change): keeps duplicate-key ordinal order when a duplicate of <paramref name="oldKey"/> shifted into
+    /// <paramref name="oldPos"/>, otherwise seeks strictly past <paramref name="oldKey"/>.
+    /// </summary>
+    public IndexPosition? NextAfterMovedOrDeleted(IndexPosition oldPos, ReadOnlySpan<byte> oldKey)
+    {
+        if (AtOrAfter(oldPos) is { } shifted && KeyEquals(shifted, oldKey))
+        {
+            return shifted;
+        }
+        return LowerBound(KeyBound.After(oldKey));
+    }
+
+    /// <summary>
+    /// Last entry before a position whose row was deleted or whose key changed (r-def-cursor-dao/delete-by-other-cursor-current-row,
+    /// r-cursor-1/id-key-change): keeps duplicate-key ordinal order when a duplicate of <paramref name="oldKey"/> precedes
+    /// <paramref name="oldPos"/>, otherwise seeks strictly before <paramref name="oldKey"/>.
+    /// </summary>
+    public IndexPosition? PreviousBeforeMovedOrDeleted(IndexPosition oldPos, ReadOnlySpan<byte> oldKey)
+    {
+        if (BeforeDeleted(oldPos) is { } shifted && KeyEquals(shifted, oldKey))
+        {
+            return shifted;
+        }
+        return Before(LowerBound(KeyBound.Low(oldKey)));
+    }
+
     /// <summary>
     /// The entry naming this row, by walking the leaves in order (used when the current row moves to another index or a
     /// bookmark is assigned). Linear in the index size: a key-directed find needs every column's encoder, Text included.

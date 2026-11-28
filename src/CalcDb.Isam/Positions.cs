@@ -20,6 +20,14 @@ public interface IOrderedSource<T> where T : struct
 public enum PositionTag
 {
     Before,
+
+    /// <summary>
+    /// After a negative relative <see cref="PositionState{T}.Move"/> starting from <see cref="After"/> stepped past the
+    /// first row (r-def-cursor-dao/mdb-pos-dynaset, mdb-pos-snapshot, mdb-pos-table): both BOF and EOF are true, there
+    /// is no current row (Move 0 gives NoCurrentRecord keeping both flags), and MoveFirst lands on row 1.
+    /// </summary>
+    BeforeAndAfter,
+
     At,
     After,
     Empty,
@@ -137,9 +145,9 @@ public sealed class PositionState<T> where T : struct
     /// <summary>The occurrence held when a sibling deleted the current row (<see cref="PositionTag.DeletedBySibling"/>), or null.</summary>
     public T? DeletedBySiblingAnchor => Tag == PositionTag.DeletedBySibling ? _deletedAnchor : null;
 
-    public bool Bof => Tag is PositionTag.Before or PositionTag.Empty or PositionTag.CloneRequeried || (IsSeekMiss && _missBof);
+    public bool Bof => Tag is PositionTag.Before or PositionTag.BeforeAndAfter or PositionTag.Empty or PositionTag.CloneRequeried || (IsSeekMiss && _missBof);
 
-    public bool Eof => Tag is PositionTag.After or PositionTag.Empty or PositionTag.CloneRequeried || (IsSeekMiss && _missEof);
+    public bool Eof => Tag is PositionTag.After or PositionTag.BeforeAndAfter or PositionTag.Empty or PositionTag.CloneRequeried || (IsSeekMiss && _missEof);
 
     private bool IsSeekMiss => Tag is PositionTag.SeekMissBefore or PositionTag.SeekMissAfter;
 
@@ -407,7 +415,7 @@ public sealed class PositionState<T> where T : struct
         {
             return MoveOutcome.NoCurrentRecord;
         }
-        if (Tag is PositionTag.BookmarkInvalid or PositionTag.RolledBackNoCurrent)
+        if (Tag is PositionTag.BookmarkInvalid or PositionTag.RolledBackNoCurrent or PositionTag.BeforeAndAfter)
         {
             return MoveOutcome.NotModelled;
         }
@@ -434,7 +442,7 @@ public sealed class PositionState<T> where T : struct
         {
             return MoveOutcome.NoCurrentRecord;
         }
-        if (Tag is PositionTag.Requeried or PositionTag.BookmarkInvalid or PositionTag.RolledBackNoCurrent)
+        if (Tag is PositionTag.Requeried or PositionTag.BookmarkInvalid or PositionTag.RolledBackNoCurrent or PositionTag.BeforeAndAfter)
         {
             return MoveOutcome.NotModelled;
         }
@@ -471,10 +479,11 @@ public sealed class PositionState<T> where T : struct
             }
             return MoveOutcome.NoCurrentRecord;
         }
-        if (Tag is PositionTag.BookmarkInvalid or PositionTag.RolledBackNoCurrent || (Tag == PositionTag.Requeried && rows < 0))
+        if (Tag is PositionTag.BookmarkInvalid or PositionTag.RolledBackNoCurrent or PositionTag.BeforeAndAfter || (Tag == PositionTag.Requeried && rows < 0))
         {
             return MoveOutcome.NotModelled;
         }
+        bool startedAfter = Tag == PositionTag.After;
         NoMatch = false;
         bool forward = rows > 0;
         ulong distance = forward ? (ulong)rows : (ulong)(-(rows + 1)) + 1;
@@ -483,6 +492,10 @@ public sealed class PositionState<T> where T : struct
             MoveOutcome step = forward ? MoveNext() : MovePrevious();
             if (step != MoveOutcome.Moved)
             {
+                if (step == MoveOutcome.ReachedBoundary && !forward && startedAfter)
+                {
+                    Tag = PositionTag.BeforeAndAfter;
+                }
                 return step == MoveOutcome.ReachedBoundary ? MoveOutcome.ReachedBoundary : step;
             }
         }

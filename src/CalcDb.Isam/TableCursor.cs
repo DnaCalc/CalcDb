@@ -122,6 +122,9 @@ public interface IMutableCursor
 
     /// <summary>A new row was inserted and published; returns its keyset ordinal on a populated cursor when appended, else null.</summary>
     int? OnRowInserted(RowId row);
+
+    /// <summary>The current row was updated by this cursor (II-07 §16: stays current at its new index key).</summary>
+    void OnRowUpdated() { }
 }
 
 /// <summary>
@@ -663,8 +666,11 @@ public sealed class TableCursor : IRecordCursor, IRowPositioned, IMutableCursor
         return IndexRefusal.None;
     }
 
-    private static TableOccurrence? Locate(IndexNavigator? navigator, RowId root) =>
-        navigator is null ? new TableOccurrence(root, null) : navigator.Find(root) is { } entry ? new TableOccurrence(root, entry) : null;
+    private TableOccurrence? Locate(IndexNavigator? navigator, RowId root) =>
+        navigator is null ? new TableOccurrence(root, null) : navigator.Find(root) is { } entry ? CaptureOccurrence(entry) : null;
+
+    private TableOccurrence CaptureOccurrence(IndexPosition hit) =>
+        _order is IndexOrder indexOrder ? indexOrder.Capture(hit) : new TableOccurrence(hit.Row, hit);
 
     /// <summary>The column of the current index's key field <paramref name="i"/>, or null when the table has none.</summary>
     public ColumnDescriptor? KeyColumn(int i) => _keyColumns[i];
@@ -774,7 +780,7 @@ public sealed class TableCursor : IRecordCursor, IRowPositioned, IMutableCursor
         _row.Unbind();
         if (landing is { } hit)
         {
-            _position.SeekFound(new TableOccurrence(hit.Row, hit));
+            _position.SeekFound(CaptureOccurrence(hit));
             found = true;
         }
         else
@@ -868,7 +874,7 @@ public sealed class TableCursor : IRecordCursor, IRowPositioned, IMutableCursor
             {
                 p = index.Next(at);
             }
-            landing = p is { } hit ? new TableOccurrence(hit.Row, hit) : null;
+            landing = p is { } hit ? CaptureOccurrence(hit) : null;
         }
         else
         {
@@ -922,6 +928,14 @@ public sealed class TableCursor : IRecordCursor, IRowPositioned, IMutableCursor
 
     public int? OnRowInserted(RowId row) => null;
 
+    public void OnRowUpdated()
+    {
+        if (_position.Current is { } at && _index is { } index && _order is IndexOrder && Locate(index, at.Root) is { } relocated)
+        {
+            _position.Seek(relocated);
+        }
+    }
+
     public void Dispose()
     {
         _row.Dispose();
@@ -937,23 +951,89 @@ public sealed class TableCursor : IRecordCursor, IRowPositioned, IMutableCursor
     }
 
     /// <summary>
-    /// Index entry order as table occurrences. A move starts from the current entry revalidated: a publication can have
-    /// moved the row's entry within its leaf (W-05/same-width-mutation; the edited row stays current and the move goes
-    /// from its new place).
+    /// Index entry order as table occurrences. A move starts from the current entry revalidated when its row still sits at
+    /// the same key (W-05/same-width-mutation); when another cursor deleted the row (r-def-cursor-dao/delete-by-other-cursor-current-row)
+    /// or changed its key (r-cursor-1/id-key-change), movement continues from the entry's prior key place.
     /// </summary>
     private sealed class IndexOrder(IndexNavigator index) : IOrderedSource<TableOccurrence>
     {
-        public TableOccurrence? Next(TableOccurrence? after) =>
-            (after?.Entry is { } e ? index.Next(index.Revalidate(e) ?? e) : index.First()) is { } p ? new TableOccurrence(p.Row, p) : null;
+        private byte[] _currentKey = [];
+        private int _currentKeyLen;
+        private bool _hasCurrentKey;
 
-        public TableOccurrence? Previous(TableOccurrence? before) =>
-            (before?.Entry is { } e ? index.Previous(index.Revalidate(e) ?? e) : index.Last()) is { } p ? new TableOccurrence(p.Row, p) : null;
+        public TableOccurrence Capture(IndexPosition position)
+        {
+            _hasCurrentKey = index.TryCopyKeyBytes(position, ref _currentKey, out _currentKeyLen);
+            return new TableOccurrence(position.Row, position);
+        }
+
+        private TableOccurrence? Finish(IndexPosition? position)
+        {
+            if (position is { } p)
+            {
+                return Capture(p);
+            }
+            _hasCurrentKey = false;
+            return null;
+        }
+
+        public TableOccurrence? Next(TableOccurrence? after)
+        {
+            IndexPosition? p;
+            if (after?.Entry is { } e)
+            {
+                IndexPosition? cur = index.Revalidate(e);
+                if (cur is { } r && (!_hasCurrentKey || index.KeyEquals(r, _currentKey.AsSpan(0, _currentKeyLen))))
+                {
+                    p = index.Next(r);
+                }
+                else
+                {
+                    p = _hasCurrentKey
+                        ? index.NextAfterMovedOrDeleted(e, _currentKey.AsSpan(0, _currentKeyLen))
+                        : index.AtOrAfter(e);
+                }
+            }
+            else
+            {
+                p = index.First();
+            }
+            return Finish(p);
+        }
+
+        public TableOccurrence? Previous(TableOccurrence? before)
+        {
+            IndexPosition? p;
+            if (before?.Entry is { } e)
+            {
+                IndexPosition? cur = index.Revalidate(e);
+                if (cur is { } r && (!_hasCurrentKey || index.KeyEquals(r, _currentKey.AsSpan(0, _currentKeyLen))))
+                {
+                    p = index.Previous(r);
+                }
+                else
+                {
+                    p = _hasCurrentKey
+                        ? index.PreviousBeforeMovedOrDeleted(e, _currentKey.AsSpan(0, _currentKeyLen))
+                        : index.BeforeDeleted(e);
+                }
+            }
+            else
+            {
+                p = index.Last();
+            }
+            return Finish(p);
+        }
 
         public TableOccurrence? NextAfterDeleted(TableOccurrence deleted) =>
-            (deleted.Entry is { } e ? index.AtOrAfter(e) : index.First()) is { } p ? new TableOccurrence(p.Row, p) : null;
+            Finish(deleted.Entry is { } e
+                ? (_hasCurrentKey ? index.NextAfterMovedOrDeleted(e, _currentKey.AsSpan(0, _currentKeyLen)) : index.AtOrAfter(e))
+                : index.First());
 
         public TableOccurrence? PreviousBeforeDeleted(TableOccurrence deleted) =>
-            (deleted.Entry is { } e ? index.Previous(e) : index.Last()) is { } p ? new TableOccurrence(p.Row, p) : null;
+            Finish(deleted.Entry is { } e
+                ? (_hasCurrentKey ? index.PreviousBeforeMovedOrDeleted(e, _currentKey.AsSpan(0, _currentKeyLen)) : index.BeforeDeleted(e))
+                : index.Last());
     }
 }
 
