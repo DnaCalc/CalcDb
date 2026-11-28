@@ -119,6 +119,13 @@ internal static class DaoErrors
     /// <summary>3366 (r-q46-dao-ddl-multi/rel-errors-*, r-dao-1-err-1/draft-index-relation: Relations.Append with 0 fields).</summary>
     public const string RelationNoFields = "Cannot append a relation with no fields defined.";
 
+    /// <summary>3211 (r-def-cursor-dao/err-dup-field-append #28, err-dup-index-append #36): TableDef Fields/Indexes Append on a table with an open Recordset.</summary>
+    public static string TableInUse(string name) =>
+        $"The database engine could not lock table '{name}' because it is already in use by another person or process.";
+
+    /// <summary>3702 (r-fix-wire-ado/chunk-memo-text-append-fieldsize #25, #32, #47): odd-byte BSTR passed to Memo AppendChunk.</summary>
+    public const string UnicodeWidthEvenBytes = "The width of a Unicode text column must be an even number of bytes.";
+
     /// <summary>3368 (r-q47-bigint-expr-edges/rel-mismatch-3368-*: enforced Relations.Append with mismatched field types).</summary>
     public const string RelationTypeMismatch = "Relationship must be on the same number of fields with the same data types.";
 

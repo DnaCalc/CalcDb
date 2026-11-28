@@ -319,12 +319,14 @@ public sealed unsafe class AdoExecuteAndRecordsetTests
             Assert.Equal(true, Call(rsDirect, "Supports", 4194304).Value);  // adSeek
             Assert.Equal(false, Call(rsDirect, "Supports", 262144).Value); // adNotify cleared on TableDirect
             // Held-table DDL while table K is held by an open server cursor:
-            // - ALTER TABLE K ADD COLUMN X TEXT(10) (the statement in r-fix-wire-ado/fields-refresh-ddl-keyset-only #27-35,
-            //   r-ado-1b/fields-refresh-ddl #29-37) is currently refused by CalcDb.Sql's DdlBinder (NotModelled.DdlTableInUsePrecedence).
+            // - ALTER TABLE K ADD COLUMN X TEXT(10) fails ACE 3211 -> 0x80040E14 (r-ado-1b/fields-refresh-ddl #28..#37).
             // - DROP TABLE K on a held table has no retained ADO 3211 record (only DAO records exist), so ADO refuses by name.
             Outcome alterLocked = Call(cn, "Execute", "ALTER TABLE K ADD COLUMN X TEXT(10)", Missing, 129);
             Assert.NotNull(alterLocked.Failure);
-            Assert.Equal(HResults.E_NOTIMPL, alterLocked.Failure.Value.Scode);
+            Assert.Equal(unchecked((int)0x80040E14), alterLocked.Failure.Value.Scode);
+            Assert.Equal("Microsoft Access Database Engine", alterLocked.Failure.Value.Source);
+            Assert.Equal(5003009u, alterLocked.Failure.Value.HelpContext);
+            Assert.Equal(IidCommand, alterLocked.Failure.Value.InfoGuid);
             Outcome dropLocked = Call(cn, "Execute", "DROP TABLE K", Missing, 1);
             Assert.NotNull(dropLocked.Failure);
             Assert.Equal(HResults.E_NOTIMPL, dropLocked.Failure.Value.Scode);

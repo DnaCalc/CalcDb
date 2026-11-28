@@ -337,6 +337,18 @@ internal static class AdoSqlErrors
             "",
             1029));
 
+    /// <summary>Client static read-only Resync(adAffectAll, adResyncAllValues) fails 0x80004005 (Microsoft Cursor Engine, NativeError 1006, SQLState "", helpContext 0, IErrorInfo guid = Guid.Empty; r-ado-1b/rs-cache-same-connection #68).</summary>
+    public static MappedProviderError InsufficientBaseTableInfo() => new(
+        AdoObject.CursorEngineFailure(AdoObject.HResultFail, "Insufficient base table information for updating or refreshing."),
+        new AdoErrorEntry(
+            AdoObject.HResultFail,
+            AdoObject.CursorEngineSource,
+            "Insufficient base table information for updating or refreshing.",
+            "",
+            0,
+            "",
+            1006));
+
     /// <summary>Duplicate PK/unique index during client UpdateBatch / (3,3,3) immediate flush (3022 on ICommand; r-q48-ado-batch-edits/conflict-unique-dup-and-null-accdb, r-ado-1b/batch-conflict-middle).</summary>
     public static MappedProviderError DuplicateOnCommand() => Make(
         AdoObject.HResultFail,
@@ -550,7 +562,7 @@ internal static class AdoSqlErrors
             // r-fix-wire-ado/fields-refresh-ddl-keyset-only #27-35, r-ado-1b/fields-refresh-ddl #29-37:
             // ADO 3211 error tuple is recorded only for ALTER TABLE ADD COLUMN on a held table; DROP TABLE and other DDL
             // shapes have DAO records only (no ADO Errors SQLState/NativeError record) and refuse by name.
-            3211 when sql is not null && DdlParser.Parse(sql, out _, allowAdoCheck: true) is AlterTableStatement { Action: AddColumnsAlterAction } =>
+            3211 when !isSavedQuery && isConnectionExecuteAction && sql is not null && DdlParser.Parse(sql, out _, allowAdoCheck: true) is AlterTableStatement { Action: AddColumnsAlterAction } =>
                 Make(AdoObject.HResultErrorsInCommand, failure.Message, 5003009, "3211", -534316312, AdoObject.IidCommand),
             3211 => FailUnmodelledDetail(
                 "ADO OLE DB error detail for ACE error 3211 on this DDL statement is not recorded (only ALTER TABLE ADD COLUMN is recorded in r-fix-wire-ado/fields-refresh-ddl-keyset-only and r-ado-1b/fields-refresh-ddl)",

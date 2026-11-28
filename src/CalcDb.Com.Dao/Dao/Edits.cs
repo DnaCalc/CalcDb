@@ -1,7 +1,10 @@
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 using CalcDb.Com.Com;
+using CalcDb.Format;
 using CalcDb.Foundation;
+using CalcDb.Isam;
 using CalcDb.Isam.Edit;
 using CalcDb.Isam.Transactions;
 using CalcDb.Storage;
@@ -239,4 +242,230 @@ internal sealed class UnpublishedChanges
     /// <summary>Record a table's counter with the stored value it started from.</summary>
     public void Register(string file, string table, AutoNumberCounter counter, uint stored, PageCache? cache = null, uint tableDefPage = 0) =>
         _counters.Add(new CounterEntry(file, table, counter, stored, cache, tableDefPage));
+}
+
+/// <summary>
+/// Shared long-value (<c>FieldSize</c>, <c>GetChunk</c>, <c>AppendChunk</c>) and <c>VT_BSTR</c> to <c>BINARY</c> helpers
+/// across table/dynaset <see cref="FieldObject"/> and query <see cref="SelectFieldObject"/>
+/// (r-def-cursor-dao/chunk-append-memo-text, chunk-binary-roundtrip, bulk-getrows-memo-binary,
+/// r-fix-wire-ado/chunk-memo-text-append-fieldsize, chunk-ole-append-fieldsize, r-q2-wire/byref-dao-put-values).
+/// </summary>
+internal static unsafe class DaoLongValueChunks
+{
+    public static uint BstrByteLength(nint bstr) => bstr == 0 ? 0u : *(uint*)(bstr - 4);
+
+    public static bool TryWrapBinaryBstr(ColumnDescriptor column, in NativeVariant incoming, out OwnedVariant? wrapped)
+    {
+        wrapped = null;
+        if (column.TypeCode != NativeTypes.Binary || incoming.Type != VarType.Bstr || incoming.Pointer == 0)
+        {
+            return false;
+        }
+        uint byteLen = BstrByteLength(incoming.Pointer);
+        if (byteLen == 0 || column.Length <= 0 || byteLen > (uint)column.Length)
+        {
+            return false;
+        }
+        nint array = SafeArrays.Create(VarType.UI1, (0, (int)byteLen));
+        new ReadOnlySpan<byte>((byte*)incoming.Pointer, (int)byteLen)
+            .CopyTo(new Span<byte>(SafeArrays.ElementPointer(array, 0), (int)byteLen));
+        wrapped = OwnedVariant.TakeArray(array, VarType.UI1);
+        return true;
+    }
+
+    public static CallResult FieldSizeFromBuffered(int daoType, NativeValue value, string columnName) => value.Kind switch
+    {
+        NativeKind.Null => CallResult.OfScalar(VarType.I4, 0),
+        NativeKind.Text when daoType == 12 => CallResult.OfScalar(VarType.I4, (value.Text?.Length ?? 0) * 2),
+        NativeKind.LongBinary when daoType == 11 => CallResult.OfScalar(VarType.I4, value.Bytes?.Length ?? 0),
+        _ => CallResult.Fail(Failure.NotModelled("NotModelled.FieldSizeValue", $"Field.FieldSize of a {value.Kind} value of type {daoType} ({columnName}: not recorded)")),
+    };
+
+    public static CallResult GetChunkFromBuffered(int daoType, NativeValue value, int offset, int bytes, string columnName)
+    {
+        if (offset < 0 || bytes < 0)
+        {
+            return CallResult.Fail(Failure.Dao(3001, "DAO.Field", DaoErrors.InvalidArgument));
+        }
+        switch (value.Kind)
+        {
+            case NativeKind.Null:
+                return CallResult.OfScalar(VarType.Null, 0);
+            case NativeKind.Text when daoType == 12:
+            {
+                string text = value.Text ?? "";
+                if (offset >= text.Length || bytes == 0)
+                {
+                    return CallResult.Of(OwnedVariant.FromText(""));
+                }
+                int take = Math.Min(bytes, text.Length - offset);
+                return CallResult.OfOwnedBstr(Bstrs.FromUnits(take, (text, offset), static (dest, s) => s.text.AsSpan(s.offset, dest.Length).CopyTo(dest)));
+            }
+            case NativeKind.LongBinary when daoType == 11:
+            {
+                byte[] raw = value.Bytes ?? [];
+                if (bytes == 0 || offset >= raw.Length)
+                {
+                    return CallResult.Of(OwnedVariant.TakeArray(0, VarType.UI1));
+                }
+                int take = Math.Min(bytes, raw.Length - offset);
+                nint slice = SafeArrays.Create(VarType.UI1, (0, take));
+                raw.AsSpan(offset, take).CopyTo(new Span<byte>(SafeArrays.ElementPointer(slice, 0), take));
+                return CallResult.Of(OwnedVariant.TakeArray(slice, VarType.UI1));
+            }
+            default:
+                return CallResult.Fail(Failure.NotModelled("NotModelled.GetChunkValue", $"Field.GetChunk of a {value.Kind} value of type {daoType} ({columnName}: not recorded)"));
+        }
+    }
+
+    public static CallResult AppendChunk(
+        EditFrame frame,
+        ColumnDescriptor column,
+        int daoType,
+        bool chunkStarted,
+        Action markChunkStarted,
+        nint arg,
+        Func<int, string, CallResult> failField,
+        ExtendedDateTimeWriteMode dt2Mode)
+    {
+        if (daoType is not (11 or 12))
+        {
+            if (daoType is 1 or 2 or 3 or 4 or 5 or 6 or 7 or 8 or 9 or 10 or 15 or 16 or 20)
+            {
+                return failField(3259, DaoErrors.InvalidFieldType);
+            }
+            return CallResult.Fail(Failure.NotModelled("NotModelled.AppendChunkNonLvType", $"Field.AppendChunk of non-LV type {daoType} ({column.Name}: not recorded)"));
+        }
+        if (frame.Mode == EditMode.None)
+        {
+            return failField(MutationError.NoEdit, "Update or CancelUpdate without AddNew or Edit.");
+        }
+        if (arg == 0)
+        {
+            return failField(3001, DaoErrors.InvalidArgument);
+        }
+        NativeVariant incoming = ByRefValues.Dereference(Args.Cell(arg));
+        VarType vt = incoming.Type;
+        if (vt is VarType.Null or VarType.Empty or VarType.Error or VarType.I4 or VarType.R8 or VarType.Bool)
+        {
+            return failField(3001, DaoErrors.InvalidArgument);
+        }
+        if (daoType == 12)
+        {
+            if (vt == (VarType.Array | VarType.UI1))
+            {
+                return failField(3421, DaoErrors.ConversionError);
+            }
+            if (vt != VarType.Bstr)
+            {
+                return CallResult.Fail(Failure.NotModelled("NotModelled.AppendChunkArgType", $"Field.AppendChunk Memo with {vt} argument (not recorded)"));
+            }
+            uint byteLen = BstrByteLength(incoming.Pointer);
+            if ((byteLen & 1) != 0)
+            {
+                if (!chunkStarted)
+                {
+                    nint emptyBstr = Marshal.StringToBSTR("");
+                    try
+                    {
+                        var emptyVar = new NativeVariant { Vt = (ushort)VarType.Bstr, Pointer = emptyBstr };
+                        if (frame.Assign(column, emptyVar, dt2Mode, allowEmptyBstrBinaryNull: true, allowDaoConversions: true).Succeeded)
+                        {
+                            markChunkStarted();
+                        }
+                    }
+                    finally
+                    {
+                        Marshal.FreeBSTR(emptyBstr);
+                    }
+                }
+                return failField(3702, DaoErrors.UnicodeWidthEvenBytes);
+            }
+            if (byteLen == 0)
+            {
+                return CallResult.Nothing;
+            }
+            string chunk = new(new ReadOnlySpan<char>((char*)incoming.Pointer, (int)(byteLen / 2)));
+            if (chunkStarted && frame.Read(column) is { Succeeded: true, Value: { Kind: NativeKind.Text, Text: { } prev } })
+            {
+                chunk = prev + chunk;
+            }
+            nint bstr = Bstrs.FromUnits(chunk.Length, chunk, static (dest, s) => s.AsSpan().CopyTo(dest));
+            try
+            {
+                var v = new NativeVariant { Vt = (ushort)VarType.Bstr, Pointer = bstr };
+                EditOutcome outcome = frame.Assign(column, v, dt2Mode, allowEmptyBstrBinaryNull: true, allowDaoConversions: true);
+                if (outcome.Succeeded)
+                {
+                    markChunkStarted();
+                }
+                return EditPublication.Of(outcome);
+            }
+            finally
+            {
+                Marshal.FreeBSTR(bstr);
+            }
+        }
+        else
+        {
+            byte[]? appended;
+            if (vt == VarType.Bstr)
+            {
+                uint byteLen = BstrByteLength(incoming.Pointer);
+                appended = byteLen == 0 ? [] : new ReadOnlySpan<byte>((byte*)incoming.Pointer, (int)byteLen).ToArray();
+            }
+            else if (vt == (VarType.Array | VarType.UI1))
+            {
+                if (incoming.Pointer == 0)
+                {
+                    return CallResult.Fail(Failure.NotModelled("NotModelled.AppendChunkArgType", "Field.AppendChunk OLE with null SAFEARRAY (not recorded)"));
+                }
+                (int Lower, int Count)[] shape = SafeArrays.Shape(incoming.Pointer);
+                if (shape.Length != 1)
+                {
+                    return CallResult.Fail(Failure.NotModelled("NotModelled.AppendChunkArgType", $"Field.AppendChunk OLE with {shape.Length}D SAFEARRAY (not recorded)"));
+                }
+                int count = shape[0].Count;
+                appended = count == 0 ? [] : new ReadOnlySpan<byte>(SafeArrays.ElementPointer(incoming.Pointer, shape[0].Lower), count).ToArray();
+            }
+            else
+            {
+                return CallResult.Fail(Failure.NotModelled("NotModelled.AppendChunkArgType", $"Field.AppendChunk OLE with {vt} argument (not recorded)"));
+            }
+            if (appended.Length == 0)
+            {
+                if (chunkStarted)
+                {
+                    return CallResult.Nothing;
+                }
+                using OwnedVariant emptyArr = OwnedVariant.TakeArray(SafeArrays.Create(VarType.UI1, (0, 0)), VarType.UI1);
+                EditOutcome emptyOutcome = frame.Assign(column, *emptyArr.Pointer, dt2Mode, allowEmptyBstrBinaryNull: true, allowDaoConversions: true);
+                if (emptyOutcome.Succeeded)
+                {
+                    markChunkStarted();
+                }
+                return EditPublication.Of(emptyOutcome);
+            }
+            byte[] combined;
+            if (chunkStarted && frame.Read(column) is { Succeeded: true, Value: { Kind: NativeKind.LongBinary, Bytes: { Length: > 0 } prevBytes } })
+            {
+                combined = new byte[prevBytes.Length + appended.Length];
+                prevBytes.CopyTo(combined, 0);
+                appended.CopyTo(combined, prevBytes.Length);
+            }
+            else
+            {
+                combined = appended;
+            }
+            nint array = SafeArrays.Create(VarType.UI1, (0, combined.Length));
+            combined.CopyTo(new Span<byte>(SafeArrays.ElementPointer(array, 0), combined.Length));
+            using OwnedVariant owned = OwnedVariant.TakeArray(array, VarType.UI1);
+            EditOutcome outcome = frame.Assign(column, *owned.Pointer, dt2Mode, allowEmptyBstrBinaryNull: true, allowDaoConversions: true);
+            if (outcome.Succeeded)
+            {
+                markChunkStarted();
+            }
+            return EditPublication.Of(outcome);
+        }
+    }
 }

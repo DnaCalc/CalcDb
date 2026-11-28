@@ -255,6 +255,12 @@ internal abstract class AdoObject : DispatchObject
     /// </summary>
     protected override bool WritesArgErrorOnConversionException => false;
 
+    /// <summary>
+    /// ADO fails repeated named arguments or positional+named collisions with <c>DISP_E_PARAMNOTFOUND</c>
+    /// (0x80020004) without EXCEPINFO or IErrorInfo (r-q2-ado-misc/ado-named-arguments #36 Open, #54 CreateParameter).
+    /// </summary>
+    protected override int? RepeatedNamedArgumentHResult(MemberDecl member) => HResults.DISP_E_PARAMNOTFOUND;
+
     public CallResult Fail(AdoError error, bool publishesErrorInfo = true) =>
         CallResult.Fail(AdoFailure(error, Source, Declaration.Iid, publishesErrorInfo));
 

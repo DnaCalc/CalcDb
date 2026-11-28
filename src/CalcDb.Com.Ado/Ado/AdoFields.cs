@@ -116,6 +116,12 @@ internal sealed record AdoFieldDescriptor(
             {
                 return decimalDesc;
             }
+            if (expressionRoot is { Kind: SyntaxKind.Call, Items.Count: 0 }
+                && string.Equals(expressionRoot.Text, "Now", StringComparison.OrdinalIgnoreCase))
+            {
+                // r-ado-1b/fields-meta-expressions #19[17], #36[17]: Now() reports adDate (7), DefinedSize=8, Prec=255, Scale=255, Attr=114.
+                return new(col.Name, 7, 8, 255, 255, AttrExprFixed, false, null, -1);
+            }
             return Refused(
                 col.Name,
                 typeOpen ?? "NotModelled.ExpressionFieldType",

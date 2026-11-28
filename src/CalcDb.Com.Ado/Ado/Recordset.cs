@@ -1339,6 +1339,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
     private bool _eof;
     private bool _bothBofEofAfterForwardMove;
     private bool _suspendedAfterForwardMoveLast;
+    private bool _serverStaticBookmarkFailedNoRow;
     private bool _keysetTruncatedAfterRollback;
     private int _position; // 0-based index into current view when !_bof && !_eof
     private int _posBeforeAddNew;
@@ -1558,9 +1559,14 @@ internal sealed unsafe class RecordsetObject : AdoObject
         _chunkOffset = 0;
         _chunkConsumedOrdinals?.Clear();
         _serverValueReadOrdinals?.Clear();
+        _serverStaticBookmarkFailedNoRow = false;
     }
 
-    private void ResetServerValueReadState() => _serverValueReadOrdinals?.Clear();
+    private void ResetServerValueReadState()
+    {
+        _serverValueReadOrdinals?.Clear();
+        _serverStaticBookmarkFailedNoRow = false;
+    }
 
     /// <summary>
     /// By-reference scalar arguments (typed VT_BYREF|T and VT_BYREF|VT_VARIANT) behave as by-value on ACCDB for
@@ -3166,9 +3172,50 @@ internal sealed unsafe class RecordsetObject : AdoObject
             return CallResult.Nothing;
         }
 
+        if (IsClientCursor && _rows is MemoryRowSource && _effectiveLockType == 1)
+        {
+            int clientAff = 3;
+            if (!affectMissing)
+            {
+                if (AdoArgs.Int32(args[0]) is not int parsedAff)
+                {
+                    return FailAdo(AdoErrors.ArgumentsWrongType);
+                }
+                clientAff = parsedAff;
+            }
+            int clientRes = 2;
+            if (!resyncMissing)
+            {
+                if (AdoArgs.Int32(args[1]) is not int parsedRes)
+                {
+                    return FailAdo(AdoErrors.ArgumentsWrongType);
+                }
+                clientRes = parsedRes;
+            }
+            if (clientAff is not (1 or 2 or 3) || clientRes is not (1 or 2))
+            {
+                return FailAdo(AdoErrors.ArgumentsWrongType);
+            }
+            if (_activeConnection is null || !_activeConnection.IsOpen)
+            {
+                return FailAdo(AdoErrors.ConnectionCannotBeUsed);
+            }
+            if (clientAff == 3 && clientRes == 2)
+            {
+                if (_events.HasSinks)
+                {
+                    return CallResult.Fail(Failure.NotModelled(
+                        "NotModelled.AdoResyncFailedWithEvents",
+                        "Failed client Recordset.Resync with RecordsetEvents sink is not recorded"));
+                }
+                MappedProviderError err = AdoSqlErrors.InsufficientBaseTableInfo();
+                _activeConnection.ReplaceProviderErrors([err.ErrorEntry]);
+                return CallResult.Fail(err.ComFailure);
+            }
+        }
         if (affectMissing || resyncMissing)
         {
-            return NotImplemented("Recordset.Resync with omitted AffectRecords or ResyncValues arguments on a server cursor (not recorded)");
+            return NotImplemented($"Recordset.Resync with omitted AffectRecords or ResyncValues arguments on a {(IsClientCursor ? "client" : "server")} cursor (not recorded)");
         }
         int? affect = AdoArgs.Int32(args[0]);
         int? resync = AdoArgs.Int32(args[1]);
@@ -4930,9 +4977,15 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return decodeFailure!.Value;
         }
-        // Validate bookmark before mutating any deleted-row state so invalid bookmarks fail atomically.
+        // Validate bookmark before mutating any deleted-row state so invalid bookmarks fail atomically;
+        // on server static cursors an invalid bookmark leaves Field.Value returning VT_EMPTY until repositioned
+        // (r-q2-ado-misc/book-static-exchange #116/#125, #129/#138, #149/#158, #168/#177, #181/#190).
         if (!TryResolveBookmarkViewIndex(bookmarkValue, out int viewIndex, out CallResult? resolveFailure))
         {
+            if (IsServerStaticBookmarkMode)
+            {
+                _serverStaticBookmarkFailedNoRow = true;
+            }
             return resolveFailure!.Value;
         }
         if (_rows is KeysetRowSource)
@@ -7012,6 +7065,10 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             ClearConnectionErrors();
             return field.Fail(AdoErrors.NoCurrentRecord);
+        }
+        if (_serverStaticBookmarkFailedNoRow)
+        {
+            return CallResult.OfScalar(VarType.Empty, 0);
         }
         AdoFieldDescriptor desc = _rows!.Columns[ordinal];
         if (!IsEditingNew && !TrySeekView(_position, out Failure? seekFail))
