@@ -692,3 +692,64 @@ public sealed class ScanSource(ScanNavigator navigator) : IOrderedSource<RowId>,
         return r;
     }
 }
+
+/// <summary>An index traversal as an ordered source of row roots (R-CURSOR-1 CUR-POP: table-opened dynaset order).</summary>
+public sealed class IndexRowSource(IndexNavigator navigator) : IOrderedSource<RowId>, IDisposable
+{
+    private IndexPosition? _last;
+
+    public void Dispose() { }
+
+    /// <summary>The underlying B-tree navigator.</summary>
+    public IndexNavigator Navigator => navigator;
+
+    public TraversalFailure? LastFailure { get; private set; }
+
+    public RowId? Next(RowId? after)
+    {
+        IndexPosition? next;
+        if (after is not { } row)
+        {
+            next = navigator.First();
+        }
+        else if (_last is { } kept && kept.Row == row)
+        {
+            IndexPosition? current = navigator.Revalidate(kept);
+            next = current is { } at
+                ? navigator.Next(at)
+                : navigator.LastFailure is null ? navigator.AtOrAfter(kept) : null;
+        }
+        else
+        {
+            IndexPosition? found = navigator.Find(row);
+            next = found is { } at ? navigator.Next(at) : null;
+        }
+        LastFailure = navigator.LastFailure;
+        _last = next;
+        return next?.Row;
+    }
+
+    public RowId? Previous(RowId? before)
+    {
+        IndexPosition? prev;
+        if (before is not { } row)
+        {
+            prev = navigator.Last();
+        }
+        else if (_last is { } kept && kept.Row == row)
+        {
+            IndexPosition? current = navigator.Revalidate(kept);
+            prev = current is { } at
+                ? navigator.Previous(at)
+                : navigator.LastFailure is null ? navigator.BeforeDeleted(kept) : null;
+        }
+        else
+        {
+            IndexPosition? found = navigator.Find(row);
+            prev = found is { } at ? navigator.Previous(at) : null;
+        }
+        LastFailure = navigator.LastFailure;
+        _last = prev;
+        return prev?.Row;
+    }
+}

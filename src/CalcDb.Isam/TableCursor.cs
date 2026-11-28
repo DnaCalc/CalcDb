@@ -137,12 +137,24 @@ internal sealed class RowBinding : IDisposable
     private readonly FormatDescriptor _d;
     private readonly TableDefinition _table;
     private readonly SourceHold _hold;
+    private SourceHold? _mapHold;
+    private SourceHold? _bitmapHold;
     private RowView? _bound;
     private ulong _boundSerial;
     private ReadView? _boundView;
     private PrivateOverlay? _boundOverlay;
     private ImageId? _boundRoot;
     private ImageId? _boundData;
+    private ImageId? _boundOwnedMap;
+    private uint _boundBitmapPage;
+    private ImageId? _boundBitmap;
+    private uint _ownedCheckPage;
+    private ulong _ownedCheckSerial;
+    private PrivateOverlay? _ownedCheckOverlay;
+    private ImageId? _ownedCheckMapImage;
+    private uint _ownedCheckBitmapPage;
+    private ImageId? _ownedCheckBitmapImage;
+    private bool _ownedCheckResult;
 
     // Where the bound row's Text fields lie once read (D-STRING-1 bounded scratch, task n7mw): one entry per column,
     // allocated once per binding, valid while its generation is the binding's. A repeated read borrows the bytes
@@ -181,8 +193,11 @@ internal sealed class RowBinding : IDisposable
         if (!_source.SameSource(source))
         {
             Unbind();
+            _ownedCheckPage = 0;
             _source = source;
             _hold.Rebind(source);
+            _mapHold?.Rebind(source);
+            _bitmapHold?.Rebind(source);
         }
     }
 
@@ -245,6 +260,18 @@ internal sealed class RowBinding : IDisposable
             _boundOverlay = overlay;
             _boundRoot = null;
             _boundData = null;
+            _boundOwnedMap = null;
+            _boundBitmapPage = 0;
+            _boundBitmap = null;
+            // Live current reads must verify the root page is still owned in OwnedMap (R-CURSOR-1, r-cursor-1b/requery-empty-to-populated
+            // call #50: DeleteEveryRow clears OwnedMap/FreeMap while leaving old data-page slots intact, returning 3167 on stale cursors).
+            // Registered read views (snapshots) intentionally continue reading their view (call #168).
+            if (view is null && !IsPageOwned(root.Page, serial, overlay, out TraversalFailure? ownerFailure))
+            {
+                return ownerFailure is null
+                    ? new FieldResult(default, CursorFailure.DeletedRecord, $"row {root} page {root.Page} is no longer owned")
+                    : new FieldResult(default, CursorFailure.Storage, ownerFailure.Predicate);
+            }
             // Over the current images the bound row borrows the binding's page hold: consecutive rows on one page share
             // one pin (task 6p9q). Under a view the row owns its pin until the next move.
             TraversalFailure? failure;
@@ -259,16 +286,65 @@ internal sealed class RowBinding : IDisposable
             {
                 _boundRoot = _source.CurrentImage(overlay, root.Page);
                 _boundData = _source.CurrentImage(overlay, _bound.Value.Data.Page);
+                if (_table.OwnedMap.Page != 0)
+                {
+                    _boundOwnedMap = _ownedCheckMapImage;
+                    _boundBitmapPage = _ownedCheckBitmapPage;
+                    _boundBitmap = _ownedCheckBitmapImage;
+                }
             }
             CostCounters.Current.RowBinds++;
         }
         return null;
     }
 
-    /// <summary>Whether the bound row's root and data pages are still the overlay's current images.</summary>
+    private bool IsPageOwned(uint page, ulong serial, PrivateOverlay? overlay, out TraversalFailure? failure)
+    {
+        if (_table.OwnedMap.Page == 0)
+        {
+            failure = null;
+            return true;
+        }
+        if (_ownedCheckPage == page
+            && _ownedCheckSerial == serial
+            && ReferenceEquals(_ownedCheckOverlay, overlay)
+            && (overlay is null
+                || (_source.CurrentImage(overlay, _table.OwnedMap.Page) == _ownedCheckMapImage
+                    && (_ownedCheckBitmapPage == 0 || _source.CurrentImage(overlay, _ownedCheckBitmapPage) == _ownedCheckBitmapImage))))
+        {
+            failure = null;
+            return _ownedCheckResult;
+        }
+        bool owned = UsageMaps.ContainsPage(
+            _source,
+            _mapHold ??= new SourceHold(_source),
+            _bitmapHold ??= new SourceHold(_source),
+            _d,
+            _table.OwnedMap,
+            page,
+            out uint bitmapPage,
+            out failure);
+        if (failure is not null)
+        {
+            _ownedCheckPage = 0;
+            return false;
+        }
+        _ownedCheckPage = page;
+        _ownedCheckSerial = serial;
+        _ownedCheckOverlay = overlay;
+        _ownedCheckMapImage = overlay is not null ? _source.CurrentImage(overlay, _table.OwnedMap.Page) : null;
+        _ownedCheckBitmapPage = bitmapPage;
+        _ownedCheckBitmapImage = overlay is not null && bitmapPage != 0 ? _source.CurrentImage(overlay, bitmapPage) : null;
+        _ownedCheckResult = owned;
+        return owned;
+    }
+
+    /// <summary>Whether the bound row's root, data and ownership map pages are still the overlay's current images.</summary>
     private bool BoundImagesCurrent(PrivateOverlay overlay) =>
         _boundRoot is { } r && _source.CurrentImage(overlay, _bound!.Value.Root.Page) == r
-        && _boundData is { } b && _source.CurrentImage(overlay, _bound.Value.Data.Page) == b;
+        && _boundData is { } b && _source.CurrentImage(overlay, _bound.Value.Data.Page) == b
+        && (_table.OwnedMap.Page == 0 || _source.CurrentImage(overlay, _table.OwnedMap.Page) == _boundOwnedMap)
+        && (_boundBitmapPage == 0 || _source.CurrentImage(overlay, _boundBitmapPage) == _boundBitmap);
 
     public void Unbind()
     {
@@ -278,6 +354,9 @@ internal sealed class RowBinding : IDisposable
         _boundOverlay = null;
         _boundRoot = null;
         _boundData = null;
+        _boundOwnedMap = null;
+        _boundBitmapPage = 0;
+        _boundBitmap = null;
         _generation++;
     }
 
@@ -287,6 +366,10 @@ internal sealed class RowBinding : IDisposable
     /// </summary>
     public bool SameRow(RowId root, ReadView view)
     {
+        if (!IsPageOwned(root.Page, _source.Cache.PublishedSerial, _source.Overlay, out TraversalFailure? ownerFailure) || ownerFailure is not null)
+        {
+            return false;
+        }
         using RowView? then = RowResolver.Resolve(view, _d, root, out TraversalFailure? thenFailure);
         using RowView? now = RowResolver.Resolve(_source, _d, root, out TraversalFailure? nowFailure);
         if (then is not { } a || now is not { } b || thenFailure is not null || nowFailure is not null || !a.Body.SequenceEqual(b.Body))
@@ -308,14 +391,20 @@ internal sealed class RowBinding : IDisposable
     public FieldResult[] CopyRow(RowId root)
     {
         var values = new FieldResult[_table.Columns.Count];
-        using RowView? row = RowResolver.Resolve(_source, _d, root, out TraversalFailure? failure);
-        foreach (ColumnDescriptor column in _table.Columns)
+        TraversalFailure? failure = null;
+        RowView? row = IsPageOwned(root.Page, _source.Cache.PublishedSerial, _source.Overlay, out failure)
+            ? RowResolver.Resolve(_source, _d, root, out failure)
+            : null;
+        using (row)
         {
-            values[column.Ordinal] = row is { } bound
-                ? FieldResult.Of(FieldDecoder.Read(bound, _table, column, _source, _d))
-                : failure is null
-                    ? new FieldResult(default, CursorFailure.DeletedRecord, $"row {root} is deleted")
-                    : new FieldResult(default, CursorFailure.Storage, failure.Predicate);
+            foreach (ColumnDescriptor column in _table.Columns)
+            {
+                values[column.Ordinal] = row is { } bound
+                    ? FieldResult.Of(FieldDecoder.Read(bound, _table, column, _source, _d))
+                    : failure is null
+                        ? new FieldResult(default, CursorFailure.DeletedRecord, $"row {root} is deleted")
+                        : new FieldResult(default, CursorFailure.Storage, failure.Predicate);
+            }
         }
         CostCounters.Current.FieldDecodes += values.Length;
         return values;
@@ -326,12 +415,18 @@ internal sealed class RowBinding : IDisposable
     {
         Unbind();
         _hold.Dispose();
+        _mapHold?.Dispose();
+        _bitmapHold?.Dispose();
     }
 
     /// <summary>The live root of this table a bookmark names (CUR-ID: the root locator), or null.</summary>
     public RowId? Validate(ReadOnlySpan<byte> bookmark)
     {
         if (TableBookmark.Decode(bookmark) is not { } root)
+        {
+            return null;
+        }
+        if (!IsPageOwned(root.Page, _source.Cache.PublishedSerial, _source.Overlay, out TraversalFailure? ownerFailure) || ownerFailure is not null)
         {
             return null;
         }
@@ -972,6 +1067,7 @@ internal sealed class PopulationFamily : IDisposable
     private readonly bool _forwardOnly;
     private readonly bool _isSnapshot;
     private readonly bool _appendOnly;
+    private readonly IComparer<string>? _databaseOrder;
     private uint? _bookmarkBase;
     private bool _snapshotRequeried;
     private bool _bookmarksInvalidatedByDelete;
@@ -991,7 +1087,7 @@ internal sealed class PopulationFamily : IDisposable
     private PopulationCursor? _root;
     private bool _disposed;
 
-    public PopulationFamily(PageSource pages, FormatDescriptor d, TableDefinition table, ulong pageCount, IOrderedSource<RowId> source, bool forwardOnly, uint? bookmarkBase, bool snapshot, bool appendOnly = false)
+    public PopulationFamily(PageSource pages, FormatDescriptor d, TableDefinition table, ulong pageCount, IOrderedSource<RowId> source, bool forwardOnly, uint? bookmarkBase, bool snapshot, bool appendOnly = false, IComparer<string>? databaseOrder = null)
     {
         _pages = pages;
         _d = d;
@@ -1000,6 +1096,7 @@ internal sealed class PopulationFamily : IDisposable
         _forwardOnly = forwardOnly;
         _isSnapshot = snapshot;
         _appendOnly = appendOnly;
+        _databaseOrder = databaseOrder;
         _bookmarkBase = bookmarkBase;
         _source = source;
         // Forward-only populates only the rows it reaches (CUR-POP, r-cursor-1/pop-count-forwardonly: 1 at open, 2 after
@@ -1302,20 +1399,10 @@ internal sealed class PopulationFamily : IDisposable
             return false;
         }
         ulong extent = Math.Max(pageCount ?? _pageCount, pages.Cache.KnownExtentPages);
-        IOrderedSource<RowId> newScanSource;
-        if (_appendOnly)
+        IOrderedSource<RowId>? newScanSource = OpenSource(pages, _d, _table, extent, _forwardOnly, _isSnapshot, _appendOnly, _databaseOrder, out failure);
+        if (newScanSource is null)
         {
-            newScanSource = EmptyRowSource.Instance;
-            failure = null;
-        }
-        else
-        {
-            ScanNavigator? navigator = ScanNavigator.Open(pages, _d, _table, extent, out failure);
-            if (navigator is null)
-            {
-                return false;
-            }
-            newScanSource = new ScanSource(navigator);
+            return false;
         }
         var newStore = new OccurrenceStore<RowId>(newScanSource, firstMoveChunk: _forwardOnly ? 1 : 500);
         if (_members.Count > 1 && newStore.Next(null) is null)
@@ -1385,6 +1472,270 @@ internal sealed class PopulationFamily : IDisposable
         _snapshot?.Stamp(_store, caller.Row);
         return true;
     }
+
+    /// <summary>
+    /// Open the ordered row source for a table-opened dynaset, snapshot or forward-only cursor
+    /// (R-CURSOR-1 CUR-POP, PAR-ORDER; r-q14-dynaset-order, r-par-1/order-recordset-types,
+    /// r-cursor-1b/percent-partial-population #31, r-q2-cursor-dao/id-bookmark-number-map #61):
+    /// Snapshot and ForwardOnly use storage order; AppendOnly yields no existing rows; live keyset Dynasets
+    /// follow the PK or best single-column index when >= 2 rows exist.
+    /// </summary>
+    internal static IOrderedSource<RowId>? OpenSource(
+        PageSource pages,
+        FormatDescriptor d,
+        TableDefinition table,
+        ulong pageCount,
+        bool forwardOnly,
+        bool snapshot,
+        bool appendOnly,
+        IComparer<string>? databaseOrder,
+        out TraversalFailure? failure)
+    {
+        if (appendOnly)
+        {
+            failure = null;
+            return EmptySource;
+        }
+        ScanNavigator? scan = ScanNavigator.Open(pages, d, table, pageCount, out failure);
+        if (scan is null)
+        {
+            return null;
+        }
+        if (snapshot || forwardOnly || table.PhysicalIndexes.Count == 0 || table.LogicalIndexes.Count == 0)
+        {
+            return new ScanSource(scan);
+        }
+        RowId? firstRow = scan.Next(null, out failure);
+        if (failure is not null)
+        {
+            scan.Dispose();
+            return null;
+        }
+        if (firstRow is null)
+        {
+            return new ScanSource(scan);
+        }
+        RowId? secondRow = scan.Next(firstRow, out failure);
+        if (failure is not null)
+        {
+            scan.Dispose();
+            return null;
+        }
+        if (secondRow is null)
+        {
+            return new ScanSource(scan);
+        }
+        if (!SelectDynasetIndex(pages, d, table, databaseOrder, out IndexNavigator? indexNav, out failure))
+        {
+            scan.Dispose();
+            return null;
+        }
+        if (indexNav is not null)
+        {
+            scan.Dispose();
+            return new IndexRowSource(indexNav);
+        }
+        return new ScanSource(scan);
+    }
+
+    private static bool SelectDynasetIndex(
+        PageSource pages,
+        FormatDescriptor d,
+        TableDefinition table,
+        IComparer<string>? databaseOrder,
+        out IndexNavigator? chosen,
+        out TraversalFailure? failure)
+    {
+        chosen = null;
+        failure = null;
+        IndexDescriptorRules idxRules = d.IndexDescriptor;
+        foreach (LogicalIndex li in table.LogicalIndexes)
+        {
+            if (li.IndexType == idxRules.PrimaryKeyType && table.PhysicalOf(li) is { } pkPhys)
+            {
+                if (pkPhys.IgnoreNulls(idxRules))
+                {
+                    failure = new TraversalFailure("NotModelled.DynasetOrder.IgnoreNullsIndex: unordered dynaset over an IgnoreNulls primary key index", null);
+                    return false;
+                }
+                if (pkPhys.RootPage == 0)
+                {
+                    failure = new TraversalFailure("NotModelled.DynasetOrder: the row order of an unordered dynaset (index unavailable)", null);
+                    return false;
+                }
+                chosen = new IndexNavigator(pages, d, pkPhys, table.FirstPage);
+                return true;
+            }
+        }
+        var candidates = new List<(LogicalIndex Logical, PhysicalIndex Physical)>();
+        foreach (LogicalIndex li in table.LogicalIndexes)
+        {
+            if (table.PhysicalOf(li) is not { } pi)
+            {
+                continue;
+            }
+            if (pi.Columns.Count > 1)
+            {
+                failure = new TraversalFailure("NotModelled.DynasetOrder.CompoundIndex: unordered dynaset index selection with a compound index (Open: qualified.md R-CURSOR-1 CUR-POP, PAR-ORDER)", null);
+                return false;
+            }
+            if (pi.IgnoreNulls(idxRules))
+            {
+                failure = new TraversalFailure("NotModelled.DynasetOrder.IgnoreNullsIndex: unordered dynaset index selection with an IgnoreNulls index", null);
+                return false;
+            }
+            if (pi.RootPage == 0)
+            {
+                failure = new TraversalFailure("NotModelled.DynasetOrder: the row order of an unordered dynaset (index unavailable)", null);
+                return false;
+            }
+            candidates.Add((li, pi));
+        }
+        if (candidates.Count == 0)
+        {
+            return true;
+        }
+        if (candidates.Count == 1)
+        {
+            chosen = new IndexNavigator(pages, d, candidates[0].Physical, table.FirstPage);
+            return true;
+        }
+        var navByPhys = new Dictionary<int, IndexNavigator>();
+        var trueDistinctByPhys = new Dictionary<int, long>();
+        foreach ((LogicalIndex _, PhysicalIndex pi) in candidates)
+        {
+            if (navByPhys.ContainsKey(pi.Number))
+            {
+                continue;
+            }
+            var nav = new IndexNavigator(pages, d, pi, table.FirstPage);
+            if (!CountDistinctKeys(nav, out long trueDistinct, out failure))
+            {
+                return false;
+            }
+            navByPhys[pi.Number] = nav;
+            trueDistinctByPhys[pi.Number] = trueDistinct;
+        }
+        foreach ((LogicalIndex _, PhysicalIndex pi) in candidates)
+        {
+            if (pi.EntryCount > 0 && pi.UniqueEntryCount != trueDistinctByPhys[pi.Number])
+            {
+                failure = new TraversalFailure("NotModelled.DynasetOrder.DistinctCountMetric: index built after rows with stale DistinctCount counter (Open: qualified.md R-CURSOR-1 CUR-POP, PAR-ORDER)", null);
+                return false;
+            }
+        }
+        var unique = candidates.Where(c => c.Physical.Unique(idxRules)).ToList();
+        if (unique.Count > 0 && unique.Count < candidates.Count)
+        {
+            long bestUniqueTrue = unique.Max(c => trueDistinctByPhys[c.Physical.Number]);
+            long bestUniqueCounter = unique.Max(c => c.Physical.UniqueEntryCount);
+            foreach ((LogicalIndex _, PhysicalIndex pi) in candidates)
+            {
+                if (!pi.Unique(idxRules) && (trueDistinctByPhys[pi.Number] > bestUniqueTrue || pi.UniqueEntryCount > bestUniqueCounter))
+                {
+                    failure = new TraversalFailure("NotModelled.DynasetOrder.UniqueVsHigherDistinct: a unique index competes with a non-unique index having more distinct keys (Open: qualified.md R-CURSOR-1 CUR-POP, PAR-ORDER)", null);
+                    return false;
+                }
+            }
+            candidates = unique;
+        }
+        if (candidates.Count == 1)
+        {
+            chosen = navByPhys[candidates[0].Physical.Number];
+            return true;
+        }
+        (LogicalIndex Logical, PhysicalIndex Physical) byCounter = PickBestDynasetIndex(candidates, c => c.Physical.UniqueEntryCount, databaseOrder, out bool counterDisagrees);
+        (LogicalIndex Logical, PhysicalIndex Physical) byTrue = PickBestDynasetIndex(candidates, c => trueDistinctByPhys[c.Physical.Number], databaseOrder, out bool trueDisagrees);
+        if (counterDisagrees || trueDisagrees)
+        {
+            failure = new TraversalFailure("NotModelled.DynasetOrder.NameTieBreakCollation: ordinal and database General sort order tied index names differently (Open: qualified.md R-CURSOR-1 CUR-POP, PAR-ORDER)", null);
+            return false;
+        }
+        if (byCounter.Physical.Number != byTrue.Physical.Number)
+        {
+            failure = new TraversalFailure("NotModelled.DynasetOrder.DistinctCountMetric: DistinctCount counter and true distinct key count select different indexes (Open: qualified.md R-CURSOR-1 CUR-POP, PAR-ORDER)", null);
+            return false;
+        }
+        chosen = navByPhys[byTrue.Physical.Number];
+        return true;
+    }
+
+    private static (LogicalIndex Logical, PhysicalIndex Physical) PickBestDynasetIndex(
+        List<(LogicalIndex Logical, PhysicalIndex Physical)> candidates,
+        Func<(LogicalIndex Logical, PhysicalIndex Physical), long> scoreOf,
+        IComparer<string>? databaseOrder,
+        out bool collationDisagrees)
+    {
+        collationDisagrees = false;
+        long bestScore = candidates.Max(scoreOf);
+        var tied = new List<(LogicalIndex Logical, PhysicalIndex Physical)>();
+        foreach ((LogicalIndex Logical, PhysicalIndex Physical) c in candidates)
+        {
+            if (scoreOf(c) == bestScore)
+            {
+                tied.Add(c);
+            }
+        }
+        (LogicalIndex Logical, PhysicalIndex Physical) best = tied[0];
+        for (int i = 1; i < tied.Count; i++)
+        {
+            if (string.Compare(tied[i].Logical.Name, best.Logical.Name, StringComparison.OrdinalIgnoreCase) > 0)
+            {
+                best = tied[i];
+            }
+        }
+        if (tied.Count > 1)
+        {
+            for (int i = 0; i < tied.Count; i++)
+            {
+                for (int j = i + 1; j < tied.Count; j++)
+                {
+                    if (CollationMayDisagree(tied[i].Logical.Name, tied[j].Logical.Name, databaseOrder))
+                    {
+                        collationDisagrees = true;
+                        return best;
+                    }
+                }
+            }
+        }
+        return best;
+    }
+
+    private static bool CollationMayDisagree(string a, string b, IComparer<string>? databaseOrder)
+    {
+        if (databaseOrder is null)
+        {
+            return true;
+        }
+        return Math.Sign(string.Compare(a, b, StringComparison.OrdinalIgnoreCase))
+            != Math.Sign(databaseOrder.Compare(a, b));
+    }
+
+    private static bool CountDistinctKeys(IndexNavigator nav, out long count, out TraversalFailure? failure)
+    {
+        count = 0;
+        failure = null;
+        byte[]? previous = null;
+        for (IndexPosition? at = nav.First(); at is { } p; at = nav.Next(p))
+        {
+            byte[]? key = nav.KeyBytes(p);
+            if (key is null)
+            {
+                break;
+            }
+            if (previous is null || !previous.AsSpan().SequenceEqual(key))
+            {
+                count++;
+                previous = key;
+            }
+        }
+        if (nav.LastFailure is { } navFailure)
+        {
+            failure = navFailure;
+            return false;
+        }
+        return true;
+    }
 }
 
 /// <summary>
@@ -1422,7 +1773,7 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
     /// Open a dynaset, snapshot or forward-only cursor. <paramref name="bookmarkBase"/> numbers its bookmarks
     /// (<see cref="KeysetBookmark"/>); null where ACE's base is not identified, and the bookmarks are then NotObserved.
     /// </summary>
-    public static PopulationCursor? Open(PageSource cache, FormatDescriptor d, TableDefinition table, ulong pageCount, bool forwardOnly, out TraversalFailure? failure, uint? bookmarkBase = KeysetBookmark.FirstBase, bool snapshot = false, bool appendOnly = false)
+    public static PopulationCursor? Open(PageSource cache, FormatDescriptor d, TableDefinition table, ulong pageCount, bool forwardOnly, out TraversalFailure? failure, uint? bookmarkBase = KeysetBookmark.FirstBase, bool snapshot = false, bool appendOnly = false, IComparer<string>? databaseOrder = null)
     {
         if (snapshot && (cache.Overlay is not null || cache.IsDynamic))
         {
@@ -1431,22 +1782,12 @@ public sealed class PopulationCursor : IRecordCursor, IRowPositioned, IMutableCu
             failure = new TraversalFailure("NotModelled.Edit.UnpublishedRows: a snapshot over this Workspace's unpublished changes", null);
             return null;
         }
-        ScanNavigator? navigator = ScanNavigator.Open(cache, d, table, pageCount, out failure);
-        if (navigator is null)
+        IOrderedSource<RowId>? source = PopulationFamily.OpenSource(cache, d, table, pageCount, forwardOnly, snapshot, appendOnly, databaseOrder, out failure);
+        if (source is null)
         {
             return null;
         }
-        IOrderedSource<RowId> source;
-        if (appendOnly)
-        {
-            navigator.Dispose();
-            source = PopulationFamily.EmptySource;
-        }
-        else
-        {
-            source = new ScanSource(navigator);
-        }
-        var family = new PopulationFamily(cache, d, table, pageCount, source, forwardOnly, bookmarkBase, snapshot, appendOnly);
+        var family = new PopulationFamily(cache, d, table, pageCount, source, forwardOnly, bookmarkBase, snapshot, appendOnly, databaseOrder);
         return new PopulationCursor(family, isRoot: true);
     }
 

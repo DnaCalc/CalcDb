@@ -692,9 +692,25 @@ public sealed class SameWidthWriter(TableFootprints footprints)
             }
             if (c.PhysicalNumber >= envelope.ColumnCount)
             {
-                if (candidate.Kind != NativeKind.Null)
+                if (_table.Columns.Count != _table.MaxColumns)
                 {
-                    return NotWritten($"field {c.Name} is absent from row {root}, recorded before the column (row growth)");
+                    if (candidate.Kind != NativeKind.Null)
+                    {
+                        return NotWritten($"field {c.Name} is absent from row {root}, recorded before the column (row growth)");
+                    }
+                    continue;
+                }
+                if (c.IsMaskBoolean && candidate.Kind != NativeKind.Boolean)
+                {
+                    return NotWritten($"a {candidate.Kind} value for the Yes/No field {c.Name}");
+                }
+                if (!NativeValue.SameStored(stored[i], candidate))
+                {
+                    if (ScalarCodecs.IsCalculated(c, _d.Payload))
+                    {
+                        return NotWritten($"field {c.Name} is calculated: its change rewraps the row (W-05/growth-structural-closure)");
+                    }
+                    rewrite = true;
                 }
                 continue;
             }
@@ -1749,9 +1765,9 @@ public sealed class SameWidthWriter(TableFootprints footprints)
             failure = $"row {row.Root}: UPDATE on a table with dropped or altered columns (ColumnCount={_table.Columns.Count}, MaxColumns={_table.MaxColumns}) is not recorded";
             return null;
         }
-        if (envelope.ColumnCount != _table.MaxColumns)
+        if (envelope.ColumnCount > _table.MaxColumns)
         {
-            failure = $"row {row.Root} records {envelope.ColumnCount} of {_table.MaxColumns} columns: a row grown past C is not recorded";
+            failure = $"row {row.Root} records {envelope.ColumnCount} of {_table.MaxColumns} columns: shrinking a row past C is not recorded";
             return null;
         }
         IReadOnlyList<ColumnDescriptor> columns = _table.Columns;
@@ -1763,6 +1779,11 @@ public sealed class SameWidthWriter(TableFootprints footprints)
         {
             ColumnDescriptor c = columns[i];
             NativeValue v = values[i];
+            if (c.PhysicalNumber >= envelope.ColumnCount && NativeValue.SameStored(stored[i], v))
+            {
+                fields[i] = c.IsMaskBoolean ? EncodedField.OfBoolean(false) : EncodedField.Null;
+                continue;
+            }
             if (NativeValue.SameStored(stored[i], v))
             {
                 FieldRead read = envelope.ReadField(c, knownFixedEnd);

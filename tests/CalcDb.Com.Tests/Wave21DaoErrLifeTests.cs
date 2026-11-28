@@ -78,7 +78,7 @@ public sealed unsafe class Wave21DaoErrLifeTests : IDisposable
     [Fact]
     public void Wave20_unowned_isam_followups_stay_refused_honestly()
     {
-        // 1. r-cursor-1b/requery-empty-to-populated call 50: CompileRelease in unowned CalcDb.Isam frees data page without TableCursor 3167 detection.
+        // 1. r-cursor-1b/requery-empty-to-populated call 50: DeleteEveryRow page retirement yields TableCursor DAO 3167.
         {
             DatabaseObject db = Open(CursorMainAccdb, readOnly: false);
             RecordsetObject rs = Recover<RecordsetObject>(Ok(Method(db, "OpenRecordset", "E", 1)));
@@ -88,7 +88,7 @@ public sealed unsafe class Wave21DaoErrLifeTests : IDisposable
             Ok(Method(rs, "MoveNext"));
             Assert.Equal(2, Int32Value(Ok(FieldValue(rs, "ID"))));
             Ok(Method(db, "Execute", "DELETE FROM E", 128));
-            Assert.Null(FieldValue(rs, "ID").Failure); // unowned CalcDb.Isam CompileRelease / TableCursor boundary
+            AssertDaoError(FieldValue(rs, "ID"), 3167, "DAO.Field", errorInfo: true);
             Ok(Method(rs, "Close"));
         }
 
@@ -114,14 +114,22 @@ public sealed unsafe class Wave21DaoErrLifeTests : IDisposable
             Ok(Method(rs, "Close"));
         }
 
-        // 3. r-str-ado-act/str-schema-change call 29: unowned CalcDb.Isam NotModelled.Edit.Publication (row growth on pre-ALTER rows).
+        // 3. r-str-ado-act/str-schema-change calls 29..31: UPDATE rewrites pre-ADD-COLUMN rows and reads expected values.
         {
             DatabaseObject db = Open(StrAccdb, readOnly: false);
             Ok(Method(db, "Execute", "ALTER TABLE S ADD COLUMN X TEXT(10)"));
-            CallResult upd = Method(db, "Execute", "UPDATE S SET X = Left(T, 10) WHERE ID IN (3, 4, 5)");
-            Assert.NotNull(upd.Failure);
-            Assert.Equal(FailureKind.NotModelled, upd.Failure!.Kind);
-            Assert.StartsWith("NotModelled.Edit.Publication:", upd.Failure.Description);
+            Ok(Method(db, "Execute", "UPDATE S SET X = Left(T, 10) WHERE ID IN (3, 4, 5)"));
+            SelectRecordsetObject rx = Recover<SelectRecordsetObject>(Ok(Method(db, "OpenRecordset", "SELECT ID, X, Len(X) AS LX FROM S WHERE ID IN (3, 4, 5) ORDER BY ID", 4)));
+            foreach ((int expectedId, string expectedX, int expectedLen) in new[] { (3, "a\0b", 3), (4, "\0", 1), (5, "abc\0", 4) })
+            {
+                Assert.False(BoolValue(Ok(Get(rx, "EOF"))));
+                Assert.Equal(expectedId, Int32Value(Ok(FieldValue(rx, "ID"))));
+                Assert.Equal(expectedX, TextValue(Ok(FieldValue(rx, "X"))));
+                Assert.Equal(expectedLen, Int32Value(Ok(FieldValue(rx, "LX"))));
+                Ok(Method(rx, "MoveNext"));
+            }
+            Assert.True(BoolValue(Ok(Get(rx, "EOF"))));
+            Ok(Method(rx, "Close"));
         }
     }
 

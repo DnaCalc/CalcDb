@@ -185,6 +185,18 @@ public sealed class IndexNavigator
         return deleted.Ordinal < p.Count ? At(deleted.Leaf, deleted.Ordinal, p) : NextFrom(deleted.Leaf, p);
     }
 
+    /// <summary>The entry before <paramref name="deleted"/>'s ordinal (clamped to the leaf's current count) after that entry was removed.</summary>
+    public IndexPosition? BeforeDeleted(IndexPosition deleted)
+    {
+        LastFailure = null;
+        if (Page(deleted.Leaf) is not { } p)
+        {
+            return null;
+        }
+        int ordinal = Math.Min(deleted.Ordinal, p.Count);
+        return ordinal > 0 ? At(deleted.Leaf, ordinal - 1, p) : PreviousFrom(deleted.Leaf, p);
+    }
+
     public IndexPosition? Previous(IndexPosition at)
     {
         LastFailure = null;
