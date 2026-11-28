@@ -823,10 +823,13 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         long count;
         if (!Cursor.TryRecordCount(out count, out string? openName, out string? openDetail))
         {
-            // Derived Filter/Sort OpenRecordset walked to EOF: RecordCount is the full populated count
+            // Derived Filter/Sort OpenRecordset walked to EOF, or unordered SELECT dynaset reached full population via MoveLast/EOF
             // (evidence/r-q53-conv-abspos-subq-loc/filter-sort-openrs-read-accdb,
-            // evidence/r-q53-conv-abspos-subq-loc/filter-sort-openrs-read-mdb call 23).
-            if (_isDerived && _isSingleTableRowSelect && RecordsetType is 2 or 4 && Cursor.Eof)
+            // evidence/r-q53-conv-abspos-subq-loc/filter-sort-openrs-read-mdb call 23,
+            // evidence/r-def-cursor-dao/addnew-landing-by-index-and-type call 121):
+            // RecordCount is the full populated count.
+            if ((_isDerived && _isSingleTableRowSelect && RecordsetType is 2 or 4 && Cursor.Eof)
+                || (_familyPopulatedHere && string.Equals(openName, "NotModelled.QueryRecordCount.UnorderedDynasetMove", StringComparison.Ordinal)))
             {
                 count = Cursor.RecordCount;
             }
@@ -2602,13 +2605,14 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         // r-def-cursor-dao/prov-outer-join-absent-side (call 44): Requery on a writable updatable-join ACCDB SELECT
         // dynaset at depth 0..1 discards pending join edit/AddNew buffers and refreshes the cursor.
         bool allowSingleTableNoOrderDynaset = !IsMdb && !Database.ReadOnly && RecordsetType == 2 && _isSingleTableRowSelect && !_hasOrderBy && _openLevels.Length <= 1;
+        bool allowKnownNonUpdatableNoOrderDynaset = !IsMdb && !Database.ReadOnly && RecordsetType == 2 && IsKnownNonUpdatable && !_hasOrderBy && !_appendOnly && Plan.Parameters.Count == 0 && _openLevels.Length <= 1 && Database.Workspace.Transactions.Depth == _openLevels.Length;
         bool allowUpdatableJoinDynaset = !IsMdb && !Database.ReadOnly && RecordsetType == 2 && _isUpdatableJoin && !_isDerived && Plan.Parameters.Count == 0 && Database.Workspace.Transactions.Depth == _openLevels.Length && _openLevels.Length <= 1;
         bool allowNoOrderByDynasetAfterEdit = allowSingleTableNoOrderDynaset && _frame is { Mode: EditMode.Edit };
         if (_appendOnly
             || (IsMdb && !(RecordsetType is 2 or 4 && _openLevels.Length == 0))
             || RecordsetType is not (2 or 4)
-            || (!_isSingleTableRowSelect && !allowUpdatableJoinDynaset)
-            || (_isSingleTableRowSelect && !_hasOrderBy && !allowSingleTableNoOrderDynaset)
+            || (!_isSingleTableRowSelect && !allowUpdatableJoinDynaset && !allowKnownNonUpdatableNoOrderDynaset)
+            || (_isSingleTableRowSelect && !_hasOrderBy && !allowSingleTableNoOrderDynaset && !allowKnownNonUpdatableNoOrderDynaset)
             || Plan.Parameters.Count > 0
             || Database.Workspace.Transactions.Depth != _openLevels.Length
             || _openLevels.Length > 1)
@@ -2939,7 +2943,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
                 refused = CallResult.Fail(Failure.Dao(MutationError.ReadOnly, "DAO.Field", "Cannot update. Database or object is read-only.") with { PublishesErrorInfo = true });
                 return null;
             }
-            if (member == "Update")
+            if (member is "Update" or "CancelUpdate")
             {
                 refused = Fail(MutationError.NoEdit, "Update or CancelUpdate without AddNew or Edit.");
                 return null;
@@ -3041,6 +3045,17 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         if (RecordsetType == 4 && _isMaterializedSnapshot)
         {
             // r-fix-cursor-dao/assign-without-edit-own-transaction (call 133): EditMode on a SELECT snapshot is 0.
+            return Int16(0);
+        }
+        if (RecordsetType == 2
+            && IsKnownNonUpdatable
+            && !Database.InheritedWritable
+            && _openLevels.Length < 2
+            && Database.Workspace.Transactions.Depth <= 2)
+        {
+            // r-def-cursor-dao/prov-aggregate-groupby (#17, #41), prov-distinct-distinctrow-plain (#17, #41, #65),
+            // prov-union-crosstab (#17), r-fix-cursor-dao/prov-sources-errors-per-call (#27, #57, #87, #117, #147, #177):
+            // non-updatable type-2 SELECT dynasets report EditMode 0 at transaction depth 0..2.
             return Int16(0);
         }
         if (RecordsetType != 2
@@ -4149,8 +4164,8 @@ internal sealed unsafe class SelectFieldObject : DaoObject
         {
             return Fail(3001, DaoErrors.InvalidArgument, publishesErrorInfo: true);
         }
-        if (!TryParseChunkArg(0, offsetArg, out int offset, out CallResult argError)
-            || !TryParseChunkArg(1, bytesArg, out int bytes, out argError))
+        if (!DaoLongValueChunks.TryParseChunkArg(this, SessionLocale.Lcid, 0, offsetArg, out int offset, out CallResult argError)
+            || !DaoLongValueChunks.TryParseChunkArg(this, SessionLocale.Lcid, 1, bytesArg, out int bytes, out argError))
         {
             return argError;
         }
@@ -4279,106 +4294,10 @@ internal sealed unsafe class SelectFieldObject : DaoObject
     private CallResult GetChunkFromVariant(int type, in NativeVariant value, int offset, int bytes) => (VarType)value.Vt switch
     {
         VarType.Null => CallResult.OfScalar(VarType.Null, 0),
-        VarType.Bstr when type == 12 => MemoChunk(value.Pointer, offset, bytes),
-        VarType.Array | VarType.UI1 when type == 11 => OleChunk(value.Pointer, offset, bytes),
+        VarType.Bstr when type == 12 => DaoLongValueChunks.MemoChunk(value.Pointer, offset, bytes),
+        VarType.Array | VarType.UI1 when type == 11 => DaoLongValueChunks.OleChunk(value.Pointer, offset, bytes),
         var other => CallResult.Fail(Failure.NotModelled("NotModelled.GetChunkValue", $"Field.GetChunk of a {other} value of type {type} (not recorded)")),
     };
-
-    private static bool IsRecordedChunkArgType(int parameter, VarType vt) => parameter switch
-    {
-        0 => vt is VarType.I4 or VarType.I2 or VarType.Bool or VarType.Empty or VarType.Null or VarType.R8 or VarType.Bstr,
-        1 => vt is VarType.I4 or VarType.UI1 or VarType.Empty or VarType.Null or VarType.R8 or VarType.Bstr,
-        _ => false,
-    };
-
-    private static Failure UnrecordedChunkArgType(int parameter, VarType vt) => Failure.NotModelled(
-        "NotModelled.GetChunkArgumentType",
-        parameter == 0
-            ? $"Field.GetChunk Offset with {vt} argument (only I4, I2, Bool, Empty, Null, R8 and BSTR are recorded)"
-            : $"Field.GetChunk Bytes with {vt} argument (only I4, UI1, Empty, Null, R8 and BSTR are recorded)");
-
-    private bool TryParseChunkArg(int parameter, nint arg, out int value, out CallResult error)
-    {
-        value = 0;
-        error = default;
-        NativeVariant* cell = Args.Cell(arg);
-        if (TypedCall.IsMissing(cell))
-        {
-            error = Fail(3001, DaoErrors.InvalidArgument, publishesErrorInfo: true);
-            return false;
-        }
-        VarType vt = (VarType)cell->Vt;
-        if (vt == VarType.I4)
-        {
-            value = (int)cell->Int64;
-            return true;
-        }
-        if (vt == VarType.Empty)
-        {
-            value = 0;
-            return true;
-        }
-        if (vt == VarType.Null)
-        {
-            error = Fail(3421, DaoErrors.ConversionError, publishesErrorInfo: true);
-            return false;
-        }
-        if (IsRecordedChunkArgType(parameter, vt))
-        {
-            if (OwnedVariant.TryChangeScalar(cell, VarType.I4, SessionLocale.Lcid, out NativeVariant coerced, out int hr))
-            {
-                value = (int)coerced.Int64;
-                return true;
-            }
-            error = hr switch
-            {
-                HResults.DISP_E_OVERFLOW when parameter == 1 => Fail(3001, DaoErrors.InvalidArgument, publishesErrorInfo: true),
-                HResults.DISP_E_TYPEMISMATCH => Fail(3421, DaoErrors.ConversionError, publishesErrorInfo: true),
-                _ => CallResult.Fail(Failure.NotModelled(
-                    "NotModelled.GetChunkArgumentConversion",
-                    $"Field.GetChunk parameter {parameter} ({vt}) failed coercion with 0x{hr:X8} (not recorded)")),
-            };
-            return false;
-        }
-        error = CallResult.Fail(UnrecordedChunkArgType(parameter, vt));
-        return false;
-    }
-
-    private static CallResult MemoChunk(nint bstr, int offset, int bytes)
-    {
-        ReadOnlySpan<char> chars = Bstrs.Chars(bstr);
-        if (offset >= chars.Length || bytes == 0)
-        {
-            return Text("");
-        }
-        int take = Math.Min(bytes, chars.Length - offset);
-        return CallResult.OfOwnedBstr(Bstrs.FromUnits(take, (bstr, offset), static (dest, s) => Bstrs.Chars(s.bstr).Slice(s.offset, dest.Length).CopyTo(dest)));
-    }
-
-    private static CallResult OleChunk(nint array, int offset, int bytes)
-    {
-        if (array == 0)
-        {
-            return CallResult.Fail(Failure.NotModelled("NotModelled.GetChunkValue", "Field.GetChunk of a null SAFEARRAY OLE value (not recorded)"));
-        }
-        (int Lower, int Count)[] shape = SafeArrays.Shape(array);
-        if (shape.Length != 1 || shape[0].Lower != 0)
-        {
-            return CallResult.Fail(Failure.NotModelled("NotModelled.GetChunkValue", $"Field.GetChunk of a {shape.Length}D OLE SAFEARRAY (not recorded)"));
-        }
-        int length = shape[0].Count;
-        if (bytes == 0 || offset >= length)
-        {
-            // r-q32-dao-select-lv/q3-lv-cursors-accdb, q3-lv-cursors-mdb (and r-def-cursor-dao/chunk-binary-roundtrip):
-            // Bytes == 0, Offset == length, and Offset > length on non-Null OLE all return VT_ARRAY|VT_UI1 with a null SAFEARRAY.
-            return CallResult.Of(OwnedVariant.TakeArray(0, VarType.UI1));
-        }
-        int take = Math.Min(bytes, length - offset);
-        nint slice = SafeArrays.Create(VarType.UI1, (0, take));
-        new ReadOnlySpan<byte>((byte*)SafeArrays.ElementPointer(array, 0) + offset, take)
-            .CopyTo(new Span<byte>(SafeArrays.ElementPointer(slice, 0), take));
-        return CallResult.Of(OwnedVariant.TakeArray(slice, VarType.UI1));
-    }
 
     private readonly SelectFieldsObject _fields;
     private readonly int _ordinal;
@@ -4416,8 +4335,8 @@ internal sealed unsafe class SelectFieldObject : DaoObject
     /// r-q35-byref-args/dao-select-getchunk-accdb, dao-select-getchunk-mdb).
     /// </summary>
     protected override Failure? ScalarArgumentRefusal(MemberDecl member, int parameter, VarType sourceType) =>
-        member.Name == "GetChunk" && !IsRecordedChunkArgType(parameter, sourceType)
-            ? UnrecordedChunkArgType(parameter, sourceType)
+        member.Name == "GetChunk" && !DaoLongValueChunks.IsRecordedGetChunkArgType(parameter, sourceType)
+            ? DaoLongValueChunks.UnrecordedGetChunkArgType(parameter, sourceType)
             : null;
 
     /// <summary>
@@ -4427,22 +4346,10 @@ internal sealed unsafe class SelectFieldObject : DaoObject
     /// 3421 from DAO.Field with an IErrorInfo and writes *puArgErr (r-q32-dao-select-lv/q3-lv-getchunk-args-accdb,
     /// q3-lv-getchunk-args-mdb). Unrecorded Offset (p0) overflow and other HRESULTs are refused by name.
     /// </summary>
-    protected override Failure? ArgumentConversionFailure(MemberDecl member, ArgumentConversion conversion)
-    {
-        if (member.Name != "GetChunk")
-        {
-            return null;
-        }
-        return conversion.Reason switch
-        {
-            ArgumentConversionReason.Missing => InvalidArgumentCount(),
-            ArgumentConversionReason.Overflow when conversion.Parameter == 1 => InvalidArgumentCount(),
-            ArgumentConversionReason.TypeMismatch => Failure.Dao(3421, Source, DaoErrors.ConversionError) with { PublishesErrorInfo = true },
-            _ => Failure.NotModelled(
-                "NotModelled.GetChunkArgumentConversion",
-                $"Field.GetChunk parameter {conversion.Parameter} ({conversion.SourceType}) failed coercion with 0x{conversion.HResult:X8} (not recorded)"),
-        };
-    }
+    protected override Failure? ArgumentConversionFailure(MemberDecl member, ArgumentConversion conversion) =>
+        member.Name == "GetChunk"
+            ? DaoLongValueChunks.GetChunkArgumentConversionFailure(this, conversion)
+            : null;
 
     private static CallResult Live(ComObject self, Func<SelectFieldObject, CallResult> op)
     {

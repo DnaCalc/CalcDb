@@ -25,7 +25,8 @@ internal sealed unsafe class RecordsetObject : DaoObject, IDatabaseRecordset
     private static readonly nint Vtable = DualEntries.Build(Decl);
     private static readonly OperationTable Operations = new OperationTable(Decl)
         .Get("Type", (self, args) => Live(self, r => Int16(r.RecordsetType)))
-        .Get("RecordCount", (self, args) => Read(self, "RecordCount", r => Int32((int)r.Cursor.RecordCount)))
+        // r-cursor-1/pos-empty-singleton (#295 empty -> 0, #587 1-row forward-only at EOF -> -1).
+        .Get("RecordCount", (self, args) => Read(self, "RecordCount", r => Int32(r.RecordsetType == 8 && r.Cursor.Eof && r.Cursor.RecordCount > 0 ? -1 : (int)r.Cursor.RecordCount)))
         .Get("EOF", (self, args) => Read(self, "EOF", r => Bool(r.Cursor.Eof)))
         .Get("BOF", (self, args) => Read(self, "BOF", r => Bool(r.Cursor.Bof)))
         .Get("NoMatch", (self, args) => Read(self, "NoMatch", r => Bool(r.Cursor.NoMatch)))
@@ -2875,6 +2876,15 @@ internal sealed unsafe class FieldObject : DaoObject
             ? CallResult.Fail(Failure.NotModelled("NotModelled.OriginalValueDuringEdit", "Field.OriginalValue with an edit pending (not recorded)"))
             : f.Fail(3251, DaoErrors.NotSupportedForType)))
         .Get("FieldSize", (self, args) => Live(self, f => f.FieldSize()))
+        .Method("GetChunk", (self, args) =>
+        {
+            var field = (FieldObject)self;
+            if (args.Length != 2)
+            {
+                return CallResult.Fail(field.InvalidArgumentCount());
+            }
+            return field.GetChunk(args[0], args[1]);
+        })
         .Method("AppendChunk", (self, args) => ((FieldObject)self).AppendChunk(args.Length > 0 ? args[0] : 0))
         .Get("Properties", (self, args) => Live(self, f => f.PropertiesCollection()));
 
@@ -2895,6 +2905,22 @@ internal sealed unsafe class FieldObject : DaoObject
     private ColumnDescriptor Column => Recordset.Cursor.Table.Columns[_ordinal];
 
     protected override OperationTable Table => Operations;
+
+    protected override Failure? ArgumentCountFailure(MemberDecl member) =>
+        member.Name == "GetChunk" ? InvalidArgumentCount() : null;
+
+    protected override bool AdmitsByRefScalarArgument(MemberDecl member, int parameter, ReadOnlySpan<nint> args) =>
+        member.Name == "GetChunk" && parameter is 0 or 1;
+
+    protected override Failure? ScalarArgumentRefusal(MemberDecl member, int parameter, VarType sourceType) =>
+        member.Name == "GetChunk" && !DaoLongValueChunks.IsRecordedGetChunkArgType(parameter, sourceType)
+            ? DaoLongValueChunks.UnrecordedGetChunkArgType(parameter, sourceType)
+            : null;
+
+    protected override Failure? ArgumentConversionFailure(MemberDecl member, ArgumentConversion conversion) =>
+        member.Name == "GetChunk"
+            ? DaoLongValueChunks.GetChunkArgumentConversionFailure(this, conversion)
+            : null;
 
     private static CallResult Live(ComObject self, Func<FieldObject, CallResult> op)
     {
@@ -3070,6 +3096,103 @@ internal sealed unsafe class FieldObject : DaoObject
         CallResult.Fail(Failure.Dao(number, "DAO.Field", description) with { PublishesErrorInfo = true });
 
     private CallResult Assign(nint value) => Recordset.Closed ? Fail(3420, DaoErrors.ObjectInvalid, publishesErrorInfo: true) : AssignValue(Recordset, Column, value);
+
+    /// <summary>
+    /// GetChunk(Offset, Bytes) on a Table/Local Recordset Field (r-q-wire/str-memo-fieldsize-by-recordset-type #22):
+    /// reads UTF-16 code-unit slices for Memo (type 12) across table/dynaset/snapshot/forward-only cursors.
+    /// </summary>
+    private CallResult GetChunk(nint offsetArg, nint bytesArg)
+    {
+        if (offsetArg == 0 || bytesArg == 0)
+        {
+            return Fail(3001, DaoErrors.InvalidArgument, publishesErrorInfo: true);
+        }
+        if (!DaoLongValueChunks.TryParseChunkArg(this, SessionLocale.Lcid, 0, offsetArg, out int offset, out CallResult argError)
+            || !DaoLongValueChunks.TryParseChunkArg(this, SessionLocale.Lcid, 1, bytesArg, out int bytes, out argError))
+        {
+            return argError;
+        }
+        if (Recordset.Closed)
+        {
+            return Fail(3267, DaoErrors.RecordsetFieldOnly);
+        }
+        if (Recordset.AfterRollback != RecordsetAfterRollback.Valid)
+        {
+            return FieldsObject.AfterRollbackNamed("Field.GetChunk");
+        }
+        ColumnDescriptor column = Column;
+        if (ColumnFacts.DaoType(column) is not int type)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.GetChunkType", $"Field.GetChunk of column {column.Name}, whose type is not identified"));
+        }
+        if (type is not (12 or 11))
+        {
+            if (type is 4 or 7 or 9 or 10 or 20)
+            {
+                return Fail(3259, DaoErrors.InvalidFieldType);
+            }
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.GetChunkNonLvType",
+                $"Field.GetChunk of non-LV type {type} ({column.Name}) on {(Recordset.Database.Profile.IsAce ? "ACCDB" : "MDB")} type {Recordset.RecordsetType} recordset (not recorded)"));
+        }
+        if (type != 12)
+        {
+            return CallResult.Fail(Failure.NotModelled(
+                "NotModelled.TableGetChunkOle",
+                $"Field.GetChunk of OLE column {column.Name} on local table recordset (not recorded)"));
+        }
+        if (Recordset.FrameIfMade is { Mode: not EditMode.None } frame)
+        {
+            FieldResult buffered = frame.Read(column);
+            if (!buffered.Succeeded)
+            {
+                return CallResult.Fail(Failure.NotImplemented($"Field.GetChunk when edit buffer cannot be read: {buffered.Failure} {buffered.Detail}"));
+            }
+            return DaoLongValueChunks.GetChunkFromBuffered(type, buffered.Value, offset, bytes, column.Name);
+        }
+        if (Recordset.UnpublishedRead("Field.GetChunk") is { } unpublished)
+        {
+            return unpublished;
+        }
+        TextFieldRead text = Recordset.Cursor.ReadText(column);
+        if (text.HasText)
+        {
+            if (offset < 0 || bytes < 0)
+            {
+                return Fail(3001, DaoErrors.InvalidArgument);
+            }
+            nint bstr = Bstrs.FromUnits(text.Shape.Units, text, static (dest, t) => t.DecodeInto(dest));
+            try
+            {
+                return DaoLongValueChunks.MemoChunk(bstr, offset, bytes);
+            }
+            finally
+            {
+                System.Runtime.InteropServices.Marshal.FreeBSTR(bstr);
+            }
+        }
+        FieldResult read = text.Result;
+        if (!read.Succeeded)
+        {
+            if (offset < 0 || bytes < 0)
+            {
+                return CallResult.Fail(Failure.NotModelled(
+                    "NotModelled.GetChunkNegativeState",
+                    $"Field.GetChunk with a negative argument when Cursor.Read failed with {read.Failure} (not recorded)"));
+            }
+            return read.Failure switch
+            {
+                CursorFailure.NoCurrentRecord => Fail(3021, DaoErrors.NoCurrentRecord),
+                CursorFailure.DeletedRecord => Fail(3167, DaoErrors.RecordDeleted),
+                _ => CallResult.Fail(Failure.NotImplemented($"Field.GetChunk when the row cannot be read: {read.Failure} {read.Detail}")),
+            };
+        }
+        if (read.Value.Kind != NativeKind.Null)
+        {
+            return CallResult.Fail(Failure.NotImplemented($"Field.GetChunk of a {read.Value.Kind} value"));
+        }
+        return offset < 0 || bytes < 0 ? Fail(3001, DaoErrors.InvalidArgument) : CallResult.OfScalar(VarType.Null, 0);
+    }
 
     private CallResult AppendChunk(nint value)
     {

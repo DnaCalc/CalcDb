@@ -2374,7 +2374,8 @@ internal sealed unsafe class RecordsetObject : AdoObject
             _bothBofEofAfterForwardMove = false;
             _suspendedAfterForwardMoveLast = false;
         }
-        ClearConnectionErrors();
+        // r-fix-wire-ado/ado-write-values-numeric #409, ado-write-values-text-binary #1241:
+        // a successful Update() after a failed Field.Value put does not clear prior Connection.Errors entries.
         AdoEvents.RecordChangeComplete(_events, AdoEventReason.Update, 1, null, AdoEventStatus.Ok, this);
         return CallResult.Nothing;
     }
