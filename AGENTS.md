@@ -73,7 +73,7 @@ scope or design, the book wins.
   `calcdb-oracle freeze --name` into `evidence/artifacts` and `probes/fixtures.json`, so its questions run again from
   the repository (63z8).
 - Launch writers and Gate 4 reviewers via `define_subagent(EnableMCPTools: true)` + `invoke_subagent` (`calcdb-writer`
-  and `calcdb-reviewer`) by default so workers receive `call_mcp_tool` / `roslynskills` MCP (`mcp-p7`); empirically
+  and `calcdb-reviewer`) by default so workers receive `call_mcp_tool` / `roslynskills` MCP (`mcp-p8`); empirically
   (2026-11-27 `@mcp-probe`), `swarm add` workers do not receive `<mcp_servers>` or `call_mcp_tool` and therefore fall back
   to `roscli` via `run_command` or `rg`. Under `invoke_subagent`, pick `Model` (`inherit`, `flash`, `pro`) appropriately
   and keep stretches to one deliverable each. When running under `/swarm` explicitly (`swarm add`), use `swarm models`
@@ -94,7 +94,9 @@ scope or design, the book wins.
   of more than about 1,000 lines gets a second pass. The organizer checks the dispositions, the scope, the landing check
   and the compare (vpfd trial, 2026-11-23: about 6 organizer calls for the landing against about 25 when the organizer
   ran the review round; process log). A stretch under about 300 lines, a probe round or a bookkeeping change has the
-  organizer's review only.
+  organizer's review only. When a lower-layer slice (`Isam`/`Catalog`/`Sql`/`Expressions`) resolves a refusal
+  previously asserted by a negative test in `CalcDb.Com.Tests`, Gate 4 checks `tests/CalcDb.Com.Tests/` for that refusal
+  name and flags the assertion sync cleanly before `-Snapshot -Land`.
 - When coordinating subagents or landing jobs asynchronously, let reactive notifications wake you (no polling); if in
   `/swarm`, steer idle workers with `post_message` `@name` and sleep on `swarm_wait`.
 
@@ -146,7 +148,7 @@ scope or design, the book wins.
 - **One-call compound mindspace & overlay reads:** Prefer `roslyn_context` / `ctx.symbol_context` over chaining `rg` + `read_file` + `nav.go_to_definition` + `nav.find_references` + `nav.call_hierarchy`, and `roslyn_search` / `ctx.search_text` + `ctx.read_window` over comment-noisy `rg` + repeated `read_file` when warm. Pair semantic search with `ctx.search_text` / `rg` where a string literal could carry a symbol name (82kf trial).
 - **Semantic edits & fast diagnostics:** Use `roslyn_edit_rename` / `edit.rename_symbol --symbol`, `edit.change_signature --symbol`, atomic `roslyn_edit_transaction` with SHA-256 preconditions, `roslyn_edit_code_fix`, and `roslyn_diag_snapshot` / `diag.get_workspace_snapshot --directory-path <dir> --include-diagnostics true` instead of invoking MSBuild after small edits.
 - **Who starts a daemon & setup/cleanup:** A writer tracing or refactoring across projects and a Gate 4 reviewer start/auto-bind a daemon; a prober, bookkeeping edit, or one-file fix does not (~20 s bind + ~33 s full 33-project warmup, ~1.2 GB RAM per worktree). For CLI loops in a worktree: `dotnet restore CalcDb.slnx`, `roscli workspace.use CalcDb.slnx --wait-warmup true`, then set `ROSCLI_DAEMON=required`. Run `roscli daemon.stop` (or `roslyn_run` `daemon.stop` with `workspace_path`) before finishing and verify `roscli daemon.list` shows your worktree stopped; `roscli daemon.prune` clears leftovers.
-- **roscli is our tool** (owner, 2026-11-21): a wrong, slow or missing answer is fixed in RoslynSkills (`C:\Work\RoslynSkills`, landed on `main`, installed globally as `roscli` / `roscli-slow` + `mcp-p8`), never worked around in CalcDb.
+- **roscli is our tool** (owner, 2026-11-21): a wrong, slow or missing answer is fixed in RoslynSkills (`C:\Work\RoslynSkills`, landed on `main`, installed globally as `roscli` / `roscli-slow` + `mcp-p8`), never worked around in CalcDb. Updating an installed `mcp-p*` server requires updating **both** `~/.gemini/config/mcp_config.json` (read by Antigravity Customizations UI) and `~/.gemini/antigravity/mcp_config.json`.
 
 ## Honesty rules
 
