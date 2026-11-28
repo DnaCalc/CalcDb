@@ -514,6 +514,8 @@ public sealed class TableCursor : IRecordCursor, IRowPositioned, IMutableCursor
     private long _rowCount;
     private ulong _rowCountSerial;
     private PrivateOverlay? _rowCountOverlay;
+    private TransactionCoordinator? _registeredCoordinator;
+    private int _updatedInTxnDepth;
 
     private TableCursor(PageSource cache, FormatDescriptor d, TableDefinition table, ulong pageCount, ScanSource source, ulong fileIncarnation, ulong tableIncarnation)
     {
@@ -566,6 +568,9 @@ public sealed class TableCursor : IRecordCursor, IRowPositioned, IMutableCursor
     public bool Eof => _position.Eof;
 
     public bool NoMatch => _position.NoMatch;
+
+    /// <summary>Current position tag for DAO-level named refusals.</summary>
+    public PositionTag PositionTag => _position.Tag;
 
     /// <summary>The table-type RecordCount: live TableDef RowCount, refreshed when the cache publishes or overlay changes (CUR-POP, task hm8k).</summary>
     public long RecordCount
@@ -933,11 +938,46 @@ public sealed class TableCursor : IRecordCursor, IRowPositioned, IMutableCursor
         if (_position.Current is { } at && _index is { } index && _order is IndexOrder && Locate(index, at.Root) is { } relocated)
         {
             _position.Seek(relocated);
+            if (_cache.Coordinator is { Depth: > 0 } coordinator)
+            {
+                if (coordinator.Depth > _updatedInTxnDepth)
+                {
+                    _updatedInTxnDepth = coordinator.Depth;
+                }
+                if (!ReferenceEquals(_registeredCoordinator, coordinator))
+                {
+                    _registeredCoordinator?.Unregister(this);
+                    coordinator.Register(this);
+                    _registeredCoordinator = coordinator;
+                }
+            }
+        }
+    }
+
+    internal void OnTransactionCommit(int newDepth)
+    {
+        if (_updatedInTxnDepth > newDepth)
+        {
+            _updatedInTxnDepth = newDepth;
+        }
+    }
+
+    internal void OnTransactionRollback(int newDepth)
+    {
+        if (newDepth < _updatedInTxnDepth)
+        {
+            _updatedInTxnDepth = newDepth;
+            if (_position.Current is { } at && _index is { } index && _order is IndexOrder && Locate(index, at.Root) is { } reverted)
+            {
+                _position.Seek(reverted);
+            }
         }
     }
 
     public void Dispose()
     {
+        _registeredCoordinator?.Unregister(this);
+        _registeredCoordinator = null;
         _row.Dispose();
         _scan.Dispose();
     }

@@ -213,4 +213,51 @@ public sealed class Wave24CursorParityTests
             Assert.Equal(1L, ReadInt(rt, "ID"));
         }
     }
+
+    [Fact]
+    public void Table_cursor_own_edit_followed_by_Rollback_relocates_to_reverted_key()
+    {
+        // Gate 4 Finding #1: when an indexed TableCursor edits its own key inside BeginTrans (OnRowUpdated moves
+        // its anchor to the new key in the overlay) and Rollback reverts the key back to its prior value,
+        // TransactionCoordinator notifies the cursor so MoveNext/MovePrevious continue from the reverted key.
+        using var fixture = new ReplayFixture(Nav);
+        (TableDefinition t, TableEditContext ctx) = fixture.Table("T")!.Value;
+        ColumnDescriptor idCol = t.Columns.Single(c => c.Name == "ID");
+        using var ws = new TransactionCoordinator(new LockerId(1)) { Publisher = fixture, Scheduler = new CountingScheduler(), Clock = static () => TimeSpan.Zero };
+
+        var source = new PageSource(fixture.Cache, ws);
+        using var rt = TableCursor.Open(source, FormatDescriptor.Jet4Family, t, fixture.Image.PageCount, 1, out _)!;
+        Assert.Equal(IndexRefusal.None, rt.SetIndex("PK_T"));
+        SeekId(rt, 2);
+
+        // 1) Depth-1 Edit/Update + Rollback: ID 2 -> 20 then rolled back to 2.
+        Assert.Null(ws.BeginTrans());
+        using var frame = new EditFrame(ctx, rt, ws);
+        Assert.True(frame.Edit().Succeeded);
+        Assert.True(frame.Assign(idCol, I4(20)).Succeeded);
+        Assert.True(frame.Update().Succeeded);
+        Assert.Equal(20L, ReadInt(rt, "ID"));
+
+        Assert.True(ws.Rollback().Succeeded);
+        Assert.Equal(2L, ReadInt(rt, "ID"));
+        Assert.Equal(MoveOutcome.Moved, rt.MoveNext());
+        Assert.Equal(3L, ReadInt(rt, "ID"));
+        Assert.Equal(MoveOutcome.Moved, rt.MovePrevious());
+        Assert.Equal(2L, ReadInt(rt, "ID"));
+        Assert.Equal(MoveOutcome.Moved, rt.MovePrevious());
+        Assert.Equal(1L, ReadInt(rt, "ID"));
+
+        // 2) Nested BeginTrans commit (depth 2 -> 1) followed by outer Rollback (1 -> 0).
+        SeekId(rt, 2);
+        Assert.Null(ws.BeginTrans());
+        Assert.Null(ws.BeginTrans());
+        Assert.True(frame.Edit().Succeeded);
+        Assert.True(frame.Assign(idCol, I4(20)).Succeeded);
+        Assert.True(frame.Update().Succeeded);
+        Assert.True(ws.CommitTrans().Succeeded);
+        Assert.True(ws.Rollback().Succeeded);
+        Assert.Equal(2L, ReadInt(rt, "ID"));
+        Assert.Equal(MoveOutcome.Moved, rt.MoveNext());
+        Assert.Equal(3L, ReadInt(rt, "ID"));
+    }
 }

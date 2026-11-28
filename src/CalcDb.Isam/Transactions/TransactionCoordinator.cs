@@ -666,6 +666,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     private readonly Dictionary<PageCache, FileParticipant> _participants = [];
     private readonly List<EditFrame> _edits = [];
     private readonly List<PopulationFamily> _populations = [];
+    private readonly List<TableCursor> _tableCursors = [];
     private readonly List<AcceptedRowChange> _pending = [];
     private readonly Dictionary<MutationSemantics, TableAcceptedIndex> _acceptedByTable = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<PageCache, int> _unpublishedGlobalMapActivity = [];
@@ -1555,6 +1556,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         {
             pop.OnTransactionRollback(top);
         }
+        NotifyTableCursorsRollback(_frames.Count);
         return new ResolutionOutcome(null, open, detail);
     }
 
@@ -1650,6 +1652,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             {
                 pop.OnTransactionCommit(top);
             }
+            NotifyTableCursorsCommit(_frames.Count);
             return new ResolutionOutcome(ResolvedChanges: resolved);
         }
         // CUR-EDIT (evidence/r-q10-commit-counter-edits/addnew-cancel-once,
@@ -1693,6 +1696,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             {
                 pop.OnTransactionCommit(top);
             }
+            NotifyTableCursorsCommit(_frames.Count);
             return new ResolutionOutcome();
         }
         // 4nfc (evidence/r-q28-schema-write-open/txn-*-commit, evidence/r-q53-conv-abspos-subq-loc/txnddl-commit-rollback-*,
@@ -1788,6 +1792,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         {
             pop.OnTransactionCommit(top);
         }
+        NotifyTableCursorsCommit(_frames.Count);
         return new ResolutionOutcome(null, open, detail, resolved);
     }
 
@@ -2628,6 +2633,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             {
                 pop.OnTransactionRollback(top);
             }
+            NotifyTableCursorsRollback(_frames.Count);
             return stmtOutcome;
         }
         // Every refusal is decided before the level is touched: a refused Rollback changes nothing.
@@ -2701,6 +2707,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             {
                 pop.OnTransactionRollback(top);
             }
+            NotifyTableCursorsRollback(_frames.Count);
             return new ResolutionOutcome(ResolvedChanges: top.Changes.Count);
         }
         // 4nfc (evidence/r-q28-schema-write-open/txn-*-rollback, evidence/r-q53-conv-abspos-subq-loc/txnddl-commit-rollback-*,
@@ -2800,6 +2807,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
         {
             pop.OnTransactionRollback(top);
         }
+        NotifyTableCursorsRollback(_frames.Count);
         _sideEffectRoles.Clear();
         _pendingCloseCommit.Clear();
         _lazyBursts.Clear();
@@ -3892,6 +3900,7 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
             {
                 pop.OnTransactionRollback(own);
             }
+            NotifyTableCursorsRollback(_frames.Count);
         }
 
         HashSet<FileParticipant>? scopedSet = scopedParticipants is { Count: > 0 }
@@ -4799,6 +4808,26 @@ public sealed class TransactionCoordinator(LockerId locker) : IDisposable
     internal void Register(PopulationFamily population) => _populations.Add(population);
 
     internal void Unregister(PopulationFamily population) => _populations.Remove(population);
+
+    internal void Register(TableCursor cursor) => _tableCursors.Add(cursor);
+
+    internal void Unregister(TableCursor cursor) => _tableCursors.Remove(cursor);
+
+    private void NotifyTableCursorsCommit(int newDepth)
+    {
+        for (int i = _tableCursors.Count - 1; i >= 0; i--)
+        {
+            _tableCursors[i].OnTransactionCommit(newDepth);
+        }
+    }
+
+    private void NotifyTableCursorsRollback(int newDepth)
+    {
+        for (int i = _tableCursors.Count - 1; i >= 0; i--)
+        {
+            _tableCursors[i].OnTransactionRollback(newDepth);
+        }
+    }
 
     public void Dispose() => Close();
 

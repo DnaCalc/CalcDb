@@ -179,6 +179,9 @@ public sealed unsafe class SelectCursor : IExpressionRow, IDisposable
 
     public bool Eof => _position.Eof;
 
+    /// <summary>Current position tag for DAO-level named refusals.</summary>
+    public PositionTag PositionTag => _position.Tag;
+
     /// <summary>The occurrences populated so far (CUR-POP).</summary>
     public long RecordCount => _store.ObservedCount;
 
