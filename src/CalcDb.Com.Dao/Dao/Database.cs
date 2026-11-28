@@ -1493,6 +1493,7 @@ internal sealed unsafe class DatabaseObject : DaoObject
                 Appender = static (c, arg) => c.Database.AppendTableDef(c, arg),
                 Deleter = static (c, arg) => c.Database.DeleteTableDef(c, arg),
                 Membership = TableDefsMembership,
+                PreserveHeldByName = true, // r-q-cursor-dao/index-distinctcount-dml call 20: Refresh preserves held TableDef COM identity
                 AppendNewOnRelist = true, // r-q2-cursor-dao/enum-refresh-during-walk: Refresh appends newly created tables at the end
                 Refreshed = static (c, held) => c.Database.TableDefsRefreshed(held),
                 ClosedSource = "DAO.Database", // 3420 after Close from the owner (r-dao-1-err-1/life-database-workspace-close)

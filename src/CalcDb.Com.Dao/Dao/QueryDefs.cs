@@ -956,6 +956,13 @@ internal sealed unsafe class ParameterObject : DaoObject
     private CallResult Assign(nint value)
     {
         NativeVariant incoming = ByRefValues.Dereference(Args.Cell(value));
+        if (_parameter.DaoType == 10
+            && incoming.Type == VarType.Bstr
+            && DaoLongValueChunks.BstrByteLength(incoming.Pointer) == 0)
+        {
+            // r-fix-wire-ado/param-select-text-fresh #8: empty string assigned to a Text parameter stores VT_NULL.
+            incoming = new NativeVariant { Vt = (ushort)VarType.Null };
+        }
         SqlFailure? refused = SqlParameters.Adapt(_parameter, incoming, _owner.Database.Sql.Context, out NativeVariant adapted);
         if (refused is not null)
         {
@@ -1137,12 +1144,24 @@ internal sealed unsafe class QueryFieldObject : DaoObject
         _fields.Query.Plan() is { Sources.Count: 1 } plan
         && plan.TryColumnDataUpdatable(_ordinal, ResultKind.Dynaset, out _) == true;
 
-    private bool IsRecordedUnionColumn() =>
+    private bool IsRecordedUnionLongColumn() =>
         Column.Origin == ColumnOrigin.Union && Column is { TypeRule: ColumnTypeRule.Bound, FieldType: 4 };
+
+    private bool IsRecordedUnionColumn() =>
+        Column.Origin == ColumnOrigin.Union && Column is { TypeRule: ColumnTypeRule.Bound, FieldType: 4 or 10 };
+
+    private bool IsRecordedExpressionOrAggregate() =>
+        Column.Origin is ColumnOrigin.Expression or ColumnOrigin.Aggregate
+        && Column is { TypeRule: ColumnTypeRule.Bound, FieldType: 4 or 7 };
 
     private bool IsRecordedQueryField() =>
         (Column.Origin == ColumnOrigin.BaseColumn && Column.SourceColumn is not null)
-        || IsRecordedUnionColumn();
+        || IsRecordedUnionLongColumn();
+
+    private bool IsRecordedQueryFieldSize() =>
+        (Column.Origin is ColumnOrigin.BaseColumn or ColumnOrigin.GroupKey && Column.SourceColumn is not null)
+        || IsRecordedUnionColumn()
+        || IsRecordedExpressionOrAggregate();
 
     private CallResult RecordedMember(string member, Func<CallResult> op) =>
         IsRecordedQueryField()
@@ -1151,7 +1170,7 @@ internal sealed unsafe class QueryFieldObject : DaoObject
 
     private CallResult Size()
     {
-        if (!IsRecordedQueryField())
+        if (!IsRecordedQueryFieldSize())
         {
             return CallResult.Fail(Failure.NotModelled("NotModelled.QueryFieldSize", $"QueryDef Field.Size of {Column.Origin} column {Column.Name} is not recorded"));
         }
@@ -1163,13 +1182,31 @@ internal sealed unsafe class QueryFieldObject : DaoObject
         {
             return Int32(colSize);
         }
+        if (Column.Origin is ColumnOrigin.Expression or ColumnOrigin.Aggregate)
+        {
+            return Column.FieldType switch
+            {
+                4 => Int32(4),
+                7 => Int32(8),
+                _ => CallResult.Fail(Failure.NotModelled("NotModelled.QueryFieldSize", $"QueryDef Field.Size of {Column.Origin} column {Column.Name} (type {Column.FieldType})")),
+            };
+        }
+        if (Column.Origin == ColumnOrigin.Union)
+        {
+            return Column.FieldType switch
+            {
+                4 => Int32(4),
+                10 => Int32(255),
+                _ => CallResult.Fail(Failure.NotModelled("NotModelled.QueryFieldSize", $"QueryDef Field.Size of Union column {Column.Name} (type {Column.FieldType})")),
+            };
+        }
         return CallResult.Fail(Failure.NotModelled("NotModelled.QueryFieldSize", $"QueryDef Field.Size of column {Column.Name}"));
     }
 
     private CallResult DataUpdatable() => Column.Origin switch
     {
         ColumnOrigin.BaseColumn when Column.SourceColumn is not null && IsSingleTableNonDistinctSelect() => Bool(true),
-        _ when IsRecordedUnionColumn() => Bool(false),
+        _ when IsRecordedUnionLongColumn() => Bool(false),
         _ => CallResult.Fail(Failure.NotModelled("NotModelled.QueryFieldDataUpdatable", $"QueryDef Field.DataUpdatable of {Column.Origin} column {Column.Name} is not recorded")),
     };
 
@@ -1179,20 +1216,20 @@ internal sealed unsafe class QueryFieldObject : DaoObject
             ColumnFacts.Attributes(sc.Column, updatable: true) is int attrs
                 ? Int32(attrs)
                 : CallResult.Fail(Failure.NotModelled("NotModelled.FieldAttributes", $"QueryDef Field.Attributes of column {Column.Name}")),
-        _ when IsRecordedUnionColumn() => Int32(1),
+        _ when IsRecordedUnionLongColumn() => Int32(1),
         _ => CallResult.Fail(Failure.NotModelled("NotModelled.QueryFieldAttributes", $"QueryDef Field.Attributes of {Column.Origin} column {Column.Name} is not recorded")),
     };
 
     private CallResult CollatingOrder() => Column.Origin switch
     {
         ColumnOrigin.BaseColumn when Column.SourceColumn is { } sc => Int32(ColumnFacts.CollatingOrder(sc.Column)),
-        _ when IsRecordedUnionColumn() => Int32(_fields.Query.Database.Header.SortOrder.Identifier),
+        _ when IsRecordedUnionLongColumn() => Int32(_fields.Query.Database.Header.SortOrder.Identifier),
         _ => CallResult.Fail(Failure.NotModelled("NotModelled.QueryFieldCollatingOrder", $"QueryDef Field.CollatingOrder of {Column.Origin} column {Column.Name} is not recorded")),
     };
 
     private CallResult OriginText(string? value, string member) => Column.Origin switch
     {
-        ColumnOrigin.BaseColumn when value is not null => Text(value),
+        ColumnOrigin.BaseColumn or ColumnOrigin.GroupKey or ColumnOrigin.Expression or ColumnOrigin.Aggregate when value is not null => Text(value),
         _ when IsRecordedUnionColumn() => Text(""),
         _ => CallResult.Fail(Failure.NotModelled("NotModelled.QueryFieldSource", $"QueryDef Field.{member} of {Column.Origin} column {Column.Name} is not recorded")),
     };
@@ -1208,7 +1245,7 @@ internal sealed unsafe class QueryFieldObject : DaoObject
 
     private CallResult BaseStored(string propName, CallResult unset)
     {
-        if (IsRecordedUnionColumn())
+        if (IsRecordedUnionLongColumn())
         {
             return unset;
         }

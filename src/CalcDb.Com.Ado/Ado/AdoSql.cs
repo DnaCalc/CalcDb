@@ -301,6 +301,15 @@ internal static class AdoSqlErrors
         -68551703,
         AdoObject.IidRowset);
 
+    /// <summary>Odd-byte BSTR put onto a Text field (r-fix-wire-ado/ado-write-values-text-binary #340, #372, #404).</summary>
+    public static MappedProviderError OddUnicodeStringLength() => Make(
+        AdoObject.HResultErrorsOccurred,
+        "Number of bytes of a UNICODE string is not even.",
+        5004043,
+        null,
+        null,
+        AdoObject.IidRowset);
+
     /// <summary>Reading a field on a row deleted through the same server keyset before moving off it (r-oledb-odbc/rowlife-clone-delete-requery #26; SQLState/NativeError not observed).</summary>
     public static MappedProviderError SelfDeletedRow() => Make(
         AdoObject.HResultDeletedRecord,

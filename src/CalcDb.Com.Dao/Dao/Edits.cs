@@ -254,15 +254,23 @@ internal static unsafe class DaoLongValueChunks
 {
     public static uint BstrByteLength(nint bstr) => bstr == 0 ? 0u : *(uint*)(bstr - 4);
 
+    /// <summary>
+    /// Wrap a non-empty BSTR put on a fixed-width Binary or LONGBINARY (OLE) field into a 0-based byte array
+    /// preserving raw BSTR bytes (including odd-byte BSTRs, e.g. 0x41 -> [0x41]) (r-q-wire/str-odd-bstr-into-binary).
+    /// </summary>
     public static bool TryWrapBinaryBstr(ColumnDescriptor column, in NativeVariant incoming, out OwnedVariant? wrapped)
     {
         wrapped = null;
-        if (column.TypeCode != NativeTypes.Binary || incoming.Type != VarType.Bstr || incoming.Pointer == 0)
+        if (column.TypeCode is not (NativeTypes.Binary or NativeTypes.Ole) || incoming.Type != VarType.Bstr || incoming.Pointer == 0)
         {
             return false;
         }
         uint byteLen = BstrByteLength(incoming.Pointer);
-        if (byteLen == 0 || column.Length <= 0 || byteLen > (uint)column.Length)
+        if (byteLen == 0)
+        {
+            return false;
+        }
+        if (column.TypeCode == NativeTypes.Binary && (column.Length <= 0 || byteLen > (uint)column.Length))
         {
             return false;
         }
@@ -271,6 +279,110 @@ internal static unsafe class DaoLongValueChunks
             .CopyTo(new Span<byte>(SafeArrays.ElementPointer(array, 0), (int)byteLen));
         wrapped = OwnedVariant.TakeArray(array, VarType.UI1);
         return true;
+    }
+
+    public static bool IsRecordedGetChunkArgType(int parameter, VarType vt) => parameter switch
+    {
+        0 => vt is VarType.I4 or VarType.I2 or VarType.Bool or VarType.Empty or VarType.Null or VarType.R8 or VarType.Bstr,
+        1 => vt is VarType.I4 or VarType.UI1 or VarType.Empty or VarType.Null or VarType.R8 or VarType.Bstr,
+        _ => false,
+    };
+
+    public static Failure UnrecordedGetChunkArgType(int parameter, VarType vt) => Failure.NotModelled(
+        "NotModelled.GetChunkArgumentType",
+        parameter == 0
+            ? $"Field.GetChunk Offset with {vt} argument (only I4, I2, Bool, Empty, Null, R8 and BSTR are recorded)"
+            : $"Field.GetChunk Bytes with {vt} argument (only I4, UI1, Empty, Null, R8 and BSTR are recorded)");
+
+    public static Failure GetChunkArgumentConversionFailure(DaoObject field, ArgumentConversion conversion) => conversion.Reason switch
+    {
+        ArgumentConversionReason.Missing => field.Fail(3001, DaoErrors.InvalidArgument, publishesErrorInfo: true).Failure!,
+        ArgumentConversionReason.Overflow when conversion.Parameter == 1 => field.Fail(3001, DaoErrors.InvalidArgument, publishesErrorInfo: true).Failure!,
+        ArgumentConversionReason.TypeMismatch => Failure.Dao(3421, field.Source, DaoErrors.ConversionError) with { PublishesErrorInfo = true },
+        _ => Failure.NotModelled(
+            "NotModelled.GetChunkArgumentConversion",
+            $"Field.GetChunk parameter {conversion.Parameter} ({conversion.SourceType}) failed coercion with 0x{conversion.HResult:X8} (not recorded)"),
+    };
+
+    public static bool TryParseChunkArg(DaoObject field, uint lcid, int parameter, nint arg, out int value, out CallResult error)
+    {
+        value = 0;
+        error = default;
+        NativeVariant* cell = Args.Cell(arg);
+        if (TypedCall.IsMissing(cell))
+        {
+            error = field.Fail(3001, DaoErrors.InvalidArgument, publishesErrorInfo: true);
+            return false;
+        }
+        VarType vt = (VarType)cell->Vt;
+        if (vt == VarType.I4)
+        {
+            value = (int)cell->Int64;
+            return true;
+        }
+        if (vt == VarType.Empty)
+        {
+            value = 0;
+            return true;
+        }
+        if (vt == VarType.Null)
+        {
+            error = field.Fail(3421, DaoErrors.ConversionError, publishesErrorInfo: true);
+            return false;
+        }
+        if (IsRecordedGetChunkArgType(parameter, vt))
+        {
+            if (OwnedVariant.TryChangeScalar(cell, VarType.I4, lcid, out NativeVariant coerced, out int hr))
+            {
+                value = (int)coerced.Int64;
+                return true;
+            }
+            error = hr switch
+            {
+                HResults.DISP_E_OVERFLOW when parameter == 1 => field.Fail(3001, DaoErrors.InvalidArgument, publishesErrorInfo: true),
+                HResults.DISP_E_TYPEMISMATCH => field.Fail(3421, DaoErrors.ConversionError, publishesErrorInfo: true),
+                _ => CallResult.Fail(Failure.NotModelled(
+                    "NotModelled.GetChunkArgumentConversion",
+                    $"Field.GetChunk parameter {parameter} ({vt}) failed coercion with 0x{hr:X8} (not recorded)")),
+            };
+            return false;
+        }
+        error = CallResult.Fail(UnrecordedGetChunkArgType(parameter, vt));
+        return false;
+    }
+
+    public static CallResult MemoChunk(nint bstr, int offset, int bytes)
+    {
+        ReadOnlySpan<char> chars = Bstrs.Chars(bstr);
+        if (offset >= chars.Length || bytes == 0)
+        {
+            return CallResult.Of(OwnedVariant.FromText(""));
+        }
+        int take = Math.Min(bytes, chars.Length - offset);
+        return CallResult.OfOwnedBstr(Bstrs.FromUnits(take, (bstr, offset), static (dest, s) => Bstrs.Chars(s.bstr).Slice(s.offset, dest.Length).CopyTo(dest)));
+    }
+
+    public static CallResult OleChunk(nint array, int offset, int bytes)
+    {
+        if (array == 0)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.GetChunkValue", "Field.GetChunk of a null SAFEARRAY OLE value (not recorded)"));
+        }
+        (int Lower, int Count)[] shape = SafeArrays.Shape(array);
+        if (shape.Length != 1 || shape[0].Lower != 0)
+        {
+            return CallResult.Fail(Failure.NotModelled("NotModelled.GetChunkValue", $"Field.GetChunk of a {shape.Length}D OLE SAFEARRAY (not recorded)"));
+        }
+        int length = shape[0].Count;
+        if (bytes == 0 || offset >= length)
+        {
+            return CallResult.Of(OwnedVariant.TakeArray(0, VarType.UI1));
+        }
+        int take = Math.Min(bytes, length - offset);
+        nint slice = SafeArrays.Create(VarType.UI1, (0, take));
+        new ReadOnlySpan<byte>((byte*)SafeArrays.ElementPointer(array, 0) + offset, take)
+            .CopyTo(new Span<byte>(SafeArrays.ElementPointer(slice, 0), take));
+        return CallResult.Of(OwnedVariant.TakeArray(slice, VarType.UI1));
     }
 
     public static CallResult FieldSizeFromBuffered(int daoType, NativeValue value, string columnName) => value.Kind switch

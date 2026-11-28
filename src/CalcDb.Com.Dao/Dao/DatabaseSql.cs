@@ -544,14 +544,14 @@ internal static unsafe class SelectRoute
     }
 
     /// <summary>
-    /// True for a plain single-table SELECT projecting base rows (no UNION, GROUP BY, aggregates, DISTINCT, DISTINCTROW,
-    /// TOP, joins, or derived tables): the shape recorded across Workspace overlays (task dqtr).
+    /// True for a single-table SELECT projecting base rows (no UNION, GROUP BY, aggregates, DISTINCT,
+    /// TOP, joins, or derived tables; single-table DISTINCTROW projects the same base rows): the shape recorded across Workspace overlays (task dqtr).
     /// </summary>
     internal static bool IsSingleTableRowSelect(BoundSelect plan) =>
         plan.Sources.Count == 1
         && plan.Sources[0].Table is not null
         && !plan.IsUnion
-        && plan.Predicate == SelectPredicate.All
+        && plan.Predicate is SelectPredicate.All or SelectPredicate.DistinctRow
         && plan.Top is null
         && plan.TryUpdatable(ResultKind.Dynaset, out _) == true;
 

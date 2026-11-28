@@ -461,6 +461,28 @@ internal sealed unsafe class KeysetRowSource : IAdoRowSource
             startedImplicitEdit = true;
         }
 
+        if (col.TypeCode == NativeTypes.Text
+            && incoming.Type == VarType.Bstr
+            && incoming.Pointer != 0
+            && ((*(uint*)(incoming.Pointer - 4)) & 1) != 0)
+        {
+            // r-fix-wire-ado/ado-write-values-text-binary #340, #372, #404: odd-byte BSTR on FText fails
+            // ACE engine 0x80040E21 ("Number of bytes of a UNICODE string is not even.") and poisons AddNew.
+            if (startedImplicitEdit)
+            {
+                _frame.Discard();
+                DisposeOriginalSnapshot();
+            }
+            providerError = AdoSqlErrors.OddUnicodeStringLength();
+            if (!startedImplicitEdit && _frame.Mode == EditMode.AddNew)
+            {
+                _failedAddPut = true;
+                _failedAddPutOrdinal = ordinal;
+                _failedAddPutRead = false;
+            }
+            return false;
+        }
+
         OwnedVariant? tempConverted = null;
         NativeVariant effective = incoming;
         if (incoming.Type == VarType.Empty && col.TypeCode == NativeTypes.Long)
