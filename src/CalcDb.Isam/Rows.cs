@@ -282,4 +282,110 @@ public static class UsageMaps
         }
         return pages;
     }
+
+    /// <summary>
+    /// Whether <paramref name="page"/>'s membership bit is set in <paramref name="map"/>, without allocating a full page
+    /// list (zero-alloc on inline maps; R-CURSOR-1 DeletedRecord after page release). Reports the indirect bitmap page in
+    /// <paramref name="bitmapPage"/> when a reference map was checked so overlay bindings can detect bitmap changes.
+    /// </summary>
+    public static bool ContainsPage(PageSource cache, FormatDescriptor d, RowLocator map, uint page, out uint bitmapPage, out TraversalFailure? failure) =>
+        ContainsPage(cache, mapHold: null, bitmapHold: null, d, map, page, out bitmapPage, out failure);
+
+    internal static bool ContainsPage(PageSource cache, SourceHold? mapHold, SourceHold? bitmapHold, FormatDescriptor d, RowLocator map, uint page, out uint bitmapPage, out TraversalFailure? failure)
+    {
+        bitmapPage = 0;
+        failure = null;
+        if (map.Page == 0)
+        {
+            return true;
+        }
+        var at = RowId.From(map);
+        MapRules m = d.Map;
+        uint refBitmapPage = 0;
+        PagePin? pin = (mapHold is not null ? mapHold.Get(map.Page) : cache.Pin(map.Page)).Pin;
+        if (pin is null)
+        {
+            failure = new TraversalFailure($"map page {map.Page} could not be pinned", at);
+            return false;
+        }
+        try
+        {
+            SlotView? slot = DataPages.CheckedSlot(pin.Bytes, map.Row, d, out string? slotFailure);
+            if (slot is not { } s)
+            {
+                failure = new TraversalFailure("map declaration: " + slotFailure, at);
+                return false;
+            }
+            ReadOnlySpan<byte> declaration = pin.Bytes.Slice(s.Start, s.Length);
+            if (declaration.Length < 1)
+            {
+                failure = new TraversalFailure("map declaration: empty declaration", at);
+                return false;
+            }
+            byte type = (byte)m.Type.Read(declaration);
+            if (type == 0)
+            {
+                if (declaration.Length < m.InlineBitmapOffset)
+                {
+                    failure = new TraversalFailure("map declaration: inline declaration shorter than its base", at);
+                    return false;
+                }
+                uint inlineBase = (uint)m.InlineBase.Read(declaration);
+                ReadOnlySpan<byte> bitmap = declaration[m.InlineBitmapOffset..];
+                if (page < inlineBase || page - inlineBase >= (ulong)bitmap.Length * 8)
+                {
+                    return false;
+                }
+                uint bit = page - inlineBase;
+                return (bitmap[(int)(bit / 8)] & (1 << (int)(bit % 8))) != 0;
+            }
+            if (type != 1)
+            {
+                failure = new TraversalFailure($"map declaration: {m.Type.Id}: unknown map type {type:X2}", at);
+                return false;
+            }
+            long perBitmap = (long)(d.PageSize - m.BitmapPageBodyOffset) * 8;
+            long block = page / perBitmap;
+            long ptrOffset = m.ReferencePointersOffset + block * m.ReferencePointerBytes;
+            if (ptrOffset < m.ReferencePointersOffset || ptrOffset + m.ReferencePointerBytes > declaration.Length)
+            {
+                return false;
+            }
+            int pOff = (int)ptrOffset;
+            refBitmapPage = (uint)(declaration[pOff] | (declaration[pOff + 1] << 8) | (declaration[pOff + 2] << 16) | (declaration[pOff + 3] << 24));
+        }
+        finally
+        {
+            if (mapHold is null)
+            {
+                pin.Dispose();
+            }
+        }
+        if (refBitmapPage == 0)
+        {
+            return false;
+        }
+        bitmapPage = refBitmapPage;
+        PagePin? bmpPin = (bitmapHold is not null ? bitmapHold.Get(refBitmapPage) : cache.Pin(refBitmapPage)).Pin;
+        if (bmpPin is null)
+        {
+            failure = new TraversalFailure($"bitmap page {refBitmapPage} could not be pinned", at);
+            return false;
+        }
+        try
+        {
+            ReadOnlySpan<byte> body = bmpPin.Bytes[m.BitmapPageBodyOffset..];
+            long perPageBits = (long)(d.PageSize - m.BitmapPageBodyOffset) * 8;
+            long refBit = page % perPageBits;
+            int byteOffset = (int)(refBit / 8);
+            return byteOffset < body.Length && (body[byteOffset] & (1 << (int)(refBit % 8))) != 0;
+        }
+        finally
+        {
+            if (bitmapHold is null)
+            {
+                bmpPin.Dispose();
+            }
+        }
+    }
 }
