@@ -86,7 +86,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         // r-dao-1b/recordset-members-query-snapshot: saved UNION query snapshot (type 4) member inventory.
         .Get("CacheSize", (self, args) => Live(self, r => r.IsUnionSnapshot ? Int32(0) : CallResult.Fail(Failure.NotModelled("NotModelled.QueryRecordsetCacheSize", $"Recordset.CacheSize on type {r.RecordsetType} SELECT (not recorded)"))))
         .Get("CacheStart", (self, args) => Live(self, r => r.IsUnionSnapshot ? NullArray : CallResult.Fail(Failure.NotModelled("NotModelled.QueryRecordsetCacheStart", $"Recordset.CacheStart on type {r.RecordsetType} SELECT (not recorded)"))))
-        .Get("Restartable", (self, args) => Live(self, r => r.IsUnionSnapshot ? Bool(true) : CallResult.Fail(Failure.NotModelled("NotModelled.QueryRecordsetRestartable", $"Recordset.Restartable on type {r.RecordsetType} SELECT (not recorded)"))))
+        .Get("Restartable", (self, args) => Live(self, r => Bool(r.RecordsetType != 1)))
         .Get("ValidationRule", (self, args) => Live(self, r => r.IsUnionSnapshot ? Text("") : CallResult.Fail(Failure.NotModelled("NotModelled.QueryRecordsetValidationRule", $"Recordset.ValidationRule on type {r.RecordsetType} SELECT (not recorded)"))))
         .Get("ValidationText", (self, args) => Live(self, r => r.IsUnionSnapshot ? Text("") : CallResult.Fail(Failure.NotModelled("NotModelled.QueryRecordsetValidationText", $"Recordset.ValidationText on type {r.RecordsetType} SELECT (not recorded)"))))
         .Get("Properties", (self, args) => Live(self, r => r.PropertiesCollection()))
@@ -674,15 +674,15 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         : CallResult.Fail(Failure.NotModelled(Cursor.UpdatableOpen ?? "NotModelled.QueryUpdatable", $"Recordset.Updatable: {Cursor.UpdatableOpen ?? "unrecorded query shape"}"));
 
     /// <summary>
-    /// Bookmarkable (R-CURSOR-1 CUR-ID): True for dynaset (2) and snapshot (4) across read-only and writable opens and
-    /// all query shapes (r-cursor-1b/open-argument-shapes, r-fix-cursor-dao/open-argument-shapes-rw,
-    /// r-def-cursor-dao/pos-query-distinct-groupby, pos-query-left-join, pos-query-top, pos-query-union,
-    /// r-fix-cursor-dao/pos-query-sources-rw, r-dao-1b/recordset-members-query-snapshot; SelectRoute admits options 0
-    /// only); False for forward-only (8) (r-def-cursor-dao/open-dynamic-and-option-matrix, CUR-ID).
+    /// Bookmarkable (R-CURSOR-1 CUR-ID): True for dynaset (2) and snapshot (4) unless opened with dbForwardOnly (256),
+    /// across read-only and writable opens and all query shapes (r-cursor-1b/open-argument-shapes,
+    /// r-fix-cursor-dao/open-argument-shapes-rw, r-def-cursor-dao/pos-query-distinct-groupby, pos-query-left-join,
+    /// pos-query-top, pos-query-union, r-fix-cursor-dao/pos-query-sources-rw, r-dao-1b/recordset-members-query-snapshot,
+    /// r-def-cursor-dao/open-dynamic-and-option-matrix calls #34, #47, #136); False for forward-only (8).
     /// </summary>
     private CallResult Bookmarkable() => RecordsetType switch
     {
-        2 or 4 => Bool(true),
+        2 or 4 => Bool(RecordsetOptions.Bookmarkable(RecordsetType, _options)),
         8 => Bool(false),
         _ => CallResult.Fail(Failure.NotModelled("NotModelled.QueryBookmarkable", $"Recordset.Bookmarkable on a type {RecordsetType} query recordset (not recorded)")),
     };
@@ -763,7 +763,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
                 ? CallResult.Fail(Failure.NotModelled("NotModelled.QueryRecordCount.AppendOnlyMoved", "RecordCount after moving a dbAppendOnly SELECT dynaset (not recorded)"))
                 : Int32(_appendOnlyRows!.Count);
         }
-        if (_isUpdatableJoin && _hasOrderBy && !_movedSinceOpen && Plan.Parameters.Count == 0)
+        if (_isUpdatableJoin && _hasOrderBy && (_options & 256) == 0 && !_movedSinceOpen && Plan.Parameters.Count == 0)
         {
             SelectCursor? tmp = SelectRoute.OpenCursor(
                 Database, Plan, RecordsetType, _isSingleTableRowSelect, _hasOrderBy,
@@ -806,6 +806,12 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         {
             // r-cursor-1b/filter-derived-types (calls 76, 151): forward-only derived recordset reports RecordCount = -1 at EOF.
             return Int32(-1);
+        }
+        if ((_options & 256) != 0 && !_movedSinceOpen)
+        {
+            // r-def-cursor-dao/open-dynamic-and-option-matrix calls #36, #49, #62:
+            // Recordsets opened with dbForwardOnly (256) fetch the first row on open (RecordCount = 1 when non-empty).
+            return Int32(Cursor.Bof && Cursor.Eof ? 0 : 1);
         }
         if (IsMdb && !(_isSingleTableRowSelect && RecordsetType is 2 or 4))
         {
@@ -1127,6 +1133,12 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
         if (EditPending("OpenRecordset") is { } pending)
         {
             return pending;
+        }
+        if (Args.Int32(typeArg, omitted: null) == 16)
+        {
+            // r-def-cursor-dao/open-dynamic-and-option-matrix calls #152, #165:
+            // Recordset.OpenRecordset(dbOpenDynamic=16) fails 3001 from DAO.Recordset.
+            return Fail(3001, DaoErrors.InvalidArgument);
         }
         if (_options != 0)
         {
@@ -2583,16 +2595,20 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
                 "NotModelled.QueryRecordsetRequeryArg",
                 "Recordset.Requery with a NewQueryDef argument on a SELECT recordset (not recorded)"));
         }
-        // r-def-cursor-dao/field-value-trio-other-writer (call 34) and edit-conflict-restore-value (calls 32, 67): Requery
-        // on a writable single-table ACCDB SELECT dynaset without ORDER BY inside depth-1 BeginTrans refreshes the cursor;
-        // if a 3197 Edit frame is still pending, Requery discards the edit buffer and re-reads the current row.
-        bool allowDepth1SingleTableDynaset = !IsMdb && !Database.ReadOnly && RecordsetType == 2 && _isSingleTableRowSelect && !_hasOrderBy && _openLevels.Length == 1;
-        bool allowNoOrderByDynasetAfterEdit = allowDepth1SingleTableDynaset && _frame is { Mode: EditMode.Edit };
+        // r-def-cursor-dao/field-value-trio-other-writer (call 34), edit-conflict-restore-value (calls 32, 67), and
+        // r-dao-1-err-1/err-partial-lock (call 41): Requery on a writable single-table ACCDB SELECT dynaset without
+        // ORDER BY at depth 0..1 refreshes the cursor; if a 3197 Edit frame is still pending, Requery discards it.
+        // r-fix-cursor-dao/prov-outer-join-cancel-after-failed-update (call 60) and
+        // r-def-cursor-dao/prov-outer-join-absent-side (call 44): Requery on a writable updatable-join ACCDB SELECT
+        // dynaset at depth 0..1 discards pending join edit/AddNew buffers and refreshes the cursor.
+        bool allowSingleTableNoOrderDynaset = !IsMdb && !Database.ReadOnly && RecordsetType == 2 && _isSingleTableRowSelect && !_hasOrderBy && _openLevels.Length <= 1;
+        bool allowUpdatableJoinDynaset = !IsMdb && !Database.ReadOnly && RecordsetType == 2 && _isUpdatableJoin && !_isDerived && Plan.Parameters.Count == 0 && Database.Workspace.Transactions.Depth == _openLevels.Length && _openLevels.Length <= 1;
+        bool allowNoOrderByDynasetAfterEdit = allowSingleTableNoOrderDynaset && _frame is { Mode: EditMode.Edit };
         if (_appendOnly
             || (IsMdb && !(RecordsetType is 2 or 4 && _openLevels.Length == 0))
             || RecordsetType is not (2 or 4)
-            || !_isSingleTableRowSelect
-            || (!_hasOrderBy && !allowDepth1SingleTableDynaset)
+            || (!_isSingleTableRowSelect && !allowUpdatableJoinDynaset)
+            || (_isSingleTableRowSelect && !_hasOrderBy && !allowSingleTableNoOrderDynaset)
             || Plan.Parameters.Count > 0
             || Database.Workspace.Transactions.Depth != _openLevels.Length
             || _openLevels.Length > 1)
@@ -2601,7 +2617,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
                 "NotModelled.QueryRecordsetRequery",
                 "Requery on this SELECT recordset shape, cursor type, format or transaction depth is not recorded (CUR-POP)"));
         }
-        if (HasPendingEdit && !allowNoOrderByDynasetAfterEdit)
+        if (HasPendingEdit && !allowNoOrderByDynasetAfterEdit && !allowUpdatableJoinDynaset)
         {
             return EditPending("Requery")!.Value;
         }
@@ -2611,6 +2627,7 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
             out ReadView? nextSnapshotView, out PrivateOverlay? nextSnapshotOverlay,
             out SqlFailure? failure, out CallResult? viewRefusal,
             useReadOnlyFirstView: false,
+            dynamicJoinOverlay: _isUpdatableJoin,
             derived: _isDerived);
         if (next is null)
         {
@@ -2631,6 +2648,10 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
             _frame?.Discard();
             _editReader?.Position(null);
             ClearChunkAppends();
+        }
+        if (allowUpdatableJoinDynaset)
+        {
+            DisposeJoinFrames();
         }
         SelectCursor previousCursor = Cursor;
         PrivateOverlay? previousSnapshotOverlay = _snapshotOverlay;
@@ -3053,7 +3074,18 @@ internal sealed unsafe class SelectRecordsetObject : DaoObject, IDatabaseRecords
 
     private CallResult Edit()
     {
-        if (EditPending("Edit") is { } pending)
+        if (_isUpdatableJoin
+            && _joinCurrentChildAbsent
+            && (_joinFrames?[0]?.Mode ?? EditMode.None) == EditMode.Edit)
+        {
+            // r-def-cursor-dao/prov-outer-join-absent-side call 29: calling Edit() again after a failed child Update
+            // discards the pending parent/child edit buffers and restarts a fresh Edit on the current unmatched row.
+            _joinFrames![0]?.Discard();
+            _joinFrames[1]?.Discard();
+            _dirtyJoinSource = -1;
+            _joinCurrentChildAbsent = false;
+        }
+        else if (EditPending("Edit") is { } pending)
         {
             return pending;
         }

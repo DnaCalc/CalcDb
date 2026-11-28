@@ -256,6 +256,18 @@ internal sealed unsafe class SelectRowSource : IAdoRowSource
         return new SelectRowSource(plan, cursor, columns, heldTables, knownCount, context, shape, isSavedQuery);
     }
 
+    internal static bool TryPrepareColumns(AdoOpenSession session, string sql, out AdoFieldDescriptor[] columns)
+    {
+        columns = [];
+        using BoundSelect? plan = BoundSelect.Prepare(sql, session.SqlWithViews, out _);
+        if (plan is null)
+        {
+            return false;
+        }
+        columns = BuildSelectColumns(sql, plan, cursor: null, out _);
+        return true;
+    }
+
     private static AdoFieldDescriptor[] BuildSelectColumns(string sql, BoundSelect plan, SelectCursor? cursor, out AdoSelectShape shape)
     {
         IReadOnlyList<ResultColumn> resultCols = cursor is not null ? cursor.Columns : plan.Columns;
@@ -1313,6 +1325,8 @@ internal sealed unsafe class RecordsetObject : AdoObject
     private ConnectionObject? _activeConnection;
     private bool _wasEverOpened;
     private bool _closedAfterOpen;
+    private string? _closedSelectSource;
+    private int _closedDdlGeneration;
     private bool _isClone;
     private bool _getStringNonBstrDelimiter;
     private bool _getRowsRecordedBinaryArgShape;
@@ -3367,15 +3381,20 @@ internal sealed unsafe class RecordsetObject : AdoObject
             && _openedCommandType == AdoSqlText.AdCmdText
             && _effectiveCursorLocation == 2
             && _effectiveCursorType == 1
-            && _effectiveLockType == 3;
+            && _effectiveLockType is 1 or 3;
         bool isServerStatic = _rows is MemoryRowSource or SelectRowSource
             && _openedCommandType == AdoSqlText.AdCmdText
             && _effectiveCursorLocation == 2
             && _effectiveCursorType == 3
             && _effectiveLockType == 1;
-        if ((!isClientBatch && !isServerKeyset && !isServerStatic) || _openedOriginalSource is null || _openedEffectiveSource is null)
+        bool isClientStatic = _rows is MemoryRowSource
+            && _openedCommandType == AdoSqlText.AdCmdText
+            && _effectiveCursorLocation == 3
+            && _effectiveCursorType == 3
+            && _effectiveLockType == 1;
+        if ((!isClientBatch && !isServerKeyset && !isServerStatic && !isClientStatic) || _openedOriginalSource is null || _openedEffectiveSource is null)
         {
-            return NotImplemented("Recordset.Requery on this cursor (only client batch/optimistic, server keyset (2,1,3), and server static (2,3,1) cursors are recorded)");
+            return NotImplemented("Recordset.Requery on this cursor (only client batch/optimistic, client static (3,3,1), server keyset (2,1,1|3), and server static (2,3,1) cursors are recorded)");
         }
         if (IsEditing)
         {
@@ -3412,7 +3431,7 @@ internal sealed unsafe class RecordsetObject : AdoObject
             out Failure? refusal,
             out _,
             preferKeyset: isServerKeyset,
-            updatableKeyset: isServerKeyset,
+            updatableKeyset: isServerKeyset && _effectiveLockType is 2 or 3,
             lockPessimistic: false,
             preferClientBatch: isClientBatch,
             clientBatchOptimistic: isClientBatch && _effectiveLockType == 4);
@@ -3427,12 +3446,13 @@ internal sealed unsafe class RecordsetObject : AdoObject
             return CallResult.Fail(refusal!);
         }
 
-        if (isServerStatic && fresh is not MemoryRowSource)
+        if ((isServerStatic || isClientStatic) && fresh is not MemoryRowSource)
         {
             PersistedColumn[]? persistCols = fresh is SelectRowSource selectForPersist
                 ? selectForPersist.BuildPersistColumns(session)
                 : null;
-            MemoryRowSource? snapshot = MemoryRowSource.Materialize(fresh, isClientCursor: false, out Failure? matFailure, fresh.HeldTables, persistCols);
+            IReadOnlyList<string>? heldTables = isClientStatic ? null : fresh.HeldTables;
+            MemoryRowSource? snapshot = MemoryRowSource.Materialize(fresh, isClientCursor: isClientStatic, out Failure? matFailure, heldTables, persistCols);
             fresh.Dispose();
             if (snapshot is null)
             {
@@ -4441,6 +4461,8 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return;
         }
+        _closedSelectSource = null;
+        _closedDdlGeneration = 0;
         cn?.AddRef();
         _activeConnection?.Release();
         _activeConnection = cn;
@@ -5303,6 +5325,8 @@ internal sealed unsafe class RecordsetObject : AdoObject
         {
             return FailAdo(AdoErrors.ObjectOpen);
         }
+        _closedSelectSource = null;
+        _closedDdlGeneration = 0;
 
         nint sourceArg = args.Length > 0 ? args[0] : 0;
         nint connArg = args.Length > 1 ? args[1] : 0;
@@ -6320,6 +6344,8 @@ internal sealed unsafe class RecordsetObject : AdoObject
     {
         _wasEverOpened = true;
         _closedAfterOpen = false;
+        _closedSelectSource = null;
+        _closedDdlGeneration = 0;
         _rows = rowSource;
         _effectiveCursorType = effectiveCursorType;
         _effectiveLockType = effectiveLockType;
@@ -6385,7 +6411,13 @@ internal sealed unsafe class RecordsetObject : AdoObject
             return FailAdo(AdoErrors.NotAllowedInContext);
         }
         EnsureInitialPositionRealized();
+        string? closedSelectSource = !_isClone && _openedCommandType == AdoSqlText.AdCmdText
+            ? _openedEffectiveSource
+            : null;
+        int closedDdlGeneration = _activeConnection?.DdlGeneration ?? 0;
         DisposeOpenRows();
+        _closedSelectSource = closedSelectSource;
+        _closedDdlGeneration = closedDdlGeneration;
         // Keep column descriptors in Fields while Connection stays open, invalidating Field wrappers (r-str-ado-act/ado-rs-read-close #279-288).
         _fields?.OnRecordsetClosed();
         // r-q2-ado-misc/ado-events-clone-propagation: closing a Clone emits no RecordsetChangeComplete;
@@ -6395,6 +6427,24 @@ internal sealed unsafe class RecordsetObject : AdoObject
             AdoEvents.RecordsetChangeComplete(_events, AdoEventReason.Close, null, AdoEventStatus.Ok, this);
         }
         return CallResult.Nothing;
+    }
+
+    /// <summary>
+    /// Refreshes retained Fields metadata on a closed SELECT Recordset when its open Connection executed DDL after Close
+    /// (r-fix-wire-ado/fields-refresh-ddl-closed calls #57, #106).
+    /// </summary>
+    internal bool TryRefreshClosedFieldsOnDdl(out AdoFieldDescriptor[] columns)
+    {
+        columns = [];
+        if (IsOpen
+            || _closedSelectSource is not { } sql
+            || _activeConnection is not { IsOpen: true, OpenSession: { } session } cn
+            || cn.DdlGeneration == _closedDdlGeneration)
+        {
+            return false;
+        }
+        _closedDdlGeneration = cn.DdlGeneration;
+        return SelectRowSource.TryPrepareColumns(session, sql, out columns);
     }
 
     private void DisposeOpenRows()

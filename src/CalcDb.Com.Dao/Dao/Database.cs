@@ -1094,14 +1094,25 @@ internal sealed unsafe class DatabaseObject : DaoObject
             bookmarkBase = ResolveKeysetBookmarkBase(recordsetType, table, tempSlot.Value, excludingFamilyRoot: null, out bookmarkBaseRefusal);
         }
         ulong cursorExtent = recordsetType == 4 ? PageCount : OverlayExtentPages;
+        IComparer<string>? databaseOrder = Collation is { } order
+            ? Comparer<string>.Create((a, b) => order.Compare(a, b))
+            : null;
         IRecordCursor? cursor = recordsetType == 1
             ? TableCursor.Open(source, Format, table, cursorExtent, (ulong)entry.Id, out traversal)
             : PopulationCursor.Open(source, Format, table, cursorExtent, forwardOnly: recordsetType == 8, out traversal,
                 bookmarkBase: bookmarkBase,
                 snapshot: recordsetType == 4,
-                appendOnly: recordsetType == 2 && RecordsetOptions.IsAppendOnly(options));
+                appendOnly: recordsetType == 2 && RecordsetOptions.IsAppendOnly(options),
+                databaseOrder: databaseOrder);
         if (cursor is null)
         {
+            if (traversal?.Predicate is { } predicate && predicate.StartsWith("NotModelled.DynasetOrder", StringComparison.Ordinal))
+            {
+                int colon = predicate.IndexOf(':');
+                string name = colon > 0 ? predicate[..colon] : predicate;
+                string detail = colon > 0 ? predicate[(colon + 1)..].TrimStart() : predicate;
+                return CallResult.Fail(Failure.NotModelled(name, detail));
+            }
             return CallResult.Fail(Failure.NotImplemented("OpenRecordset when the table cannot be traversed: " + traversal?.Predicate));
         }
         if (recordsetType == 4)

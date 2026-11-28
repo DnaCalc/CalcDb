@@ -264,7 +264,7 @@ internal static unsafe class SelectRoute
             return CallResult.Fail(Failure.NotModelled("NotModelled.DerivedOpenRecordsetTypeArg", "Recordset.OpenRecordset with a non-numeric Type argument (not recorded)"));
         }
         int recordsetType = requestedType ?? (parentType == 1 ? 2 : parentType);
-        if (recordsetType == 1)
+        if (recordsetType is 1 or 16)
         {
             return caller.Fail(3001, DaoErrors.InvalidArgument);
         }

@@ -144,6 +144,15 @@ internal static class AdoSqlErrors
         -66585593,
         AdoObject.IidRowset);
 
+    /// <summary>Record is deleted during client cursor UpdateBatch on ICommand (3167; r-ado-1b/batch-conflict-delete #39, r-fix-wire-ado/batch-conflict-delete-readback #39).</summary>
+    public static MappedProviderError RecordIsDeletedOnCommand() => Make(
+        AdoObject.HResultFail,
+        "Record is deleted.",
+        5003167,
+        "3167",
+        -66585593,
+        AdoObject.IidCommand);
+
     /// <summary>CommitTrans or RollbackTrans without an active transaction (3034; r-str-ado-act/ado-txn #40-49, r-ado-1b/txn-nesting-three #244).</summary>
     public static MappedProviderError NoTransaction() => Make(
         AdoObject.HResultNoTransaction,

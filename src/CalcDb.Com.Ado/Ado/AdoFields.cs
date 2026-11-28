@@ -627,6 +627,7 @@ internal sealed unsafe class AdoFieldsObject : AdoObject
         get
         {
             DetachIfConnectionClosed();
+            RefreshClosedFieldsIfNeeded();
             return _columns.Length;
         }
     }
@@ -640,6 +641,14 @@ internal sealed unsafe class AdoFieldsObject : AdoObject
         if (!_recordset.IsOpen && !_recordset.IsActiveConnectionOpen && _columns.Length > 0)
         {
             Detach();
+        }
+    }
+
+    private void RefreshClosedFieldsIfNeeded()
+    {
+        if (!_recordset.IsOpen && _recordset.TryRefreshClosedFieldsOnDdl(out AdoFieldDescriptor[] refreshed))
+        {
+            Bind(refreshed);
         }
     }
 
@@ -714,6 +723,7 @@ internal sealed unsafe class AdoFieldsObject : AdoObject
     private CallResult Count()
     {
         DetachIfConnectionClosed();
+        RefreshClosedFieldsIfNeeded();
         if (!_recordset.IsOpen && _fabricatedColumns.Count > 0)
         {
             return NotImplemented("Fields.Count on a closed Recordset with appended fabricated fields before Open (not recorded)");
@@ -729,6 +739,7 @@ internal sealed unsafe class AdoFieldsObject : AdoObject
     private CallResult Item(nint index)
     {
         DetachIfConnectionClosed();
+        RefreshClosedFieldsIfNeeded();
         if (!_recordset.IsOpen && _fabricatedColumns.Count > 0)
         {
             return NotImplemented("Fields.Item on a closed Recordset with appended fabricated fields before Open (not recorded)");
@@ -860,6 +871,7 @@ internal sealed unsafe class AdoFieldsObject : AdoObject
     private CallResult NewEnum()
     {
         DetachIfConnectionClosed();
+        RefreshClosedFieldsIfNeeded();
         if (!_recordset.IsOpen && _fabricatedColumns.Count > 0)
         {
             return NotImplemented("Fields._NewEnum on a closed Recordset with appended fabricated fields before Open (not recorded)");

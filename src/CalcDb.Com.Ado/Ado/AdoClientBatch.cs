@@ -1209,7 +1209,10 @@ internal sealed unsafe class ClientRowBuffer
             {
                 return new BatchRowOutcome(row, false, null, locateRefusal);
             }
-            return MarkConcurrencyConflict(row);
+            // r-ado-1b/batch-conflict-delete #39, r-fix-wire-ado/batch-conflict-delete-readback #39:
+            // updating a row externally deleted at the store fails 0x80004005 "Record is deleted." (3167 on ICommand)
+            // and leaves Status=2 (without 2048 concurrency bit) and Value/Original/Underlying as read.
+            return new BatchRowOutcome(row, Succeeded: false, AdoSqlErrors.RecordIsDeletedOnCommand(), null);
         }
 
         try

@@ -645,6 +645,11 @@ internal sealed unsafe class QueryDefObject : DaoObject
         {
             return CallResult.Fail(Failure.NotImplemented("QueryDef.OpenRecordset with a Type or Options argument that is not numeric"));
         }
+        if (type is 16)
+        {
+            // r-def-cursor-dao/open-dynamic-and-option-matrix call 123: dbOpenDynamic (16) fails 3001 from DAO.QueryDef.
+            return Fail(3001, DaoErrors.InvalidArgument);
+        }
         CallResult result;
         if (_mode != QueryDefMode.Saved)
         {
