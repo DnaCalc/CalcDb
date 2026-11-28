@@ -443,6 +443,7 @@ public sealed class BoundAction : IDisposable
         var slot = new SourceSlot(0, scopeName, _syntax.TargetName, TargetTable);
         var scope = new BoundSelect.SourceScope([slot], [], ParameterList, Source);
         var seen = new HashSet<int>();
+        string? unknownUnqualifiedColumn = null;
 
         foreach (SetAssignment a in _syntax.Assignments)
         {
@@ -455,6 +456,15 @@ public sealed class BoundAction : IDisposable
             ColumnDescriptor? col = slot.Column(a.Column);
             if (col is null)
             {
+                if (a.Qualifier is null && _syntax.Assignments.Count == 1)
+                {
+                    unknownUnqualifiedColumn = a.Column;
+                    if (BindExpression(a.Value, scope, out _) is { } unkRhsFailure)
+                    {
+                        return unkRhsFailure;
+                    }
+                    continue;
+                }
                 return SqlFailure.Open(SqlPhase.Bind, "NotModelled.UnknownUpdateColumn", $"UPDATE SET target column '{a.Column}' is not a column of '{_syntax.TargetName}'");
             }
             if (!seen.Add(col.Ordinal))
@@ -477,6 +487,16 @@ public sealed class BoundAction : IDisposable
                 return wf;
             }
             Where = boundWhere;
+        }
+        if (unknownUnqualifiedColumn is not null)
+        {
+            if (ParameterList.Count == 0)
+            {
+                // evidence/r-q2-ado-misc/ado-recordsaffected-byref calls #110, #117:
+                // UPDATE K SET NoSuchColumn = 1 fails as an unbound parameter (3061 / 0x80040E10).
+                return SqlFailure.Ace(SqlPhase.Bind, 3061, SqlMessages.TooFewParameters(1));
+            }
+            return SqlFailure.Open(SqlPhase.Bind, "NotModelled.UnknownUpdateColumn", $"UPDATE SET target column '{unknownUnqualifiedColumn}' is not a column of '{_syntax.TargetName}'");
         }
         return null;
     }

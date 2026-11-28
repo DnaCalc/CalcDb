@@ -745,8 +745,8 @@ public sealed unsafe class Wave22ComAdoDaoTests : IDisposable
         Assert.Equal(VarType.Empty, ResultVarType(Ok(FieldValue(rs, "ID"))));
         Ok(Method(rs, "Close"));
 
-        // 2. evidence/r-q2-ado-misc/ado-recordsaffected-byref call 110:
-        // UPDATE K SET NoSuchColumn = 1 stays cleanly refused by unowned CalcDb.Sql (NotModelled.UnknownUpdateColumn).
+        // 2. evidence/r-q2-ado-misc/ado-recordsaffected-byref calls 110 & 117:
+        // UPDATE K SET NoSuchColumn = 1 returns ACE 0x80040E10 "No value given for one or more required parameters." without modifying recAff.
         NativeVariant recAff = new() { Vt = (ushort)VarType.Empty };
         NativeVariant byRefRecAff = new() { Vt = (ushort)(VarType.ByRef | VarType.Variant), Pointer = (nint)(&recAff) };
         int dispId = GetDispId(cn, "Execute");
@@ -763,12 +763,18 @@ public sealed unsafe class Wave22ComAdoDaoTests : IDisposable
             uint argErr = 0;
             int hr = cn.Invoke(dispId, (ushort)InvokeKind.Method, &dp, &res, &ex, &argErr);
             Assert.Equal(HResults.DISP_E_EXCEPTION, hr);
+            int scode = ex.Scode;
+            uint helpContext = ex.HelpContext;
+            string src = Marshal.PtrToStringBSTR(ex.Source);
             string desc = Marshal.PtrToStringBSTR(ex.Description);
             if (ex.Source != 0) Marshal.FreeBSTR(ex.Source);
             if (ex.Description != 0) Marshal.FreeBSTR(ex.Description);
             if (ex.HelpFile != 0) Marshal.FreeBSTR(ex.HelpFile);
             if (NativeRoute.GetErrorInfo(0, out nint ei) == 0 && ei != 0) Marshal.Release(ei);
-            Assert.Contains("NotModelled.UnknownUpdateColumn", desc);
+            Assert.Equal(unchecked((int)0x80040E10), scode);
+            Assert.Equal("Microsoft Access Database Engine", src);
+            Assert.Equal("No value given for one or more required parameters.", desc);
+            Assert.Equal(5000000u, helpContext);
             Assert.Equal((ushort)VarType.Empty, recAff.Vt);
         }
         finally
