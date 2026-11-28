@@ -900,15 +900,11 @@ internal sealed unsafe class IndexObject : DaoObject
         return x.Invalid ? x.Fail(3420, DaoErrors.ObjectInvalid) : op(x);
     }
 
-    private CallResult DistinctCount()
-    {
-        using Storage.PagePin? pin = _owner.Database.Cache.Pin(_table.FirstPage).Pin;
-        if (pin is not null && TableDefUpdater.TryReadUniqueEntryCount(pin.Bytes, _physical.Number, _owner.Database.Format, out uint current))
-        {
-            return Int32((int)current);
-        }
-        return Int32((int)_physical.UniqueEntryCount);
-    }
+    /// <summary>
+    /// Cached distinct key count from the TableDef snapshot captured when the collection was opened or last refreshed
+    /// (<c>r-q-cursor-dao/index-distinctcount-dml</c> calls #13-#17: stays stale across DML until <c>Indexes.Refresh()</c>).
+    /// </summary>
+    private CallResult DistinctCount() => Int32((int)_physical.UniqueEntryCount);
 
     private CallResult FieldsCollection()
     {

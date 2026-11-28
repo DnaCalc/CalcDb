@@ -727,7 +727,11 @@ internal sealed unsafe class ConnectionObject : AdoObject
 
     public bool IsPersistenceOpen => _isPersistenceOpen;
 
+    private int _ddlGeneration;
+
     public AdoOpenSession? OpenSession => _session;
+
+    internal int DdlGeneration => _ddlGeneration;
 
     public int CursorLocationValue => _cursorLocation;
 
@@ -2654,6 +2658,11 @@ internal sealed unsafe class ConnectionObject : AdoObject
                 return CallResult.Fail(err.ComFailure);
             }
             return CallResult.Fail(unmodelled!);
+        }
+
+        if (DdlParser.IsDdlLeadingKeyword(effectiveSql))
+        {
+            _ddlGeneration++;
         }
 
         if (outcome.LastIdentity is long id)

@@ -273,12 +273,12 @@ public sealed unsafe class DaoSelectPopulationTests : IDisposable
         Ok(Method(ord, "Close"));
 
         // Unordered single-table SELECT dynaset: RecordCount is 1 at open (r-cursor-1b/open-argument-shapes),
-        // post-move RecordCount and Requery are refused by name.
+        // post-move RecordCount is refused by name; depth-0 Requery refreshes the cursor (r-dao-1-err-1/err-partial-lock calls #41, #45).
         SelectRecordsetObject noOrd = OpenSelect(accdb, "SELECT ID, V FROM R", 2);
         Assert.Equal(1, IntValue(Ok(Get(noOrd, "RecordCount"))));
         Ok(Method(noOrd, "MoveNext"));
         AssertNotModelled(Get(noOrd, "RecordCount"), "NotModelled.QueryRecordCount.UnorderedDynasetMove");
-        AssertNotModelled(Method(noOrd, "Requery"), "NotModelled.QueryRecordsetRequery");
+        Ok(Method(noOrd, "Requery"));
         Ok(Method(noOrd, "Close"));
 
         SelectRecordsetObject distinct = OpenSelect(accdb, "SELECT DISTINCT V FROM R ORDER BY V", 2);
