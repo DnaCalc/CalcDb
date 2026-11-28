@@ -10243,6 +10243,7 @@ public sealed class SchemaWriter
         var keyValues = new NativeValue[keyCols.Length];
         uint scannedRows = 0;
         int nullKeyRows = 0;
+        string? deferredDuplicateFailure = null;
         var leafSource = new PageSource(_cache, _overlay);
         foreach (RowView row in RowResolver.Scan(leafSource, _d, table, _pageCount, scanFailures))
         {
@@ -10303,7 +10304,7 @@ public sealed class SchemaWriter
                                 || (keyCols[0].TypeCode == NativeTypes.Memo && keySpecs[0].Ascending)
                                 || (!index.Unique && keyCols[0].TypeCode == NativeTypes.Numeric)))
                             || (!index.Unique && keyCols[0].TypeCode == NativeTypes.Binary)
-                            || (index.Unique && keyCols[0].TypeCode == NativeTypes.Long && keySpecs[0].Ascending)))
+                            || (index.Unique && keyCols[0].TypeCode is NativeTypes.Long or NativeTypes.Text && keySpecs[0].Ascending)))
                         || (keyCols.Length == 2
                             && keyCols.All(c => c.TypeCode is NativeTypes.Long or NativeTypes.Text));
                     if (!recordedNull)
@@ -10312,6 +10313,10 @@ public sealed class SchemaWriter
                         return false;
                     }
                     nullKeyRows++;
+                }
+                if (deferredDuplicateFailure is not null)
+                {
+                    continue;
                 }
                 byte[]? key = IndexEntryInsert.EncodeKey(keyCols, keySpecs, keyValues, out string? keyFailure);
                 if (key is null)
@@ -10332,7 +10337,17 @@ public sealed class SchemaWriter
                         return false;
                     }
                     duplicateUnique = true;
-                    failure = $"{index.Name}: existing duplicate key in {(index.PrimaryKey ? "PRIMARY" : "UNIQUE")} index (3022)";
+                    string dupMsg = $"{index.Name}: existing duplicate key in {(index.PrimaryKey ? "PRIMARY" : "UNIQUE")} index (3022)";
+                    if (index.PrimaryKey || index.DisallowNull)
+                    {
+                        // r-q-cursor-dao/index-build-order-failure (calls #10, #20, #30) &
+                        // r-q2-cursor-dao/index-null-sorts-after-duplicate (call #11):
+                        // Null refusal (3058) on PRIMARY / WITH DISALLOW NULL precedes duplicate key
+                        // detection (3022) regardless of insertion or key sort order; keep scanning for Null.
+                        deferredDuplicateFailure ??= dupMsg;
+                        continue;
+                    }
+                    failure = dupMsg;
                     return false;
                 }
                 byte[] entryBytes = IndexEntryInsert.EncodeEntry(key, row.Root);
@@ -10352,6 +10367,11 @@ public sealed class SchemaWriter
         if (scannedRows != table.RowCount)
         {
             failure = $"table scan read {scannedRows} live rows but TableDef.RowCount is {table.RowCount}";
+            return false;
+        }
+        if (deferredDuplicateFailure is not null)
+        {
+            failure = deferredDuplicateFailure;
             return false;
         }
         if (index.IgnoreNull && entryCount == 0)
@@ -11197,6 +11217,12 @@ public sealed class SchemaWriter
                     return new SchemaRefusal(null, $"descending UNIQUE index {index.Name} on DateTime2 field {fieldName} is not recorded (evidence/r-q49-dt2-draftprops/dt2-unique-index-accdb records ascending UNIQUE only)");
                 }
                 continue;
+            }
+            if (isDao && tc == NativeTypes.Ole)
+            {
+                // evidence/r-q-cursor-dao/index-nonindexable-types (call #31 ixs.Append(IxDaoO) on Ob(O LONGBINARY)):
+                // DAO Indexes.Append rejects LONGBINARY/OLE Object fields with 3409 ("Invalid field definition ...").
+                return new SchemaRefusal(3409, fieldName);
             }
             return new SchemaRefusal(null, $"index {index.Name} on field {fieldName} of native type 0x{tc:X2} (r-q11/r-q21/r-q44 record Long{(allowText ? ", Text" : "")}{(allowExtendedCreateIndexTypes ? ", Double, DateTime, GUID, and Memo" : "")} keys)");
         }
